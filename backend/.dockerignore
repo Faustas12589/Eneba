@@ -1,0 +1,6 @@
+# Never bake secrets or local config into the image.
+**/.env
+**/.env.*
+**/sa.json
+**/*service-account*.json
+**/*firebase-adminsdk*.json

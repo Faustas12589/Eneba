@@ -65,4 +65,13 @@ same under a mutex.
 Rejected: generating a random key at purchase (no real stock to reserve, so the
 "reserve stock" requirement would be a fake counter).
 
-<!-- 12. ... -->
+## 12. Firestore is backend-only; config via .env
+Browsers never touch Firestore: the Go API uses the Admin SDK (service account),
+which bypasses security rules, so `firestore.rules` denies all client access. One
+place enforces auth and validation (the API), and the Firebase web config in the
+frontend can't be abused to read or write data. Firebase Auth is still used client-side.
+Local config comes from `backend/.env`, read by a ~20-line loader in `config`
+(real env vars win, so Render is unaffected). Rejected: `godotenv` (a dependency for
+20 lines); client-side Firestore SDK (rules become the security layer, logic splits in two).
+
+<!-- 13. ... -->

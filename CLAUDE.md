@@ -19,7 +19,8 @@ scope and DECISIONS.md for past trade-offs before changing anything.
 - First-time setup: `cd backend && go mod tidy` (writes go.sum, commit it) and `cd frontend && npm install`
 - Backend dev: `cd backend && go run ./cmd/api` (STORE=memory by default, no Firebase needed)
 - Backend tests: `cd backend && go test ./...`
-- Seed Firestore: `cd backend && go run ./cmd/seed` (needs `FIREBASE_PROJECT_ID` + `GOOGLE_APPLICATION_CREDENTIALS`; idempotent)
+- Seed Firestore: `cd backend && go run ./cmd/seed` (needs `FIREBASE_PROJECT_ID` + `GOOGLE_APPLICATION_CREDENTIALS` in `backend/.env`; idempotent)
+- Use Firestore locally: set `STORE=firestore` in `backend/.env` (template: `backend/.env.example`)
 - Frontend dev: `cd frontend && npm run dev` (proxies /api to :8080)
 - Frontend check: `cd frontend && npm run build` (runs tsc then vite build)
 

@@ -37,13 +37,14 @@ you in as a local dev user (only accepted by a `STORE=memory` backend). See `DEC
 1. Create a Firebase project; enable **Firestore** and **Authentication > Email/Password**.
 2. Project settings > Service accounts > generate a private key (keep it OUT of git).
 3. Project settings > Your apps > add a Web app; copy config into `frontend/.env.local` (see `.env.example`).
-4. Seed and run the backend against Firestore:
+4. Firestore > Rules: paste `firestore.rules` (deny all client access; only the Go API reads/writes).
+5. Copy `backend/.env.example` to `backend/.env`, set `STORE=firestore`, `FIREBASE_PROJECT_ID`
+   and `GOOGLE_APPLICATION_CREDENTIALS` (absolute path to the key, kept outside the repo).
+6. Seed and run:
    ```bash
    cd backend
-   export FIREBASE_PROJECT_ID=your-project
-   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json
-   go run ./cmd/seed
-   STORE=firestore go run ./cmd/api
+   go run ./cmd/seed    # idempotent: re-running overwrites by id
+   go run ./cmd/api     # log should say store=firestore
    ```
 
 ## Deploy (Render)

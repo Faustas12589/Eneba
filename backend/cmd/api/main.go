@@ -31,6 +31,9 @@ func main() {
 
 	switch cfg.Store {
 	case "firestore":
+		if cfg.FirebaseProj == "" {
+			log.Fatal("STORE=firestore needs FIREBASE_PROJECT_ID (see backend/.env.example)")
+		}
 		app, err := firebase.NewApp(ctx, &firebase.Config{ProjectID: cfg.FirebaseProj}, credOpts(cfg)...)
 		if err != nil {
 			log.Fatalf("firebase app: %v", err)
