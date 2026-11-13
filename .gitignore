@@ -1,0 +1,22 @@
+# secrets: NEVER commit
+*.env
+.env.*
+!.env.example
+*service-account*.json
+*firebase-adminsdk*.json
+sa.json
+
+# node
+node_modules/
+frontend/dist/
+
+# go
+backend/bin/
+*.test
+*.out
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

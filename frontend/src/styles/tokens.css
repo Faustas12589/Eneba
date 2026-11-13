@@ -1,0 +1,37 @@
+/*
+ * PLACEHOLDER design tokens. Replace every value with what you extract from
+ * eneba.com (see docs/DESIGN.md). Components only ever use these variables,
+ * so restyling the whole app = editing this one file.
+ */
+:root {
+  /* colors */
+  --color-bg: #1b0f3a;
+  --color-surface: #261650;
+  --color-surface-2: #301c66;
+  --color-border: #3d2a7a;
+  --color-text: #ffffff;
+  --color-text-muted: #b7a9e0;
+  --color-primary: #7c4dff;
+  --color-primary-hover: #6a3df0;
+  --color-accent: #ffc107;
+  --color-danger: #ff5c7a;
+  --color-success: #3ddc97;
+
+  /* typography */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+
+  /* spacing / shape */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius: 8px;
+  --radius-lg: 14px;
+  --container: 1200px;
+}

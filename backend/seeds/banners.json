@@ -1,0 +1,23 @@
+[
+  {
+    "id": "b1",
+    "title": "Winter Sale",
+    "subtitle": "Up to 75% off top PC games",
+    "imageUrl": "",
+    "linkUrl": "/store?sort=discount"
+  },
+  {
+    "id": "b2",
+    "title": "New releases",
+    "subtitle": "Fresh keys from trusted sellers",
+    "imageUrl": "",
+    "linkUrl": "/store?sort=popular"
+  },
+  {
+    "id": "b3",
+    "title": "Gift cards",
+    "subtitle": "Top up Steam, Nintendo and more",
+    "imageUrl": "",
+    "linkUrl": "/store?genre=Gift%20Card"
+  }
+]

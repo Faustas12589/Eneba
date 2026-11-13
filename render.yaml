@@ -1,0 +1,41 @@
+# Render Blueprint: New > Blueprint > select this repo.
+# Fill the `sync: false` values in the Render dashboard (they are not stored in git).
+services:
+  - type: web
+    name: eneba-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: STORE
+        value: firestore
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CREDENTIALS_JSON   # paste the whole service-account JSON
+        sync: false
+      - key: CORS_ORIGINS                # the frontend URL, e.g. https://eneba-web.onrender.com
+        sync: false
+
+  - type: web
+    name: eneba-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite                    # SPA fallback for client-side routes
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL                # the API URL, e.g. https://eneba-api.onrender.com
+        sync: false
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false
