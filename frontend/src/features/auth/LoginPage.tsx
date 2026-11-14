@@ -20,7 +20,7 @@ export function LoginPage() {
       await (mode === "login" ? signIn : register)(email, password);
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : "Kažkas nepavyko");
     } finally {
       setBusy(false);
     }
@@ -28,15 +28,15 @@ export function LoginPage() {
 
   return (
     <div className="page container">
-      <h1>{mode === "login" ? "Sign in" : "Create account"}</h1>
-      {!configured && <p className="muted">Dev mode: Firebase env vars are not set, so any email/password signs you in as a local dev user.</p>}
+      <h1>{mode === "login" ? "Prisijungti" : "Sukurti paskyrą"}</h1>
+      {!configured && <p className="muted">Kūrimo režimas: Firebase nesukonfigūruotas, todėl bet koks el. paštas ir slaptažodis prijungia vietinį testinį naudotoją.</p>}
       <form className="form" onSubmit={submit}>
-        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <input type="password" placeholder="Password (min 6 chars)" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <input type="email" placeholder="El. paštas" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <input type="password" placeholder="Slaptažodis (min. 6 simboliai)" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required />
         {error && <p className="error">{error}</p>}
-        <button className="btn" disabled={busy}>{mode === "login" ? "Sign in" : "Register"}</button>
+        <button className="btn" disabled={busy}>{mode === "login" ? "Prisijungti" : "Registruotis"}</button>
         <button type="button" className="btn secondary" onClick={() => setMode(mode === "login" ? "register" : "login")}>
-          {mode === "login" ? "Need an account? Register" : "Have an account? Sign in"}
+          {mode === "login" ? "Neturite paskyros? Registruokitės" : "Jau turite paskyrą? Prisijunkite"}
         </button>
       </form>
     </div>

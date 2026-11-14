@@ -18,6 +18,7 @@ import (
 
 type Handler struct {
 	Catalog *service.Catalog
+	Cart    *service.Cart
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -109,6 +110,36 @@ func (h *Handler) Deals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// --- Cart (guests too) ---------------------------------------------------
+
+// SetCartItem: PUT /api/carts/{cartId}/items/{offerId}  body {"quantity": n}
+// Reserves or releases stock so the cart holds exactly n units (0 = remove).
+// 409 when there isn't enough stock; the body says how many are available.
+func (h *Handler) SetCartItem(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Quantity *int `json:"quantity"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body); err != nil || body.Quantity == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": `body must be {"quantity": n}`})
+		return
+	}
+	line, err := h.Cart.SetQuantity(r.Context(), chi.URLParam(r, "cartId"), chi.URLParam(r, "offerId"), *body.Quantity)
+
+	var oos *service.OutOfStockError
+	switch {
+	case errors.As(err, &oos):
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": "not enough stock", "stock": oos.Available, "quantity": oos.Reserved,
+		})
+	case errors.Is(err, service.ErrInvalidCartID), errors.Is(err, service.ErrInvalidQuantity):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	case err != nil:
+		writeErr(w, err)
+	default:
+		writeJSON(w, http.StatusOK, line)
+	}
 }
 
 // --- Auth-protected ---------------------------------------------------

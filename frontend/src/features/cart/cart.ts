@@ -1,10 +1,14 @@
-// Pure cart logic: no React, no storage. Every function returns a new array.
+// Pure cart logic: no React, no storage, no network. Every function returns a new array.
 import type { Offer, Product } from "../../types";
+
+/** Same cap as the backend (service.MaxPerLine). */
+export const MAX_PER_LINE = 10;
 
 /**
  * One line per OFFER (a product can be in the cart from two sellers).
- * Name/price/stock are a snapshot for display only; checkout re-reads them
- * on the server, so a stale or tampered value can't change what is charged.
+ * `quantity` is what the server has reserved for this cart; `stock` is how many
+ * more units are still available to anyone (both come from the server's reply).
+ * Name/price are a display snapshot; checkout re-reads prices on the server.
  */
 export interface CartItem {
   offerId: string;
@@ -18,38 +22,19 @@ export interface CartItem {
   quantity: number;
 }
 
-/** Keeps quantity between 1 and the offer's stock. */
-function clampQty(qty: number, stock: number): number {
-  return Math.max(1, Math.min(Math.floor(qty), stock));
-}
-
 export function quantityOf(items: CartItem[], offerId: string): number {
   return items.find((i) => i.offerId === offerId)?.quantity ?? 0;
 }
 
-/**
- * Why one more unit of `offerId` can't be added when the server says `stock`
- * are left, or null if it can. Covers both "you already have all of it" and
- * "someone else bought it since you loaded the page" (stock went down).
- */
-export function addError(items: CartItem[], offerId: string, stock: number): string | null {
-  if (stock < 1) return "Šis pasiūlymas jau išparduotas.";
-  if (quantityOf(items, offerId) >= stock) {
-    return `Daugiau pridėti negalima: liko tik ${stock} vnt., ir visi jie jau tavo krepšelyje.`;
-  }
-  return null;
+/** Saves the server's answer for one offer: new quantity (0 = line removed) and stock. */
+export function applyServerLine(items: CartItem[], offerId: string, quantity: number, stock: number): CartItem[] {
+  if (quantity === 0) return items.filter((i) => i.offerId !== offerId);
+  return items.map((i) => (i.offerId === offerId ? { ...i, quantity, stock } : i));
 }
 
-/** Replaces the stock snapshot with the server's current value. */
-export function updateStock(items: CartItem[], offerId: string, stock: number): CartItem[] {
-  return items.map((i) => (i.offerId === offerId ? { ...i, stock } : i));
-}
-
-/** Adds one unit. `offer.stock` should be fresh from the server. */
-export function addItem(items: CartItem[], product: Product, offer: Offer): CartItem[] {
-  if (offer.stock < 1) return items;
-  const existing = items.find((i) => i.offerId === offer.id);
-  if (existing) return setQuantity(updateStock(items, offer.id, offer.stock), offer.id, existing.quantity + 1);
+/** Adds a line the server just reserved (or updates it if it's already there). */
+export function addServerLine(items: CartItem[], product: Product, offer: Offer, quantity: number, stock: number): CartItem[] {
+  if (items.some((i) => i.offerId === offer.id)) return applyServerLine(items, offer.id, quantity, stock);
   return [
     ...items,
     {
@@ -60,19 +45,17 @@ export function addItem(items: CartItem[], product: Product, offer: Offer): Cart
       sellerName: offer.sellerName,
       price: offer.price,
       currency: offer.currency,
-      stock: offer.stock,
-      quantity: 1,
+      stock,
+      quantity,
     },
   ];
 }
 
-export function setQuantity(items: CartItem[], offerId: string, qty: number): CartItem[] {
-  if (!Number.isFinite(qty)) return items;
-  return items.map((i) => (i.offerId === offerId ? { ...i, quantity: clampQty(qty, i.stock) } : i));
-}
-
-export function removeItem(items: CartItem[], offerId: string): CartItem[] {
-  return items.filter((i) => i.offerId !== offerId);
+/** Error text when the server refused because stock ran out. */
+export function outOfStockMessage(stock: number, inCart: number): string {
+  if (stock > 0) return `Liko tik ${stock} vnt.`;
+  if (inCart > 0) return "Daugiau nebeliko: visos likusios prekės jau tavo krepšelyje.";
+  return "Šis pasiūlymas jau išparduotas.";
 }
 
 export function itemCount(items: CartItem[]): number {

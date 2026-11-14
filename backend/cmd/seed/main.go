@@ -41,6 +41,14 @@ func main() {
 	must(seeds.Load("banners", &banners))
 
 	bw := fs.BulkWriter(ctx)
+	// Re-seeding resets offer stock, so old cart reservations must go too,
+	// or carts would "hold" units that are already back in stock.
+	oldRes, err := fs.Collection(repository.ColReservations).Documents(ctx).GetAll()
+	must(err)
+	for _, d := range oldRes {
+		_, err := bw.Delete(d.Ref)
+		must(err)
+	}
 	for _, p := range products {
 		_, err := bw.Set(fs.Collection(repository.ColProducts).Doc(p.ID), p)
 		must(err)
@@ -54,7 +62,8 @@ func main() {
 		must(err)
 	}
 	bw.End()
-	log.Printf("seeded %d products, %d offers, %d banners", len(products), len(offers), len(banners))
+	log.Printf("seeded %d products, %d offers, %d banners; cleared %d reservations",
+		len(products), len(offers), len(banners), len(oldRes))
 }
 
 func must(err error) {

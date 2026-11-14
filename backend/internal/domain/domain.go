@@ -2,6 +2,8 @@
 // All money is stored as integer cents to avoid float rounding bugs.
 package domain
 
+import "time"
+
 type Product struct {
 	ID              string `json:"id" firestore:"id"`
 	Name            string `json:"name" firestore:"name"`
@@ -37,4 +39,13 @@ type Banner struct {
 	LinkURL  string `json:"linkUrl" firestore:"linkUrl"`
 }
 
-// TODO (checkout slice): CartItem, Order, OrderItem, DigitalKey.
+// Reservation is how many units of one offer a cart is holding. Those units are
+// already taken out of Offer.Stock, so Offer.Stock is what anyone else can still add.
+type Reservation struct {
+	CartID    string    `json:"cartId" firestore:"cartId"`
+	OfferID   string    `json:"offerId" firestore:"offerId"`
+	Quantity  int       `json:"quantity" firestore:"quantity"`
+	UpdatedAt time.Time `json:"updatedAt" firestore:"updatedAt"`
+}
+
+// TODO (checkout slice): Order, OrderItem, DigitalKey.

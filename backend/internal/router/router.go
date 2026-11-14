@@ -25,12 +25,13 @@ func New(h *handler.Handler, verifier middleware.TokenVerifier, corsOrigins []st
 		r.Get("/home/banners", h.Banners)
 		r.Get("/home/best-sellers", h.BestSellers)
 		r.Get("/home/deals", h.Deals)
+		r.Put("/carts/{cartId}/items/{offerId}", h.SetCartItem)
 
 		// signed-in only
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireAuth(verifier))
 			r.Get("/me", h.Me)
-			// TODO: cart, checkout, orders
+			// TODO: checkout, orders
 		})
 	})
 	return r

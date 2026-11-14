@@ -3,13 +3,14 @@ import { api, type ProductQuery } from "../../lib/api";
 import { useAsync } from "../../lib/useAsync";
 import { Status } from "../../components/Status";
 import { ProductCard } from "../../components/ProductCard";
+import { formatItemCount } from "../../lib/format";
 
 const SORTS = [
-  { value: "", label: "Relevance / popular" },
-  { value: "price_asc", label: "Price: low to high" },
-  { value: "price_desc", label: "Price: high to low" },
-  { value: "discount", label: "Biggest discount" },
-  { value: "name", label: "Name A–Z" },
+  { value: "", label: "Populiariausi" },
+  { value: "price_asc", label: "Kaina: nuo mažiausios" },
+  { value: "price_desc", label: "Kaina: nuo didžiausios" },
+  { value: "discount", label: "Didžiausia nuolaida" },
+  { value: "name", label: "Pavadinimas A–Ž" },
 ];
 
 const list = (v: string | null) => (v ? v.split(",").filter(Boolean) : []);
@@ -53,9 +54,9 @@ export function StorePage() {
             <>
               {(
                 [
-                  ["platform", "Platform", facets.platforms],
-                  ["region", "Region", facets.regions],
-                  ["genre", "Genre", facets.genres],
+                  ["platform", "Platforma", facets.platforms],
+                  ["region", "Regionas", facets.regions],
+                  ["genre", "Žanras", facets.genres],
                 ] as const
               ).map(([key, label, values]) => (
                 <fieldset key={key} style={{ border: 0, padding: 0, margin: 0 }}>
@@ -72,31 +73,31 @@ export function StorePage() {
           )}
         </Status>
         <div>
-          <label>Price (EUR)</label>
-          <input type="number" min={0} placeholder="Min" value={euros(query.minPrice)} onChange={(e) => set("minPrice", e.target.value ? String(Math.round(Number(e.target.value) * 100)) : "")} style={{ width: "48%" }} />{" "}
-          <input type="number" min={0} placeholder="Max" value={euros(query.maxPrice)} onChange={(e) => set("maxPrice", e.target.value ? String(Math.round(Number(e.target.value) * 100)) : "")} style={{ width: "48%" }} />
+          <label>Kaina (EUR)</label>
+          <input type="number" min={0} placeholder="Nuo" value={euros(query.minPrice)} onChange={(e) => set("minPrice", e.target.value ? String(Math.round(Number(e.target.value) * 100)) : "")} style={{ width: "48%" }} />{" "}
+          <input type="number" min={0} placeholder="Iki" value={euros(query.maxPrice)} onChange={(e) => set("maxPrice", e.target.value ? String(Math.round(Number(e.target.value) * 100)) : "")} style={{ width: "48%" }} />
         </div>
       </aside>
 
       <section>
         <div className="toolbar">
-          <h1>{query.q ? `Results for “${query.q}”` : "Store"}</h1>
-          <select value={query.sort} onChange={(e) => set("sort", e.target.value)} aria-label="Sort">
+          <h1>{query.q ? `Paieškos rezultatai: „${query.q}“` : "Parduotuvė"}</h1>
+          <select value={query.sort} onChange={(e) => set("sort", e.target.value)} aria-label="Rūšiuoti">
             {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </div>
         <Status state={state}>
           {(pg) => (
             <>
-              <p className="muted">{pg.total} products</p>
-              {pg.items.length === 0 ? <p>No products match these filters.</p> : (
+              <p className="muted">Rasta: {formatItemCount(pg.total)}</p>
+              {pg.items.length === 0 ? <p>Pagal šiuos filtrus prekių nerasta.</p> : (
                 <div className="grid">{pg.items.map((p) => <ProductCard key={p.id} p={p} />)}</div>
               )}
               {pg.total > pg.pageSize && (
                 <div className="pager">
-                  <button className="btn secondary" disabled={pg.page <= 1} onClick={() => set("page", String(pg.page - 1))}>Prev</button>
-                  <span className="muted">Page {pg.page} / {Math.ceil(pg.total / pg.pageSize)}</span>
-                  <button className="btn secondary" disabled={pg.page * pg.pageSize >= pg.total} onClick={() => set("page", String(pg.page + 1))}>Next</button>
+                  <button className="btn secondary" disabled={pg.page <= 1} onClick={() => set("page", String(pg.page - 1))}>Ankstesnis</button>
+                  <span className="muted">Puslapis {pg.page} / {Math.ceil(pg.total / pg.pageSize)}</span>
+                  <button className="btn secondary" disabled={pg.page * pg.pageSize >= pg.total} onClick={() => set("page", String(pg.page + 1))}>Kitas</button>
                 </div>
               )}
             </>

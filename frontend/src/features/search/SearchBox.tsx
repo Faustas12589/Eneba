@@ -36,10 +36,10 @@ export function SearchBox() {
     <form className="search" onSubmit={submit} onBlur={() => setTimeout(() => setOpen(false), 150)}>
       <input
         value={q}
-        placeholder="Search games, gift cards…"
+        placeholder="Ieškokite žaidimų, dovanų kortelių…"
         onChange={(e) => { setQ(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
-        aria-label="Search"
+        aria-label="Paieška"
       />
       {open && items.length > 0 && (
         <div className="search-dropdown">

@@ -1,16 +1,40 @@
 import { getIdToken } from "./firebase";
-import type { Banner, Product, ProductDetail, ProductPage } from "../types";
+import type { Banner, CartLine, Product, ProductDetail, ProductPage } from "../types";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
-async function request<T>(path: string, opts: { auth?: boolean; signal?: AbortSignal } = {}): Promise<T> {
+/** Non-2xx response. `body` is the parsed JSON error (e.g. {stock, quantity} on a 409). */
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(status: number, statusText: string, body: unknown) {
+    super(`${status} ${statusText}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+interface RequestOpts {
+  auth?: boolean;
+  signal?: AbortSignal;
+  method?: "GET" | "PUT" | "POST";
+  body?: unknown; // sent as JSON
+}
+
+async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (opts.auth) {
     const token = await getIdToken();
     if (token) headers.Authorization = `Bearer ${token}`;
   }
-  const res = await fetch(`${BASE}${path}`, { headers, signal: opts.signal });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  const res = await fetch(`${BASE}${path}`, {
+    method: opts.method ?? "GET",
+    headers,
+    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    signal: opts.signal,
+  });
+  if (!res.ok) throw new ApiError(res.status, res.statusText, await res.json().catch(() => null));
   return res.json() as Promise<T>;
 }
 
@@ -47,5 +71,11 @@ export const api = {
   banners: () => request<{ items: Banner[] }>("/api/home/banners"),
   bestSellers: () => request<{ items: Product[] }>("/api/home/best-sellers"),
   deals: () => request<{ items: Product[] }>("/api/home/deals"),
+  /** Reserve/release stock so the cart holds exactly `quantity` (0 = remove). 409 = not enough stock. */
+  setCartItem: (cartId: string, offerId: string, quantity: number) =>
+    request<CartLine>(`/api/carts/${encodeURIComponent(cartId)}/items/${encodeURIComponent(offerId)}`, {
+      method: "PUT",
+      body: { quantity },
+    }),
   me: () => request<{ uid: string; email: string }>("/api/me", { auth: true }),
 };

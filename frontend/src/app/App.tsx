@@ -38,7 +38,7 @@ export function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
             <Route path="/orders" element={<RequireAuth><OrdersPage /></RequireAuth>} />
-            <Route path="*" element={<div className="page container"><h1>Page not found</h1></div>} />
+            <Route path="*" element={<div className="page container"><h1>Puslapis nerastas</h1></div>} />
           </Route>
         </Routes>
         </CartProvider>

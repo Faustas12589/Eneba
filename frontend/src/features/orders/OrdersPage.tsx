@@ -2,8 +2,8 @@
 export function OrdersPage() {
   return (
     <div className="page container">
-      <h1>Your orders</h1>
-      <p className="muted">Not implemented yet.</p>
+      <h1>Mano užsakymai</h1>
+      <p className="muted">Dar neįgyvendinta.</p>
     </div>
   );
 }

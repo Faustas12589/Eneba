@@ -95,3 +95,20 @@ This is UX only: it can't reserve stock, so checkout still re-checks in a transa
 Rejected: trusting the stock loaded with the page (misses other buyers); a dedicated
 `GET /api/offers/{id}` endpoint (the product endpoint already returns it).
 Note: cart/popup text is Lithuanian to match eneba.lt; the rest of the UI is still English.
+
+## 15. Stock is reserved when an item goes into the cart (supersedes the stock part of #7, #14)
+`PUT /api/carts/{cartId}/items/{offerId} {"quantity": n}` makes a cart hold exactly n
+units: one atomic step (Firestore transaction / mutex in memory) moves the difference
+between `offers.stock` and a `reservations/{cartId}_{offerId}` doc. So `offer.stock` is
+what anyone else can still buy, and two carts can never get the same last unit (test:
+`TestSetQuantityNoOversell`). The rule (`reserve`) is a pure function in `service`; the
+repository only runs it atomically (`UpdateReservation(..., apply)`), keeping layering.
+- Absolute quantity, not "+1": a retried request can't reserve twice.
+- A cart can only release what its own reservation holds, so nobody can inflate stock.
+- `cartId` is a browser-generated UUID (guest carts still work, no login needed);
+  max 10 per line so one cart can't hoard an offer.
+- 409 returns the real stock + reserved qty; the frontend corrects its cart from it.
+Known gap: abandoned carts hold stock forever. Fix later: expire reservations after
+~30 min (`updatedAt` is stored for that) or convert them at checkout.
+Rejected: reserving only at checkout (user asked for cart-time reservation);
+decrementing without a reservation record (release couldn't be verified).

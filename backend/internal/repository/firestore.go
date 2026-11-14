@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
@@ -17,6 +18,8 @@ const (
 	ColProducts = "products"
 	ColOffers   = "offers"
 	ColBanners  = "banners"
+
+	ColReservations = "reservations"
 )
 
 type Firestore struct {
@@ -50,6 +53,53 @@ func (f *Firestore) ListOffers(ctx context.Context, productID string) ([]domain.
 
 func (f *Firestore) ListBanners(ctx context.Context) ([]domain.Banner, error) {
 	return listAll[domain.Banner](ctx, f.c.Collection(ColBanners).Query)
+}
+
+// UpdateReservation runs in a Firestore transaction: if another request changes
+// the offer's stock between our read and write, Firestore retries the whole
+// function with fresh data, so two carts can never take the same last unit.
+func (f *Firestore) UpdateReservation(ctx context.Context, cartID, offerID string, apply ApplyFunc) error {
+	offerRef := f.c.Collection(ColOffers).Doc(offerID)
+	resRef := f.c.Collection(ColReservations).Doc(reservationID(cartID, offerID))
+
+	return f.c.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		offerSnap, err := tx.Get(offerRef)
+		if status.Code(err) == codes.NotFound {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		var offer domain.Offer
+		if err := offerSnap.DataTo(&offer); err != nil {
+			return err
+		}
+
+		var res domain.Reservation // zero Quantity if this cart has none yet
+		resSnap, err := tx.Get(resRef)
+		if err != nil && status.Code(err) != codes.NotFound {
+			return err
+		}
+		if err == nil {
+			if err := resSnap.DataTo(&res); err != nil {
+				return err
+			}
+		}
+
+		newStock, newReserved, err := apply(offer.Stock, res.Quantity)
+		if err != nil {
+			return err
+		}
+		if err := tx.Update(offerRef, []firestore.Update{{Path: "stock", Value: newStock}}); err != nil {
+			return err
+		}
+		if newReserved == 0 {
+			return tx.Delete(resRef)
+		}
+		return tx.Set(resRef, domain.Reservation{
+			CartID: cartID, OfferID: offerID, Quantity: newReserved, UpdatedAt: time.Now(),
+		})
+	})
 }
 
 func listAll[T any](ctx context.Context, q firestore.Query) ([]T, error) {

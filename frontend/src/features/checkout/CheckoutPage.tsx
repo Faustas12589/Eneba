@@ -3,8 +3,8 @@
 export function CheckoutPage() {
   return (
     <div className="page container">
-      <h1>Checkout</h1>
-      <p className="muted">Not implemented yet.</p>
+      <h1>Atsiskaitymas</h1>
+      <p className="muted">Dar neįgyvendinta.</p>
     </div>
   );
 }

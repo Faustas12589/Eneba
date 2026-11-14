@@ -52,3 +52,10 @@ export interface ProductDetail {
   product: Product;
   offers: Offer[];
 }
+
+/** Server's answer to a cart change (and the body of a 409, minus offerId). */
+export interface CartLine {
+  offerId: string;
+  quantity: number; // units this cart now reserves
+  stock: number; // units still available to everyone else
+}

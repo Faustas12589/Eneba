@@ -11,15 +11,15 @@ export function Header() {
         <Link to="/" className="logo">ENEBA-STYLE</Link>
         <SearchBox />
         <nav className="nav">
-          <Link to="/store">Store</Link>
+          <Link to="/store">Parduotuvė</Link>
           <CartMenu />
           {user ? (
             <>
-              <Link to="/orders">Orders</Link>
-              <button className="btn secondary" onClick={signOut}>Sign out</button>
+              <Link to="/orders">Užsakymai</Link>
+              <button className="btn secondary" onClick={signOut}>Atsijungti</button>
             </>
           ) : (
-            <Link to="/login" className="btn">Sign in</Link>
+            <Link to="/login" className="btn">Prisijungti</Link>
           )}
         </nav>
       </div>

@@ -26,7 +26,7 @@ func main() {
 	cfg := config.Load()
 	ctx := context.Background()
 
-	var repo repository.Catalog
+	var repo repository.Store
 	var verifier middleware.TokenVerifier
 
 	switch cfg.Store {
@@ -59,7 +59,7 @@ func main() {
 		log.Println("STORE=memory: serving embedded seed data; auth accepts the dev token only")
 	}
 
-	h := &handler.Handler{Catalog: service.NewCatalog(repo)}
+	h := &handler.Handler{Catalog: service.NewCatalog(repo), Cart: service.NewCart(repo)}
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           router.New(h, verifier, cfg.CORSOrigins),

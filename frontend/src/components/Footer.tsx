@@ -1,7 +1,7 @@
 export function Footer() {
   return (
     <footer className="footer">
-      <div className="container">Demo marketplace for an internship assignment. No real payments.</div>
+      <div className="container">Demonstracinė parduotuvė praktikos užduočiai. Tikrų mokėjimų nėra.</div>
     </footer>
   );
 }

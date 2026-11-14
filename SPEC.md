@@ -13,7 +13,7 @@ status; the "why" column is what I will say when asked.
 | Search | Scaffolded | Typo/partial tolerant (trigram), header dropdown + results via store page. |
 | Product page + seller offers | Scaffolded | Offer comparison table with add-to-cart per offer. |
 | Auth | Scaffolded | Firebase Auth email/password; backend verifies tokens. Dev mode without Firebase (DECISIONS #10). TODO: Google sign-in? (optional) |
-| Cart | Done | Client-side cart of offers (localStorage, DECISIONS #7, #13). Qty clamped to stock, header count. |
+| Cart | Done | Client-side cart, but stock is reserved on the server when an item is added (DECISIONS #15). Popup, header dropdown, live stock errors. |
 | Checkout + key delivery | TODO | Simulated payment (DECISIONS #8). Keys come from a seeded pool per offer; stock = unsold keys. Transaction: claim key(s), create order (DECISIONS #11). Needs `Order`/`Key` types, `seeds/keys.json`, Firestore + memory orders repo. |
 | Order history | TODO | Signed-in only. |
 | Eneba styling | TODO | Tokens-driven (tokens.css is still placeholder). Extract real values into docs/DESIGN.md first. |

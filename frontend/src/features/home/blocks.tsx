@@ -37,10 +37,10 @@ function ProductRail({ title, items }: { title: string; items: Product[] }) {
 
 export function BestSellersBlock() {
   const state = useAsync(() => api.bestSellers(), []);
-  return <Status state={state}>{({ items }) => <ProductRail title="Best sellers" items={items} />}</Status>;
+  return <Status state={state}>{({ items }) => <ProductRail title="Perkamiausi" items={items} />}</Status>;
 }
 
 export function DealsBlock() {
   const state = useAsync(() => api.deals(), []);
-  return <Status state={state}>{({ items }) => <ProductRail title="Top deals" items={items} />}</Status>;
+  return <Status state={state}>{({ items }) => <ProductRail title="Geriausi pasiūlymai" items={items} />}</Status>;
 }
