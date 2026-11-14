@@ -75,3 +75,12 @@ Local config comes from `backend/.env`, read by a ~20-line loader in `config`
 20 lines); client-side Firestore SDK (rules become the security layer, logic splits in two).
 
 <!-- 13. ... -->
+
+## 13. Cart lines snapshot display data; logic is pure functions
+Each cart line is one offer (not product) and stores a snapshot of name, seller,
+price and stock next to offerId + quantity, so the cart page renders with no API call.
+The snapshot is display-only: checkout re-reads price/stock on the server (#7).
+Cart rules (add, clamp quantity to 1..stock, remove, totals) live in `features/cart/cart.ts`
+as pure functions; `CartContext` only holds state and saves to localStorage.
+Rejected: storing only ids and fetching each offer on the cart page (needs a new
+batch endpoint and loading states for little gain); a reducer/state library (overkill).

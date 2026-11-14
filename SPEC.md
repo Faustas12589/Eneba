@@ -11,9 +11,9 @@ status; the "why" column is what I will say when asked.
 | Store (filters, sort, search, pagination) | Scaffolded | Core of a marketplace. Filters + sort in Go (see DECISIONS #2). Aim: polish + tests. |
 | Homepage blocks | Scaffolded | 3 blocks (banners, best sellers, deals), each own endpoint. Add 1-2 more if time. |
 | Search | Scaffolded | Typo/partial tolerant (trigram), header dropdown + results via store page. |
-| Product page + seller offers | Scaffolded | Offer comparison table. TODO: add-to-cart per offer. |
+| Product page + seller offers | Scaffolded | Offer comparison table with add-to-cart per offer. |
 | Auth | Scaffolded | Firebase Auth email/password; backend verifies tokens. Dev mode without Firebase (DECISIONS #10). TODO: Google sign-in? (optional) |
-| Cart | TODO | Client-side cart of offers (localStorage, DECISIONS #7). |
+| Cart | Done | Client-side cart of offers (localStorage, DECISIONS #7, #13). Qty clamped to stock, header count. |
 | Checkout + key delivery | TODO | Simulated payment (DECISIONS #8). Keys come from a seeded pool per offer; stock = unsold keys. Transaction: claim key(s), create order (DECISIONS #11). Needs `Order`/`Key` types, `seeds/keys.json`, Firestore + memory orders repo. |
 | Order history | TODO | Signed-in only. |
 | Eneba styling | TODO | Tokens-driven (tokens.css is still placeholder). Extract real values into docs/DESIGN.md first. |

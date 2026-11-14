@@ -6,6 +6,7 @@ import { HomePage } from "../features/home/HomePage";
 import { StorePage } from "../features/store/StorePage";
 import { ProductPage } from "../features/product/ProductPage";
 import { CartPage } from "../features/cart/CartPage";
+import { CartProvider } from "../features/cart/CartContext";
 import { CheckoutPage } from "../features/checkout/CheckoutPage";
 import { OrdersPage } from "../features/orders/OrdersPage";
 import { Header } from "../components/Header";
@@ -25,6 +26,7 @@ export function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <CartProvider>
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
@@ -37,6 +39,7 @@ export function App() {
             <Route path="*" element={<div className="page container"><h1>Page not found</h1></div>} />
           </Route>
         </Routes>
+        </CartProvider>
       </AuthProvider>
     </BrowserRouter>
   );
