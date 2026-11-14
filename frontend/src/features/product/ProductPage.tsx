@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
+import type { Offer, Product } from "../../types";
 import { api } from "../../lib/api";
 import { useAsync } from "../../lib/useAsync";
 import { formatPrice } from "../../lib/format";
@@ -9,7 +11,13 @@ export function ProductPage() {
   const { id = "" } = useParams();
   const state = useAsync(() => api.product(id), [id]);
   const { items, add } = useCart();
+  const [pending, setPending] = useState<string | null>(null); // offer id being added
   const inCart = (offerId: string) => items.find((i) => i.offerId === offerId)?.quantity ?? 0;
+  const onAdd = async (p: Product, o: Offer) => {
+    setPending(o.id);
+    await add(p, o); // checks live stock; the popup shows success or the error
+    setPending(null);
+  };
   return (
     <div className="page container">
       <Status state={state}>
@@ -35,8 +43,8 @@ export function ProductPage() {
                       <td>
                         <button
                           className="btn"
-                          disabled={o.stock < 1 || inCart(o.id) >= o.stock}
-                          onClick={() => add(p, o)}
+                          disabled={o.stock < 1 || pending === o.id}
+                          onClick={() => onAdd(p, o)}
                         >
                           {o.stock < 1 ? "Sold out" : "Add to cart"}
                         </button>

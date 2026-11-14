@@ -84,3 +84,14 @@ Cart rules (add, clamp quantity to 1..stock, remove, totals) live in `features/c
 as pure functions; `CartContext` only holds state and saves to localStorage.
 Rejected: storing only ids and fetching each offer on the cart page (needs a new
 batch endpoint and loading states for little gain); a reducer/state library (overkill).
+
+## 14. Live stock check on add-to-cart; popup + header dropdown
+Before adding an offer (product page button or "+" in the cart), the frontend re-reads
+that offer's stock from `GET /api/products/{id}`. If the cart already holds all of it,
+or someone else bought it since the page loaded, the user gets an error instead of a
+silent no-op. Success opens an Eneba-style popup ("Pridėta į krepšelį"); the header
+cart is a dropdown with the same `CartLine`/`QtyStepper` components as the cart page.
+This is UX only: it can't reserve stock, so checkout still re-checks in a transaction (#11).
+Rejected: trusting the stock loaded with the page (misses other buyers); a dedicated
+`GET /api/offers/{id}` endpoint (the product endpoint already returns it).
+Note: cart/popup text is Lithuanian to match eneba.lt; the rest of the UI is still English.

@@ -23,10 +23,33 @@ function clampQty(qty: number, stock: number): number {
   return Math.max(1, Math.min(Math.floor(qty), stock));
 }
 
+export function quantityOf(items: CartItem[], offerId: string): number {
+  return items.find((i) => i.offerId === offerId)?.quantity ?? 0;
+}
+
+/**
+ * Why one more unit of `offerId` can't be added when the server says `stock`
+ * are left, or null if it can. Covers both "you already have all of it" and
+ * "someone else bought it since you loaded the page" (stock went down).
+ */
+export function addError(items: CartItem[], offerId: string, stock: number): string | null {
+  if (stock < 1) return "Šis pasiūlymas jau išparduotas.";
+  if (quantityOf(items, offerId) >= stock) {
+    return `Daugiau pridėti negalima: liko tik ${stock} vnt., ir visi jie jau tavo krepšelyje.`;
+  }
+  return null;
+}
+
+/** Replaces the stock snapshot with the server's current value. */
+export function updateStock(items: CartItem[], offerId: string, stock: number): CartItem[] {
+  return items.map((i) => (i.offerId === offerId ? { ...i, stock } : i));
+}
+
+/** Adds one unit. `offer.stock` should be fresh from the server. */
 export function addItem(items: CartItem[], product: Product, offer: Offer): CartItem[] {
   if (offer.stock < 1) return items;
   const existing = items.find((i) => i.offerId === offer.id);
-  if (existing) return setQuantity(items, offer.id, existing.quantity + 1);
+  if (existing) return setQuantity(updateStock(items, offer.id, offer.stock), offer.id, existing.quantity + 1);
   return [
     ...items,
     {

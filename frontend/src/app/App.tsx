@@ -7,6 +7,7 @@ import { StorePage } from "../features/store/StorePage";
 import { ProductPage } from "../features/product/ProductPage";
 import { CartPage } from "../features/cart/CartPage";
 import { CartProvider } from "../features/cart/CartContext";
+import { CartPopup } from "../features/cart/CartPopup";
 import { CheckoutPage } from "../features/checkout/CheckoutPage";
 import { OrdersPage } from "../features/orders/OrdersPage";
 import { Header } from "../components/Header";
@@ -18,6 +19,7 @@ function Layout() {
       <Header />
       <main><Outlet /></main>
       <Footer />
+      <CartPopup />
     </>
   );
 }
