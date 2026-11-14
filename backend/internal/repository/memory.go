@@ -82,7 +82,7 @@ func (m *Memory) UpdateReservation(_ context.Context, cartID, offerID string, ap
 	}
 
 	key := reservationID(cartID, offerID)
-	newStock, newReserved, err := apply(m.offers[idx].Stock, m.reservations[key].Quantity)
+	newStock, newReserved, err := apply(m.offers[idx].Stock, m.reservations[key])
 	if err != nil {
 		return err
 	}
@@ -93,6 +93,26 @@ func (m *Memory) UpdateReservation(_ context.Context, cartID, offerID string, ap
 		m.reservations[key] = domain.Reservation{CartID: cartID, OfferID: offerID, Quantity: newReserved, UpdatedAt: time.Now()}
 	}
 	return nil
+}
+
+func (m *Memory) ListCartReservations(_ context.Context, cartID string) ([]domain.Reservation, error) {
+	return m.filterReservations(func(r domain.Reservation) bool { return r.CartID == cartID }), nil
+}
+
+func (m *Memory) ListReservationsBefore(_ context.Context, t time.Time) ([]domain.Reservation, error) {
+	return m.filterReservations(func(r domain.Reservation) bool { return r.UpdatedAt.Before(t) }), nil
+}
+
+func (m *Memory) filterReservations(keep func(domain.Reservation) bool) []domain.Reservation {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.Reservation
+	for _, r := range m.reservations {
+		if keep(r) {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // reservationID is the document id: one reservation per (cart, offer) pair.

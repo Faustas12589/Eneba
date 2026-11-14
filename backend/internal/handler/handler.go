@@ -142,6 +142,21 @@ func (h *Handler) SetCartItem(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetCart: GET /api/carts/{cartId} -> {"items": [{offerId, quantity, expiresAt}]}
+// What the server still reserves; lines missing here have expired.
+func (h *Handler) GetCart(w http.ResponseWriter, r *http.Request) {
+	lines, err := h.Cart.Lines(r.Context(), chi.URLParam(r, "cartId"))
+	if errors.Is(err, service.ErrInvalidCartID) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": lines})
+}
+
 // --- Auth-protected ---------------------------------------------------
 
 // Me: GET /api/me (requires Firebase ID token)

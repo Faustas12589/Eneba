@@ -58,4 +58,8 @@ export interface CartLine {
   offerId: string;
   quantity: number; // units this cart now reserves
   stock: number; // units still available to everyone else
+  expiresAt?: string; // ISO time the reservation is released (absent when removed)
 }
+
+/** GET /api/carts/{id}: what the server still reserves for one offer. */
+export type ServerLine = Omit<CartLine, "stock">; // offerId, quantity, expiresAt

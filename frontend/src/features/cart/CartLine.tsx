@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { formatPrice } from "../../lib/format";
+import { formatPrice, formatTime } from "../../lib/format";
 import { useCart } from "./CartContext";
 import type { CartItem } from "./cart";
 
@@ -27,6 +27,7 @@ export function CartLine({ item }: { item: CartItem }) {
         <Link to={`/product/${item.productId}`} className="card-title">{item.productName}</Link>
         <span className="muted small">Pardavėjas: {item.sellerName}</span>
         <span className="muted small">Dar liko: {item.stock} vnt.</span>
+        {item.expiresAt && <span className="muted small">Rezervuota iki {formatTime(item.expiresAt)}</span>}
         <button type="button" className="link-btn" disabled={busy} onClick={() => change(0)}>Pašalinti</button>
       </div>
       <div className="qty-wrap">

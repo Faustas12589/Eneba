@@ -2,6 +2,11 @@ export function formatPrice(cents: number, currency = "EUR"): string {
   return new Intl.NumberFormat("lt-LT", { style: "currency", currency }).format(cents / 100);
 }
 
+/** "14:35" in local time, from an ISO timestamp. */
+export function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("lt-LT", { hour: "2-digit", minute: "2-digit" });
+}
+
 /** Lithuanian plural: 1 prekė, 2 prekės, 10 prekių, 21 prekė, 22 prekės. */
 export function formatItemCount(n: number): string {
   const last = n % 10;

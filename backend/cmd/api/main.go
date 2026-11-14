@@ -59,7 +59,10 @@ func main() {
 		log.Println("STORE=memory: serving embedded seed data; auth accepts the dev token only")
 	}
 
-	h := &handler.Handler{Catalog: service.NewCatalog(repo), Cart: service.NewCart(repo)}
+	cart := service.NewCart(repo)
+	go sweepExpiredReservations(ctx, cart)
+
+	h := &handler.Handler{Catalog: service.NewCatalog(repo), Cart: cart}
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           router.New(h, verifier, cfg.CORSOrigins),
@@ -79,6 +82,21 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
+}
+
+// sweepExpiredReservations returns abandoned cart stock once a minute.
+// Safe with several API instances: each release is its own transaction.
+func sweepExpiredReservations(ctx context.Context, cart *service.Cart) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for range t.C {
+		n, err := cart.ReleaseExpired(ctx, time.Now())
+		if err != nil {
+			log.Printf("release expired reservations: %v", err)
+		} else if n > 0 {
+			log.Printf("released %d expired cart reservations", n)
+		}
+	}
 }
 
 // credOpts: JSON in env (Render) wins; otherwise fall back to Application

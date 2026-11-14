@@ -25,6 +25,7 @@ func New(h *handler.Handler, verifier middleware.TokenVerifier, corsOrigins []st
 		r.Get("/home/banners", h.Banners)
 		r.Get("/home/best-sellers", h.BestSellers)
 		r.Get("/home/deals", h.Deals)
+		r.Get("/carts/{cartId}", h.GetCart)
 		r.Put("/carts/{cartId}/items/{offerId}", h.SetCartItem)
 
 		// signed-in only

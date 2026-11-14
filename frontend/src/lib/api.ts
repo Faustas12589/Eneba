@@ -1,5 +1,5 @@
 import { getIdToken } from "./firebase";
-import type { Banner, CartLine, Product, ProductDetail, ProductPage } from "../types";
+import type { Banner, CartLine, Product, ProductDetail, ProductPage, ServerLine } from "../types";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
@@ -77,5 +77,8 @@ export const api = {
       method: "PUT",
       body: { quantity },
     }),
+  /** What the server still reserves for this cart (expired lines are missing). */
+  cart: (cartId: string) =>
+    request<{ items: ServerLine[] }>(`/api/carts/${encodeURIComponent(cartId)}`),
   me: () => request<{ uid: string; email: string }>("/api/me", { auth: true }),
 };

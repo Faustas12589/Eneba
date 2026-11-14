@@ -86,7 +86,7 @@ func (f *Firestore) UpdateReservation(ctx context.Context, cartID, offerID strin
 			}
 		}
 
-		newStock, newReserved, err := apply(offer.Stock, res.Quantity)
+		newStock, newReserved, err := apply(offer.Stock, res)
 		if err != nil {
 			return err
 		}
@@ -100,6 +100,16 @@ func (f *Firestore) UpdateReservation(ctx context.Context, cartID, offerID strin
 			CartID: cartID, OfferID: offerID, Quantity: newReserved, UpdatedAt: time.Now(),
 		})
 	})
+}
+
+func (f *Firestore) ListCartReservations(ctx context.Context, cartID string) ([]domain.Reservation, error) {
+	return listAll[domain.Reservation](ctx, f.c.Collection(ColReservations).Where("cartId", "==", cartID))
+}
+
+// Single-field range query: Firestore indexes every field automatically, so
+// no composite index is needed.
+func (f *Firestore) ListReservationsBefore(ctx context.Context, t time.Time) ([]domain.Reservation, error) {
+	return listAll[domain.Reservation](ctx, f.c.Collection(ColReservations).Where("updatedAt", "<", t))
 }
 
 func listAll[T any](ctx context.Context, q firestore.Query) ([]T, error) {

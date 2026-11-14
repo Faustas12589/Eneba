@@ -45,7 +45,7 @@ export function CartPopup() {
           </>
         ) : (
           <>
-            <h2 id="cart-popup-title">Nepavyko pridėti</h2>
+            <h2 id="cart-popup-title">{notice.title ?? "Nepavyko pridėti"}</h2>
             <p className="error">{notice.message}</p>
             <div className="modal-actions">
               <button type="button" className="btn" onClick={closeNotice} autoFocus>Gerai</button>

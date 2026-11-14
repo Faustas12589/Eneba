@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"eneba-marketplace/backend/internal/repository"
 )
@@ -141,5 +142,34 @@ func TestSetQuantityNoOversell(t *testing.T) {
 	wg.Wait()
 	if won != stock || stockOf(t, m, testOffer) != 0 {
 		t.Fatalf("won=%d (want %d), stock left=%d", won, stock, stockOf(t, m, testOffer))
+	}
+}
+
+func TestReleaseExpired(t *testing.T) {
+	s, m := newCartSvc(t)
+	ctx := context.Background()
+	start := stockOf(t, m, testOffer)
+	if _, err := s.SetQuantity(ctx, testCart, testOffer, 4); err != nil {
+		t.Fatal(err)
+	}
+
+	// Not expired yet: nothing happens.
+	if n, err := s.ReleaseExpired(ctx, time.Now()); err != nil || n != 0 {
+		t.Fatalf("released %d too early (err %v)", n, err)
+	}
+	if lines, _ := s.Lines(ctx, testCart); len(lines) != 1 || lines[0].Quantity != 4 {
+		t.Fatalf("cart should still hold 4: %+v", lines)
+	}
+
+	// Pretend 31 minutes passed: stock comes back and the cart is empty.
+	n, err := s.ReleaseExpired(ctx, time.Now().Add(ReservationTTL+time.Minute))
+	if err != nil || n != 1 {
+		t.Fatalf("want 1 released, got %d (err %v)", n, err)
+	}
+	if stockOf(t, m, testOffer) != start {
+		t.Fatalf("stock not restored: %d, want %d", stockOf(t, m, testOffer), start)
+	}
+	if lines, _ := s.Lines(ctx, testCart); len(lines) != 0 {
+		t.Fatalf("expired line still in cart: %+v", lines)
 	}
 }

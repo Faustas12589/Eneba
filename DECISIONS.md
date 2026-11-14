@@ -112,3 +112,20 @@ Known gap: abandoned carts hold stock forever. Fix later: expire reservations af
 ~30 min (`updatedAt` is stored for that) or convert them at checkout.
 Rejected: reserving only at checkout (user asked for cart-time reservation);
 decrementing without a reservation record (release couldn't be verified).
+
+## 16. Cart reservations expire after 30 minutes
+Closes the gap in #15: an abandoned cart would otherwise hold stock forever. Each line
+is held for 30 min after it was last changed (`reservations.updatedAt`). A goroutine in
+`cmd/api` calls `Cart.ReleaseExpired` every minute: it lists old reservations, then
+releases each in its own transaction that re-checks the timestamp, so a line the
+shopper touched a second ago is left alone. Several API instances can sweep safely.
+The browser calls `GET /api/carts/{id}` on load, every minute and on tab focus, drops
+lines the server no longer holds and shows "Krepšelis atnaujintas". Each line shows
+"Rezervuota iki HH:MM". A background refresh is ignored if a cart change ran meanwhile.
+Rejected: Firestore TTL policy (deletes the doc but can't put stock back);
+lazy expiry on the next request (stock stays blocked if nobody calls the API).
+Note: Render's free tier sleeps when idle, so the sweep runs once the API wakes.
+
+## 17. `.env.example` files restored
+They were deleted in 684c9f0 but README/CLAUDE.md still pointed to them. Restored as
+templates; real `backend/.env` and `frontend/.env.local` are gitignored.
