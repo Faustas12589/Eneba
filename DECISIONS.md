@@ -129,3 +129,15 @@ Note: Render's free tier sleeps when idle, so the sweep runs once the API wakes.
 ## 17. `.env.example` files restored
 They were deleted in 684c9f0 but README/CLAUDE.md still pointed to them. Restored as
 templates; real `backend/.env` and `frontend/.env.local` are gitignored.
+
+## 18. Stay on Firestore; search stays in Go
+Question raised: Firestore has no full-text/fuzzy search, so should we switch databases?
+No. Search never used the database: the service caches the product list and does
+trigram matching in Go (#2, #3), so it works the same on any store. At tens to low
+thousands of products that is fast enough.
+If the catalog grew to ~100k+ products, the move would be PostgreSQL with the `pg_trgm`
+extension (trigram similarity + GIN index inside the database; free hosts: Supabase,
+Neon), or a search engine (Typesense/Meilisearch) next to Firestore.
+Rejected for now: migrating to Postgres (rewrite of the repository layer and stock
+transactions, a new `pgx` dependency, new hosting, for no visible gain at this size);
+a separate search service (one more thing to deploy and keep in sync).
