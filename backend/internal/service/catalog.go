@@ -63,21 +63,23 @@ func discountPercent(listPrice, priceFrom int) int {
 }
 
 type Filter struct {
-	Q         string
-	Platforms []string
-	Regions   []string
-	Genres    []string
-	MinPrice  int // cents, 0 = unset
-	MaxPrice  int // cents, 0 = unset
-	Sort      string
-	Page      int
-	PageSize  int
+	Q          string
+	Platforms  []string
+	Regions    []string
+	Genres     []string
+	Categories []string
+	MinPrice   int // cents, 0 = unset
+	MaxPrice   int // cents, 0 = unset
+	Sort       string
+	Page       int
+	PageSize   int
 }
 
 type Facets struct {
-	Platforms []string `json:"platforms"`
-	Regions   []string `json:"regions"`
-	Genres    []string `json:"genres"`
+	Platforms  []string `json:"platforms"`
+	Regions    []string `json:"regions"`
+	Genres     []string `json:"genres"`
+	Categories []string `json:"categories"`
 }
 
 type Page struct {
@@ -116,7 +118,8 @@ func (c *Catalog) List(ctx context.Context, f Filter) (Page, error) {
 
 	out := make([]domain.Product, 0, len(pool))
 	for _, p := range pool {
-		if !inSet(f.Platforms, p.Platform) || !inSet(f.Regions, p.Region) || !inSet(f.Genres, p.Genre) {
+		if !inSet(f.Platforms, p.Platform) || !inSet(f.Regions, p.Region) || !inSet(f.Genres, p.Genre) ||
+			!inSet(f.Categories, p.Category) {
 			continue
 		}
 		if f.MinPrice > 0 && p.PriceFrom < f.MinPrice {
@@ -184,17 +187,27 @@ func inSet(set []string, v string) bool {
 }
 
 func facets(ps []domain.Product) Facets {
-	pl, rg, gn := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	pl, rg, gn, ct := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, p := range ps {
-		pl[p.Platform], rg[p.Region], gn[p.Genre] = true, true, true
+		pl[p.Platform], rg[p.Region], gn[p.Genre], ct[p.Category] = true, true, true, true
 	}
-	return Facets{Platforms: keys(pl), Regions: keys(rg), Genres: keys(gn)}
+	// Categories keep their fixed menu order; the rest are alphabetical.
+	cats := []string{}
+	for _, c := range domain.Categories {
+		if ct[c] {
+			cats = append(cats, c)
+		}
+	}
+	return Facets{Platforms: keys(pl), Regions: keys(rg), Genres: keys(gn), Categories: cats}
 }
 
+// keys returns the map's keys sorted, without "" (e.g. cards have no genre).
 func keys(m map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
-		out = append(out, k)
+		if k != "" {
+			out = append(out, k)
+		}
 	}
 	sort.Strings(out)
 	return out

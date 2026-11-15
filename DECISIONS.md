@@ -214,3 +214,18 @@ Why in Go: a shopper has tens of orders, and a Firestore `where userId ==` + `or
 query needs a composite index to deploy and explain.
 Rejected: Firestore `limit` + cursor paging (index + cursor tokens in the API; only worth it
 for users with thousands of orders); `offset` in Firestore (still bills the skipped reads).
+
+## 23. Every product has a category (product type), separate from genre
+Eneba's menu and filters start from the product type: games, DLC, gaming cards
+(Steam/PSN/Xbox top-ups), gift cards, software. `Product.category` holds one of the fixed ids in
+`domain.Categories`; genre stays for games and DLC and is `""` for the rest (the seed used
+to fake this with the genre "Gift Card"). The store filters by `?category=a,b` like the other
+facets, the facet list keeps the menu order, and the header has a category row linking to
+`/store?category=…`. The frontend only maps ids to Lithuanian labels (`lib/categories.ts`).
+Seed grew from 16 to 24 products (2 DLC, 2 gaming cards, 2 gift cards, 2 software) with small
+stock (+357 keys) so each category has entries; a seed test checks every category is known
+and `priceFrom` equals the cheapest offer.
+Rejected: a `categories` collection in Firestore (5 fixed values need no reads or admin UI);
+several categories per product (Eneba shows one type per item; tags can come later);
+reusing genre (a card has no genre, and a game needs both).
+Firestore needs a re-seed (`go run ./cmd/seed`) to get the field; it wipes carts/orders (#19).

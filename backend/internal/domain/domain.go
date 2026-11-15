@@ -10,7 +10,8 @@ type Product struct {
 	Slug            string `json:"slug" firestore:"slug"`
 	Platform        string `json:"platform" firestore:"platform"`
 	Region          string `json:"region" firestore:"region"`
-	Genre           string `json:"genre" firestore:"genre"`
+	Genre           string `json:"genre" firestore:"genre"`       // games and DLC only; "" for cards and software
+	Category        string `json:"category" firestore:"category"` // one of Categories
 	Description     string `json:"description" firestore:"description"`
 	ImageURL        string `json:"imageUrl" firestore:"imageUrl"`
 	ListPrice       int    `json:"listPrice" firestore:"listPrice"` // cents, before discount
@@ -19,6 +20,11 @@ type Product struct {
 	DiscountPercent int    `json:"discountPercent" firestore:"discountPercent"`
 	Sales           int    `json:"sales" firestore:"sales"`
 }
+
+// Categories are the product types, like Eneba's top-level menu. A product has
+// exactly one. The order here is the order the store's filter shows them in;
+// the frontend turns the ids into Lithuanian labels.
+var Categories = []string{"games", "dlc", "gaming-cards", "gift-cards", "software"}
 
 type Offer struct {
 	ID           string  `json:"id" firestore:"id"`
@@ -38,7 +44,6 @@ type Banner struct {
 	ImageURL string `json:"imageUrl" firestore:"imageUrl"`
 	LinkURL  string `json:"linkUrl" firestore:"linkUrl"`
 }
-
 
 // Reservation is one cart line seen from the stock side: how many units of an
 // offer a cart holds and until when. It is not stored on its own: it is read

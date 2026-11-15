@@ -39,6 +39,9 @@ input, select {
 .header .container { display: flex; align-items: center; gap: var(--space-4); height: 64px; }
 .logo { font-weight: 800; font-size: var(--text-lg); color: var(--color-accent); }
 .nav { display: flex; gap: var(--space-4); margin-left: auto; align-items: center; }
+.header .category-nav { height: 40px; font-size: var(--text-sm); overflow-x: auto; white-space: nowrap; }
+.category-nav a { color: var(--color-text-muted); }
+.category-nav a:hover { color: var(--color-text); }
 .footer { border-top: 1px solid var(--color-border); padding: var(--space-6) 0; color: var(--color-text-muted); }
 
 /* search */

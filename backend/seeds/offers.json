@@ -478,5 +478,165 @@
     "price": 2272,
     "currency": "EUR",
     "stock": 167
+  },
+  {
+    "id": "p017-o1",
+    "productId": "p017",
+    "sellerId": "gamevault",
+    "sellerName": "GameVault",
+    "sellerRating": 4.7,
+    "price": 2749,
+    "currency": "EUR",
+    "stock": 25
+  },
+  {
+    "id": "p017-o2",
+    "productId": "p017",
+    "sellerId": "lootlane",
+    "sellerName": "LootLane",
+    "sellerRating": 4.5,
+    "price": 2990,
+    "currency": "EUR",
+    "stock": 15
+  },
+  {
+    "id": "p018-o1",
+    "productId": "p018",
+    "sellerId": "pixelmart",
+    "sellerName": "PixelMart",
+    "sellerRating": 4.2,
+    "price": 1899,
+    "currency": "EUR",
+    "stock": 20
+  },
+  {
+    "id": "p018-o2",
+    "productId": "p018",
+    "sellerId": "keyhub",
+    "sellerName": "KeyHub",
+    "sellerRating": 4.6,
+    "price": 2100,
+    "currency": "EUR",
+    "stock": 12
+  },
+  {
+    "id": "p019-o1",
+    "productId": "p019",
+    "sellerId": "digitaldragon",
+    "sellerName": "DigitalDragon",
+    "sellerRating": 4.4,
+    "price": 2449,
+    "currency": "EUR",
+    "stock": 30
+  },
+  {
+    "id": "p019-o2",
+    "productId": "p019",
+    "sellerId": "gamevault",
+    "sellerName": "GameVault",
+    "sellerRating": 4.7,
+    "price": 2520,
+    "currency": "EUR",
+    "stock": 18
+  },
+  {
+    "id": "p020-o1",
+    "productId": "p020",
+    "sellerId": "lootlane",
+    "sellerName": "LootLane",
+    "sellerRating": 4.5,
+    "price": 3999,
+    "currency": "EUR",
+    "stock": 22
+  },
+  {
+    "id": "p020-o2",
+    "productId": "p020",
+    "sellerId": "pixelmart",
+    "sellerName": "PixelMart",
+    "sellerRating": 4.2,
+    "price": 4250,
+    "currency": "EUR",
+    "stock": 10
+  },
+  {
+    "id": "p021-o1",
+    "productId": "p021",
+    "sellerId": "keyhub",
+    "sellerName": "KeyHub",
+    "sellerRating": 4.6,
+    "price": 2475,
+    "currency": "EUR",
+    "stock": 20
+  },
+  {
+    "id": "p021-o2",
+    "productId": "p021",
+    "sellerId": "digitaldragon",
+    "sellerName": "DigitalDragon",
+    "sellerRating": 4.4,
+    "price": 2560,
+    "currency": "EUR",
+    "stock": 14
+  },
+  {
+    "id": "p022-o1",
+    "productId": "p022",
+    "sellerId": "gamevault",
+    "sellerName": "GameVault",
+    "sellerRating": 4.7,
+    "price": 2999,
+    "currency": "EUR",
+    "stock": 16
+  },
+  {
+    "id": "p022-o2",
+    "productId": "p022",
+    "sellerId": "lootlane",
+    "sellerName": "LootLane",
+    "sellerRating": 4.5,
+    "price": 3150,
+    "currency": "EUR",
+    "stock": 12
+  },
+  {
+    "id": "p023-o1",
+    "productId": "p023",
+    "sellerId": "pixelmart",
+    "sellerName": "PixelMart",
+    "sellerRating": 4.2,
+    "price": 1299,
+    "currency": "EUR",
+    "stock": 30
+  },
+  {
+    "id": "p023-o2",
+    "productId": "p023",
+    "sellerId": "keyhub",
+    "sellerName": "KeyHub",
+    "sellerRating": 4.6,
+    "price": 1499,
+    "currency": "EUR",
+    "stock": 25
+  },
+  {
+    "id": "p024-o1",
+    "productId": "p024",
+    "sellerId": "lootlane",
+    "sellerName": "LootLane",
+    "sellerRating": 4.5,
+    "price": 2499,
+    "currency": "EUR",
+    "stock": 20
+  },
+  {
+    "id": "p024-o2",
+    "productId": "p024",
+    "sellerId": "digitaldragon",
+    "sellerName": "DigitalDragon",
+    "sellerRating": 4.4,
+    "price": 2790,
+    "currency": "EUR",
+    "stock": 15
   }
 ]

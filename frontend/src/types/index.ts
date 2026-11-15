@@ -5,7 +5,8 @@ export interface Product {
   slug: string;
   platform: string;
   region: string;
-  genre: string;
+  genre: string; // "" for cards and software
+  category: string; // id from lib/categories.ts
   description: string;
   imageUrl: string;
   listPrice: number;
@@ -38,6 +39,7 @@ export interface Facets {
   platforms: string[];
   regions: string[];
   genres: string[];
+  categories: string[];
 }
 
 export interface ProductPage {

@@ -5,6 +5,7 @@ import { Status } from "../../components/Status";
 import { ProductCard } from "../../components/ProductCard";
 import { Pager } from "../../components/Pager";
 import { formatItemCount } from "../../lib/format";
+import { categoryLabel } from "../../lib/categories";
 
 const SORTS = [
   { value: "", label: "Populiariausi" },
@@ -24,6 +25,7 @@ export function StorePage() {
     platform: list(sp.get("platform")),
     region: list(sp.get("region")),
     genre: list(sp.get("genre")),
+    category: list(sp.get("category")),
     minPrice: Number(sp.get("minPrice")) || undefined,
     maxPrice: Number(sp.get("maxPrice")) || undefined,
     sort: sp.get("sort") ?? "",
@@ -39,7 +41,7 @@ export function StorePage() {
     setSp(next);
   }
 
-  function toggle(key: "platform" | "region" | "genre", value: string) {
+  function toggle(key: "category" | "platform" | "region" | "genre", value: string) {
     const cur = list(sp.get(key));
     set(key, (cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value]).join(","));
   }
@@ -55,6 +57,7 @@ export function StorePage() {
             <>
               {(
                 [
+                  ["category", "Kategorija", facets.categories],
                   ["platform", "Platforma", facets.platforms],
                   ["region", "Regionas", facets.regions],
                   ["genre", "Žanras", facets.genres],
@@ -65,7 +68,7 @@ export function StorePage() {
                   {values.map((v) => (
                     <label key={v} className="check">
                       <input type="checkbox" checked={list(sp.get(key)).includes(v)} onChange={() => toggle(key, v)} />
-                      {v}
+                      {key === "category" ? categoryLabel(v) : v}
                     </label>
                   ))}
                 </fieldset>
@@ -82,7 +85,13 @@ export function StorePage() {
 
       <section>
         <div className="toolbar">
-          <h1>{query.q ? `Paieškos rezultatai: „${query.q}“` : "Parduotuvė"}</h1>
+          <h1>
+            {query.q
+              ? `Paieškos rezultatai: „${query.q}“`
+              : query.category?.length === 1
+                ? categoryLabel(query.category[0])
+                : "Parduotuvė"}
+          </h1>
           <select value={query.sort} onChange={(e) => set("sort", e.target.value)} aria-label="Rūšiuoti">
             {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>

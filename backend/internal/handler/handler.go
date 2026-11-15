@@ -48,15 +48,16 @@ func (h *Handler) Health(w http.ResponseWriter, _ *http.Request) {
 func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	pg, err := h.Catalog.List(r.Context(), service.Filter{
-		Q:         q.Get("q"),
-		Platforms: csv(q.Get("platform")),
-		Regions:   csv(q.Get("region")),
-		Genres:    csv(q.Get("genre")),
-		MinPrice:  atoi(q.Get("minPrice")),
-		MaxPrice:  atoi(q.Get("maxPrice")),
-		Sort:      q.Get("sort"),
-		Page:      atoi(q.Get("page")),
-		PageSize:  atoi(q.Get("pageSize")),
+		Q:          q.Get("q"),
+		Platforms:  csv(q.Get("platform")),
+		Regions:    csv(q.Get("region")),
+		Genres:     csv(q.Get("genre")),
+		Categories: csv(q.Get("category")),
+		MinPrice:   atoi(q.Get("minPrice")),
+		MaxPrice:   atoi(q.Get("maxPrice")),
+		Sort:       q.Get("sort"),
+		Page:       atoi(q.Get("page")),
+		PageSize:   atoi(q.Get("pageSize")),
 	})
 	if err != nil {
 		writeErr(w, err)

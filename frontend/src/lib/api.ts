@@ -46,6 +46,7 @@ export interface ProductQuery {
   platform?: string[];
   region?: string[];
   genre?: string[];
+  category?: string[];
   minPrice?: number; // cents
   maxPrice?: number; // cents
   sort?: string;
@@ -58,6 +59,7 @@ export function toSearchParams(q: ProductQuery): URLSearchParams {
   if (q.platform?.length) p.set("platform", q.platform.join(","));
   if (q.region?.length) p.set("region", q.region.join(","));
   if (q.genre?.length) p.set("genre", q.genre.join(","));
+  if (q.category?.length) p.set("category", q.category.join(","));
   if (q.minPrice) p.set("minPrice", String(q.minPrice));
   if (q.maxPrice) p.set("maxPrice", String(q.maxPrice));
   if (q.sort) p.set("sort", q.sort);

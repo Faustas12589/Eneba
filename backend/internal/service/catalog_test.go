@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
+	"eneba-marketplace/backend/internal/domain"
 	"eneba-marketplace/backend/internal/repository"
 )
 
@@ -43,6 +45,37 @@ func TestListFilterSortPaginate(t *testing.T) {
 	for _, p := range capped.Items {
 		if p.PriceFrom > 1000 {
 			t.Errorf("%q exceeds max price", p.Name)
+		}
+	}
+}
+
+func TestListByCategory(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+
+	pg, err := s.List(ctx, Filter{Categories: []string{"dlc", "software"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pg.Total != 4 {
+		t.Fatalf("want the 2 DLCs + 2 software products, got %d", pg.Total)
+	}
+	for _, p := range pg.Items {
+		if p.Category != "dlc" && p.Category != "software" {
+			t.Errorf("%q (%s) slipped through", p.Name, p.Category)
+		}
+	}
+	// Combines with other filters: Steam DLC only.
+	if steam, _ := s.List(ctx, Filter{Categories: []string{"dlc"}, Platforms: []string{"Steam"}}); steam.Total != 1 {
+		t.Errorf("Steam DLC: got %d", steam.Total)
+	}
+	// Facets list every category in menu order, and no empty genre.
+	if !reflect.DeepEqual(pg.Facets.Categories, domain.Categories) {
+		t.Errorf("category facets %v", pg.Facets.Categories)
+	}
+	for _, g := range pg.Facets.Genres {
+		if g == "" {
+			t.Error("empty genre in facets")
 		}
 	}
 }

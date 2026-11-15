@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { SearchBox } from "../features/search/SearchBox";
 import { useAuth } from "../features/auth/AuthContext";
 import { CartMenu } from "../features/cart/CartMenu";
+import { CATEGORIES } from "../lib/categories";
 
 export function Header() {
   const { user, signOut } = useAuth();
@@ -18,6 +19,12 @@ export function Header() {
           {user && <button className="btn secondary" onClick={signOut}>Atsijungti</button>}
         </nav>
       </div>
+      {/* Category row like Eneba's second header line; each link is a store filter. */}
+      <nav className="container category-nav" aria-label="Kategorijos">
+        {CATEGORIES.map((c) => (
+          <Link key={c.id} to={`/store?category=${c.id}`}>{c.label}</Link>
+        ))}
+      </nav>
     </header>
   );
 }
