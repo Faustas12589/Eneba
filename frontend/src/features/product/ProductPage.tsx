@@ -37,6 +37,9 @@ export function ProductPage() {
               <p className="muted">
                 {[p.platform, regionLabel(p.region), categoryLabel(p.category), p.genre].filter(Boolean).join(" · ")}
               </p>
+              {p.preOrder && (
+                <p><span className="badge">Išankstinis užsakymas</span> Išleidimo data: {p.releaseDate}</p>
+              )}
               <p>{p.description}</p>
               <h2>Pardavėjų pasiūlymai</h2>
               <table className="offers">

@@ -19,6 +19,11 @@ type Product struct {
 	Currency        string `json:"currency" firestore:"currency"`
 	DiscountPercent int    `json:"discountPercent" firestore:"discountPercent"`
 	Sales           int    `json:"sales" firestore:"sales"`
+	// ReleaseDate is "YYYY-MM-DD", or "" for products that are already out.
+	ReleaseDate string `json:"releaseDate,omitempty" firestore:"releaseDate"`
+	// PreOrder is derived from ReleaseDate when the catalog loads (never stored),
+	// so a product stops being a pre-order by itself on release day.
+	PreOrder bool `json:"preOrder" firestore:"-"`
 }
 
 // Categories are the product types, like Eneba's top-level menu. A product has

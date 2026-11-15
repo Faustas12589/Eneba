@@ -23,9 +23,10 @@ type Catalog struct {
 	products []domain.Product
 	byID     map[string]domain.Product
 	index    *search.Index
+	now      func() time.Time // time.Now; tests pin it so pre-order dates stay testable
 }
 
-func NewCatalog(repo repository.Catalog) *Catalog { return &Catalog{repo: repo} }
+func NewCatalog(repo repository.Catalog) *Catalog { return &Catalog{repo: repo, now: time.Now} }
 
 // snapshot returns the cached product list, reloading when stale.
 // Filtering/sorting happens in Go because Firestore can't combine arbitrary
@@ -42,8 +43,10 @@ func (c *Catalog) snapshot(ctx context.Context) ([]domain.Product, error) {
 	}
 	items := make([]search.Item, len(ps))
 	byID := make(map[string]domain.Product, len(ps))
+	now := c.now()
 	for i := range ps {
 		ps[i].DiscountPercent = discountPercent(ps[i].ListPrice, ps[i].PriceFrom)
+		ps[i].PreOrder = isPreOrder(ps[i].ReleaseDate, now) // cache is 60s, so it flips within a minute of midnight
 		p := ps[i]
 		items[i] = search.Item{ID: p.ID, Name: p.Name}
 		byID[p.ID] = p
@@ -224,6 +227,7 @@ func (c *Catalog) Get(ctx context.Context, id string) (*ProductDetail, error) {
 		return nil, err
 	}
 	p.DiscountPercent = discountPercent(p.ListPrice, p.PriceFrom)
+	p.PreOrder = isPreOrder(p.ReleaseDate, c.now())
 	offers, err := c.repo.ListOffers(ctx, id)
 	if err != nil {
 		return nil, err
@@ -238,16 +242,63 @@ func (c *Catalog) Suggest(ctx context.Context, q string, limit int) ([]domain.Pr
 	return pg.Items, err
 }
 
-// BestSellers and Deals are separate "services" so the homepage blocks are
-// independent: each has its own endpoint and can fail on its own.
+// Each homepage block is its own method + endpoint, so the blocks are
+// independent: each can fail on its own (DECISIONS #6).
+
 func (c *Catalog) BestSellers(ctx context.Context, n int) ([]domain.Product, error) {
 	pg, err := c.List(ctx, Filter{Sort: "popular", PageSize: n})
 	return pg.Items, err
 }
 
-func (c *Catalog) Deals(ctx context.Context, n int) ([]domain.Product, error) {
-	pg, err := c.List(ctx, Filter{Sort: "discount", PageSize: n})
+// TopInCategory: the best sellers of one category ("Populiariausios el. dovanų
+// kortelės" = gift-cards, "Populiariausi papildymai" = gaming-cards).
+func (c *Catalog) TopInCategory(ctx context.Context, category string, n int) ([]domain.Product, error) {
+	pg, err := c.List(ctx, Filter{Categories: []string{category}, Sort: "popular", PageSize: n})
 	return pg.Items, err
+}
+
+// PreOrders ("Įsigyk iš anksto"): products not released yet, soonest release first.
+func (c *Catalog) PreOrders(ctx context.Context, n int) ([]domain.Product, error) {
+	all, err := c.snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []domain.Product
+	for _, p := range all {
+		if p.PreOrder {
+			out = append(out, p)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].ReleaseDate < out[j].ReleaseDate })
+	return out[:min(n, len(out))], nil
+}
+
+type CategoryCount struct {
+	Category string `json:"category"`
+	Count    int    `json:"count"`
+}
+
+// CategoryCounts: how many products each category has, in menu order.
+func (c *Catalog) CategoryCounts(ctx context.Context) ([]CategoryCount, error) {
+	all, err := c.snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts := map[string]int{}
+	for _, p := range all {
+		counts[p.Category]++
+	}
+	out := make([]CategoryCount, 0, len(domain.Categories))
+	for _, cat := range domain.Categories {
+		out = append(out, CategoryCount{Category: cat, Count: counts[cat]})
+	}
+	return out, nil
+}
+
+// isPreOrder: the release date is after today. "YYYY-MM-DD" strings compare
+// correctly as text, so no date parsing is needed.
+func isPreOrder(releaseDate string, now time.Time) bool {
+	return releaseDate != "" && releaseDate > now.Format("2006-01-02")
 }
 
 // lookup returns the products with these ids, in the same order. Unknown ids

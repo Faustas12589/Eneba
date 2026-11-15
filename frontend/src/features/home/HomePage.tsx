@@ -1,22 +1,26 @@
-import { BannerBlock, BestSellersBlock, DealsBlock, RecentlyViewedBlock, RecommendedBlock } from "./blocks";
+import {
+  BannerBlock,
+  BestSellersBlock,
+  CategoriesBlock,
+  GiftCardsBlock,
+  PreOrdersBlock,
+  RecentlyViewedBlock,
+  RecommendedBlock,
+  TopUpsBlock,
+} from "./blocks";
 
+/** Homepage = a stack of independent blocks; each is a full-width band, colors alternate (CSS). */
 export function HomePage() {
   return (
-    <div className="page container">
+    <div className="home">
       <BannerBlock />
       <RecentlyViewedBlock />
       <RecommendedBlock />
-
-
       <BestSellersBlock />
-                  {/*"populiariausios el. dovanų kortelės"*/}
-            {/*"populiariausi papildymai"(roblux steam playstation.store)*/}
-            {/*"įsigyk iš anksto"*/}
-
-      <DealsBlock /> {/* this one isnt needed */}
-      {/* game categories with the number of the games that each category has */}
+      <GiftCardsBlock />
+      <TopUpsBlock />
+      <PreOrdersBlock />
+      <CategoriesBlock />
     </div>
   );
 }
-
-{/* each of the block need to be in the alternating color from purple to dark purple (the ones you've used)*/}

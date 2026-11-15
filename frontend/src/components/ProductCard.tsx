@@ -6,6 +6,7 @@ import { formatPrice, regionLabel } from "../lib/format";
 export function ProductCard({ p }: { p: Product }) {
   return (
     <Link to={`/product/${p.id}`} className="card">
+      {p.preOrder && <span className="card-tag" title="Išankstinis užsakymas">Iš anksto · {p.releaseDate}</span>}
       {p.imageUrl ? (
         <img className="card-img" src={p.imageUrl} alt={p.name} />
       ) : (

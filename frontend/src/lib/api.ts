@@ -1,6 +1,6 @@
 import { getIdToken } from "./firebase";
 import { guestId } from "./guest";
-import type { Banner, CartUpdate, Order, OrderPage, Product, ProductDetail, ProductPage } from "../types";
+import type { Banner, CartUpdate, CategoryCount, Order, OrderPage, Product, ProductDetail, ProductPage } from "../types";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
@@ -76,7 +76,10 @@ export const api = {
     request<{ items: Product[] }>(`/api/search?q=${encodeURIComponent(q)}`, { signal }),
   banners: () => request<{ items: Banner[] }>("/api/home/banners"),
   bestSellers: () => request<{ items: Product[] }>("/api/home/best-sellers"),
-  deals: () => request<{ items: Product[] }>("/api/home/deals"),
+  giftCards: () => request<{ items: Product[] }>("/api/home/gift-cards"),
+  topUps: () => request<{ items: Product[] }>("/api/home/top-ups"),
+  preOrders: () => request<{ items: Product[] }>("/api/home/pre-orders"),
+  categoryCounts: () => request<{ items: CategoryCount[] }>("/api/home/categories"),
   /** Personal blocks: built from this browser's profile (guest id while login is off). */
   recentlyViewed: () => request<{ items: Product[] }>("/api/home/recently-viewed", { guest: true }),
   recommended: () => request<{ items: Product[] }>("/api/home/recommended", { guest: true }),

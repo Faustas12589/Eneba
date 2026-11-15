@@ -17,8 +17,8 @@ import (
 )
 
 type Handler struct {
-	Catalog *service.Catalog
-	Cart    *service.Cart
+	Catalog  *service.Catalog
+	Cart     *service.Cart
 	Orders   *service.Orders
 	Profiles *service.Profiles
 }
@@ -106,11 +106,38 @@ func (h *Handler) BestSellers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
-func (h *Handler) Deals(w http.ResponseWriter, r *http.Request) {
-	items, err := h.Catalog.Deals(r.Context(), 8)
+// GiftCards: GET /api/home/gift-cards -> best-selling eGift cards (Amazon, Spotify...).
+func (h *Handler) GiftCards(w http.ResponseWriter, r *http.Request) {
+	items, err := h.Catalog.TopInCategory(r.Context(), "gift-cards", 8)
+	writeItems(w, items, err)
+}
+
+// TopUps: GET /api/home/top-ups -> best-selling gaming cards (Steam, PSN, Roblox...).
+func (h *Handler) TopUps(w http.ResponseWriter, r *http.Request) {
+	items, err := h.Catalog.TopInCategory(r.Context(), "gaming-cards", 8)
+	writeItems(w, items, err)
+}
+
+// PreOrders: GET /api/home/pre-orders -> unreleased products, soonest first.
+func (h *Handler) PreOrders(w http.ResponseWriter, r *http.Request) {
+	items, err := h.Catalog.PreOrders(r.Context(), 8)
+	writeItems(w, items, err)
+}
+
+// Categories: GET /api/home/categories -> {"items": [{"category", "count"}...]} in menu order.
+func (h *Handler) Categories(w http.ResponseWriter, r *http.Request) {
+	items, err := h.Catalog.CategoryCounts(r.Context())
+	writeItems(w, items, err)
+}
+
+// writeItems answers {"items": [...]} (never null), or the error.
+func writeItems[T any](w http.ResponseWriter, items []T, err error) {
 	if err != nil {
 		writeErr(w, err)
 		return
+	}
+	if items == nil {
+		items = []T{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }

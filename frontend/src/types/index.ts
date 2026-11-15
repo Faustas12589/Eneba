@@ -14,6 +14,14 @@ export interface Product {
   currency: string;
   discountPercent: number;
   sales: number;
+  releaseDate?: string; // "YYYY-MM-DD", only on unreleased products
+  preOrder: boolean; // derived by the server from releaseDate
+}
+
+/** GET /api/home/categories: products per category, in menu order. */
+export interface CategoryCount {
+  category: string;
+  count: number;
 }
 
 export interface Offer {

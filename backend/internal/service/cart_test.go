@@ -13,7 +13,7 @@ import (
 
 const (
 	testCart  = "cart-aaaaaaaaaaaaaaaa"
-	testOffer = "p001-o1" // seeded with stock 140
+	testOffer = "p001-o1" // seeded with stock 7
 )
 
 func newCartSvc(t *testing.T) (*Cart, *repository.Memory) {

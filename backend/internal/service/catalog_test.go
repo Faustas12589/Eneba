@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"eneba-marketplace/backend/internal/domain"
 	"eneba-marketplace/backend/internal/repository"
@@ -121,5 +122,67 @@ func TestGetSortsOffersCheapestFirst(t *testing.T) {
 	}
 	if _, err := s.Get(context.Background(), "nope"); err == nil {
 		t.Error("expected not-found error")
+	}
+}
+
+func TestIsPreOrder(t *testing.T) {
+	now := time.Date(2026, 11, 15, 23, 59, 0, 0, time.Local)
+	cases := map[string]bool{
+		"":           false, // already out
+		"2026-11-14": false,
+		"2026-11-15": false, // release day: not a pre-order any more
+		"2026-11-16": true,
+		"2027-01-01": true,
+	}
+	for date, want := range cases {
+		if got := isPreOrder(date, now); got != want {
+			t.Errorf("isPreOrder(%q) = %v, want %v", date, got, want)
+		}
+	}
+}
+
+// The catalog-only homepage blocks: per-category best sellers, pre-orders, counts.
+func TestHomeBlocks(t *testing.T) {
+	s := newSvc(t)
+	s.now = func() time.Time { return time.Date(2026, 11, 15, 12, 0, 0, 0, time.Local) } // seed has releases after this
+	ctx := context.Background()
+
+	topUps, _ := s.TopInCategory(ctx, "gaming-cards", 8)
+	if len(topUps) == 0 {
+		t.Fatal("no top-ups")
+	}
+	for i, p := range topUps {
+		if p.Category != "gaming-cards" {
+			t.Errorf("%s is not a gaming card", p.Name)
+		}
+		if i > 0 && topUps[i-1].Sales < p.Sales {
+			t.Error("top-ups not sorted by sales")
+		}
+	}
+
+	pre, _ := s.PreOrders(ctx, 8)
+	if len(pre) == 0 {
+		t.Fatal("seed has future release dates, expected pre-orders")
+	}
+	for i, p := range pre {
+		if !p.PreOrder || p.ReleaseDate == "" {
+			t.Errorf("%s listed as pre-order: %+v", p.Name, p)
+		}
+		if i > 0 && pre[i-1].ReleaseDate > p.ReleaseDate {
+			t.Error("pre-orders not sorted soonest first")
+		}
+	}
+
+	counts, _ := s.CategoryCounts(ctx)
+	all, _ := s.List(ctx, Filter{})
+	total := 0
+	for i, c := range counts {
+		if c.Category != domain.Categories[i] {
+			t.Errorf("counts not in menu order: %v", counts)
+		}
+		total += c.Count
+	}
+	if total != all.Total {
+		t.Errorf("category counts add up to %d, catalog has %d", total, all.Total)
 	}
 }

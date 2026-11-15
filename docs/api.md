@@ -11,7 +11,10 @@ All responses are JSON. Prices are integer cents. Errors: `{"error": "..."}`.
 | GET | `/api/search?q=` | top 6 suggestions for the header dropdown |
 | GET | `/api/home/banners` | homepage block: banners |
 | GET | `/api/home/best-sellers` | homepage block: top by sales |
-| GET | `/api/home/deals` | homepage block: top by discount |
+| GET | `/api/home/gift-cards` | homepage block: best-selling `gift-cards` |
+| GET | `/api/home/top-ups` | homepage block: best-selling `gaming-cards` (Steam, PSN, Roblox...) |
+| GET | `/api/home/pre-orders` | homepage block: products with a future `releaseDate`, soonest first |
+| GET | `/api/home/categories` | homepage block: `{items: [{category, count}]}` in menu order |
 
 ## Cart (anyone holding the cart id, DECISIONS #15, #19)
 | Method | Path | Notes |

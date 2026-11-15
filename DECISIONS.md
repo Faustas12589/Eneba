@@ -264,3 +264,21 @@ profile can follow the user once login returns); collaborative filtering ("peopl
 also bought Y": needs far more orders than a demo has, and is harder to explain).
 Trade-off: one Firestore write per product page view (~fine at demo traffic, 20k/day free).
 When login returns, a guest's profile could be merged into the account; not built yet.
+
+## 26. Homepage = Eneba's sections; pre-orders from a release date; smaller seed
+Blocks, top to bottom: banners, recently viewed, recommended (#25), best sellers, popular gift
+cards, popular top-ups, pre-orders, categories with counts. "Geriausi pasiūlymai" (deals) is gone
+(endpoint too). Each block keeps its own endpoint (#6); the two "popular" rails reuse one service
+method (`TopInCategory`) with a different category. Every block is a full-width band and CSS
+alternates the colors (`.band:nth-child(even)`), so a hidden block (empty recently viewed) never
+breaks the pattern.
+- Pre-orders: `Product.releaseDate` ("YYYY-MM-DD", stored); `preOrder` is derived when the catalog
+  loads (never stored, like the discount in #9), so GTA VI (2026-11-19) turns into a normal product
+  on its own on release day. ISO dates compare as text, so no date parsing. The catalog's clock is
+  injectable so the test doesn't break once the seeded dates pass. Pre-orders are sold like any
+  key (delivered at once); a real shop would hold delivery until release.
+- Seed: every offer's stock divided by 20 (5,863 -> 322 keys), 1-10 units per offer, so selling
+  out, 409s and the 30-min expiry can be tried by hand; a Firestore seed is now a few hundred writes.
+  Added a Roblox card (top-ups) and 3 pre-orders (release dates are demo data).
+Rejected: a stored `isPreOrder` flag (goes stale on release day); one generic
+`/api/home/block?type=` endpoint (breaks "one endpoint per block").

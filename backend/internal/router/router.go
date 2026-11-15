@@ -24,7 +24,10 @@ func New(h *handler.Handler, verifier middleware.TokenVerifier, corsOrigins []st
 		r.Get("/search", h.Suggest)
 		r.Get("/home/banners", h.Banners)
 		r.Get("/home/best-sellers", h.BestSellers)
-		r.Get("/home/deals", h.Deals)
+		r.Get("/home/gift-cards", h.GiftCards)
+		r.Get("/home/top-ups", h.TopUps)
+		r.Get("/home/pre-orders", h.PreOrders)
+		r.Get("/home/categories", h.Categories)
 		r.Get("/carts/{cartId}", h.GetCart)
 		r.Put("/carts/{cartId}/items/{offerId}", h.SetCartItem)
 
