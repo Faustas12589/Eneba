@@ -25,8 +25,8 @@ export function CartLine({ item }: { item: OrderItem }) {
     <li className="cart-line">
       {item.imageUrl ? <img className="cart-img" src={item.imageUrl} alt="" /> : <div className="cart-img" />}
       <div className="cart-info">
-        <Link to={`/product/${item.productId}`} className="card-title">{item.productName}</Link>
-        <span className="muted small">Pardavėjas: {item.sellerName}</span>
+        <span className="muted small">Parduoda <strong>{item.sellerName}</strong></span>
+        <Link to={`/product/${item.productId}`} className="cart-title">{item.productName}</Link>
         {stock !== undefined && <span className="muted small">Dar liko: {stock} vnt.</span>}
         {item.expiresAt && <span className="muted small">Rezervuota iki {formatTime(item.expiresAt)}</span>}
         <button type="button" className="link-btn" disabled={busy} onClick={() => change(0)}>Pašalinti</button>

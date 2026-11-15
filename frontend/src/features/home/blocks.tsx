@@ -30,7 +30,7 @@ function ProductRail({ title, items }: { title: string; items: Product[] }) {
   return (
     <section className="block">
       <h2>{title}</h2>
-      <div className="grid">{items.map((p) => <ProductCard key={p.id} p={p} />)}</div>
+      <div className="grid rail">{items.map((p) => <ProductCard key={p.id} p={p} />)}</div>
     </section>
   );
 }

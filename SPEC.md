@@ -16,7 +16,7 @@ status; the "why" column is what I will say when asked.
 | Cart | Done | The cart is a server-side order (status `cart`); the UI renders that document and the browser keeps only the cart id. Stock + keys reserved when an item is added (DECISIONS #15, #19, #21). Popup, header dropdown, live stock errors. |
 | Checkout + key delivery | Done | Cart is the first stage of an order: cart -> paid -> delivered. Keys are reserved from the available pool when added to the cart, sold on delivery. Line data (name, price, keys) is written once at add time; checkout only changes status fields. Simulated payment (DECISIONS #8, #19, #21). |
 | Order history | Done | Per browser guest id while login is off (DECISIONS #20); `GET /api/orders?page=`, paged 10 per page (#22), lists orders with copyable key codes. |
-| Eneba styling | TODO | Tokens-driven (tokens.css is still placeholder). Extract real values into docs/DESIGN.md first. |
+| Eneba styling | Done | Values from eneba.com CSS in docs/DESIGN.md -> tokens.css; header, cards, store, product, cart restyled (DECISIONS #24). Mobile filter drawer still TODO. |
 
 ## Explicitly out of scope (and why)
 - Real payments: assignment allows simulation; no value in wiring a provider.
@@ -36,8 +36,7 @@ status; the "why" column is what I will say when asked.
    Login is switched off for now (DECISIONS #20); bring it back before or after deploy.
 2. ~~Checkout + key delivery~~ Done (DECISIONS #19).
 3. ~~Order history~~ Done.
-4. **Eneba styling.** Fill `docs/DESIGN.md` from eneba.com (colors, fonts, spacing, components),
-   copy the values into `tokens.css`, polish header, cards, product page, cart dropdown, popup.
+4. ~~**Eneba styling.**~~ Done (DECISIONS #24). Left: collapse store filters on phones; real cover images.
 5. **Deploy to Render** with `render.yaml`, set env vars, test the live site end to end
    (free tier sleeps; the reservation sweep runs once it wakes).
 6. **Tests + polish.** Handler tests for the cart endpoints; store/search edge cases; frontend

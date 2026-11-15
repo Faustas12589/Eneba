@@ -4,7 +4,7 @@ import { useAsync } from "../../lib/useAsync";
 import { Status } from "../../components/Status";
 import { ProductCard } from "../../components/ProductCard";
 import { Pager } from "../../components/Pager";
-import { formatItemCount } from "../../lib/format";
+import { formatItemCount, regionLabel } from "../../lib/format";
 import { categoryLabel } from "../../lib/categories";
 
 const SORTS = [
@@ -68,7 +68,7 @@ export function StorePage() {
                   {values.map((v) => (
                     <label key={v} className="check">
                       <input type="checkbox" checked={list(sp.get(key)).includes(v)} onChange={() => toggle(key, v)} />
-                      {key === "category" ? categoryLabel(v) : v}
+                      {key === "category" ? categoryLabel(v) : key === "region" ? regionLabel(v) : v}
                     </label>
                   ))}
                 </fieldset>

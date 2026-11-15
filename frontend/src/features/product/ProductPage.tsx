@@ -3,7 +3,8 @@ import { useParams } from "react-router-dom";
 import type { Offer } from "../../types";
 import { api } from "../../lib/api";
 import { useAsync } from "../../lib/useAsync";
-import { formatPrice } from "../../lib/format";
+import { formatPrice, regionLabel } from "../../lib/format";
+import { categoryLabel } from "../../lib/categories";
 import { Status } from "../../components/Status";
 import { useCart } from "../cart/CartContext";
 
@@ -28,7 +29,9 @@ export function ProductPage() {
             {p.imageUrl ? <img className="card-img" src={p.imageUrl} alt={p.name} /> : <div className="card-img" />}
             <div>
               <h1>{p.name}</h1>
-              <p className="muted">{p.platform} · {p.region} · {p.genre}</p>
+              <p className="muted">
+                {[p.platform, regionLabel(p.region), categoryLabel(p.category), p.genre].filter(Boolean).join(" · ")}
+              </p>
               <p>{p.description}</p>
               <h2>Pardavėjų pasiūlymai</h2>
               <table className="offers">

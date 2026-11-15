@@ -16,7 +16,7 @@ function Layout() {
   return (
     <>
       <Header />
-      <main><Outlet /></main>
+      <main className="main"><Outlet /></main>
       <Footer />
       <CartPopup />
     </>

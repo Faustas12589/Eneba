@@ -23,7 +23,7 @@ export function OrderCard({ order }: { order: Order }) {
           <li key={it.offerId} className="order-item">
             {it.imageUrl ? <img className="cart-img" src={it.imageUrl} alt="" /> : <div className="cart-img" />}
             <div className="cart-info">
-              <Link to={`/product/${it.productId}`} className="card-title">{it.productName}</Link>
+              <Link to={`/product/${it.productId}`} className="cart-title">{it.productName}</Link>
               <span className="muted small">
                 Pardavėjas: {it.sellerName} · {it.quantity} × {formatPrice(it.price, order.currency)}
               </span>

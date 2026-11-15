@@ -1,31 +1,36 @@
 /*
- * PLACEHOLDER design tokens. Replace every value with what you extract from
- * eneba.com (see docs/DESIGN.md). Components only ever use these variables,
- * so restyling the whole app = editing this one file.
+ * Design tokens taken from eneba.com (see docs/DESIGN.md for where each value comes from).
+ * Components only ever use these variables, so restyling = editing this one file.
  */
 :root {
   /* colors */
-  --color-bg: #1b0f3a;
-  --color-surface: #261650;
-  --color-surface-2: #301c66;
-  --color-border: #3d2a7a;
+  --color-bg: #4618ac;
+  --color-band: #3c1395;        /* second header row, alternate sections */
+  --color-surface: #351183;     /* panels: cart, summary, menus */
+  --color-surface-2: #2c0e6c;   /* blocks inside a panel */
+  --color-card: #1f0a4d;        /* product card info area, footer */
+  --color-border: #5825cc;
   --color-text: #ffffff;
-  --color-text-muted: #b7a9e0;
-  --color-primary: #7c4dff;
-  --color-primary-hover: #6a3df0;
-  --color-accent: #ffc107;
-  --color-danger: #ff5c7a;
-  --color-success: #3ddc97;
-  --color-overlay: rgba(0, 0, 0, 0.6);
-  --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --color-text-muted: #b3aac9;
+  --color-primary: #fad318;     /* yellow call-to-action */
+  --color-primary-hover: #f0a613;
+  --color-on-primary: #351183;  /* text on yellow */
+  --color-secondary: #5825cc;
+  --color-secondary-hover: #7a4edf;
+  --color-accent: #fad318;
+  --color-danger: #e76a8c;
+  --color-success: #23c299;
+  --color-overlay: rgba(31, 10, 77, 0.75);
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
 
   /* typography */
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Metropolis", Arial, Helvetica, sans-serif;
   --font-mono: ui-monospace, Consolas, "Courier New", monospace;
-  --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-lg: 1.25rem;
-  --text-xl: 1.75rem;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 28px;
 
   /* spacing / shape */
   --space-1: 4px;
@@ -34,7 +39,8 @@
   --space-4: 16px;
   --space-6: 24px;
   --space-8: 32px;
-  --radius: 8px;
-  --radius-lg: 14px;
+  --radius: 3px;
+  --radius-lg: 5px;
+  --radius-pill: 999px;
   --container: 1200px;
 }

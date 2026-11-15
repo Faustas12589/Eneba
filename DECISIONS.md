@@ -229,3 +229,19 @@ Rejected: a `categories` collection in Firestore (5 fixed values need no reads o
 several categories per product (Eneba shows one type per item; tags can come later);
 reusing genre (a card has no genre, and a game needs both).
 Firestore needs a re-seed (`go run ./cmd/seed`) to get the field; it wipes carts/orders (#19).
+
+## 24. Eneba styling from their real CSS, all values in tokens.css
+Colors, font and sizes come from eneba.com's own stylesheets (fetched with curl and counted by
+frequency), checked against screenshots in `docs/screens/`; `docs/DESIGN.md` lists each value
+and where Eneba uses it. `tokens.css` holds every value; components only use the variables
+(no hex outside tokens.css). Metropolis (SIL OFL) is self-hosted from `public/fonts/` with
+`@font-face`, only the 4 weights used (400/600/700/800).
+Layout follows Eneba: two-row header (search + category band), narrow cards with platform strip,
+green region, "Nuo" + struck list price, single-row scrolling rails on the homepage, cart as
+"Mano krepšelis" + "Suvestinė" panels with a yellow CTA. Region codes get Lithuanian labels
+(`regionLabel`). Cards without an image show the product name on a gradient.
+Checked visually with headless Chrome screenshots at 1280px and 500px.
+Rejected: copying Eneba's logo/images (brand assets, not ours: the logo is plain text);
+a CSS framework (Tailwind etc.: new dependency, and tokens already do the job);
+Google Fonts Montserrat (close, but the real font is free to self-host).
+Follow-up: on phones the store filters should collapse behind a button like Eneba's.

@@ -18,18 +18,24 @@ export function CartPage() {
 
   return (
     <div className="page container">
-      <h1>Krepšelis</h1>
       <div className="cart">
-        <ul className="cart-lines">
-          {items.map((i) => <CartLine key={i.offerId} item={i} />)}
-        </ul>
-        <aside className="cart-summary">
-          <div className="cart-total">
-            <span>Suma ({formatItemCount(count)})</span>
+        <section className="panel">
+          <h2>Mano krepšelis</h2>
+          <ul className="cart-lines">
+            {items.map((i) => <CartLine key={i.offerId} item={i} />)}
+          </ul>
+        </section>
+        <aside className="cart-summary panel">
+          <h2>Suvestinė</h2>
+          <Link to="/checkout" className="btn block">Atsiskaityti dabar</Link>
+          <div className="cart-total small">
+            <span>{formatItemCount(count)}</span>
+            <span>{formatPrice(total, currency)}</span>
+          </div>
+          <div className="cart-total cart-grand-total">
+            <span>Iš viso:</span>
             <span className="price">{formatPrice(total, currency)}</span>
           </div>
-          <p className="muted small">Galutinė kaina patvirtinama atsiskaitant.</p>
-          <Link to="/checkout" className="btn block">Atsiskaityti dabar</Link>
         </aside>
       </div>
     </div>
