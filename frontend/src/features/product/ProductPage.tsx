@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { Offer } from "../../types";
 import { api } from "../../lib/api";
@@ -11,6 +11,11 @@ import { useCart } from "../cart/CartContext";
 export function ProductPage() {
   const { id = "" } = useParams();
   const state = useAsync(() => api.product(id), [id]);
+  // Feeds "Neseniai peržiūrėta" / "Rekomenduojama tau". Fire and forget:
+  // a failed save must never break the product page.
+  useEffect(() => {
+    api.recordView(id).catch(() => {});
+  }, [id]);
   const { items, add, liveStock } = useCart();
   const [pending, setPending] = useState<string | null>(null); // offer id being added
   const inCart = (offerId: string) => items.find((i) => i.offerId === offerId)?.quantity ?? 0;

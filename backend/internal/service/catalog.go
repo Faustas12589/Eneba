@@ -250,6 +250,23 @@ func (c *Catalog) Deals(ctx context.Context, n int) ([]domain.Product, error) {
 	return pg.Items, err
 }
 
+// lookup returns the products with these ids, in the same order. Unknown ids
+// (e.g. a product removed since someone viewed it) are skipped.
+func (c *Catalog) lookup(ctx context.Context, ids []string) ([]domain.Product, error) {
+	if _, err := c.snapshot(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]domain.Product, 0, len(ids))
+	for _, id := range ids {
+		if p, ok := c.byID[id]; ok {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
 func (c *Catalog) Banners(ctx context.Context) ([]domain.Banner, error) {
 	return c.repo.ListBanners(ctx)
 }

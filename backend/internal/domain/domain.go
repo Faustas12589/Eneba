@@ -164,3 +164,13 @@ func (o Order) Public() Order {
 	o.Items = items
 	return o
 }
+
+// Profile is what the shop remembers about one user, so the homepage can show
+// "recently viewed" and "recommended for you". UserID is whatever the request's
+// user is: "guest:<id>" while login is off (DECISIONS #20), the Firebase uid later.
+// Purchases are not copied here; they are read from the user's orders.
+type Profile struct {
+	UserID         string    `json:"userId" firestore:"userId"`
+	RecentlyViewed []string  `json:"recentlyViewed" firestore:"recentlyViewed"` // product ids, newest first
+	UpdatedAt      time.Time `json:"updatedAt" firestore:"updatedAt"`
+}

@@ -19,7 +19,8 @@ import (
 type Handler struct {
 	Catalog *service.Catalog
 	Cart    *service.Cart
-	Orders  *service.Orders
+	Orders   *service.Orders
+	Profiles *service.Profiles
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -112,6 +113,47 @@ func (h *Handler) Deals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// Personal blocks: need the request's user (guest id while login is off).
+
+// RecentlyViewed: GET /api/home/recently-viewed -> {"items": [product...]}, newest first.
+func (h *Handler) RecentlyViewed(w http.ResponseWriter, r *http.Request) {
+	items, err := h.Profiles.RecentlyViewed(r.Context(), middleware.UserFrom(r.Context()).UID, 8)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// Recommended: GET /api/home/recommended -> {"items": [product...]}.
+func (h *Handler) Recommended(w http.ResponseWriter, r *http.Request) {
+	items, err := h.Profiles.Recommended(r.Context(), middleware.UserFrom(r.Context()).UID, 8)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// --- Profile ---------------------------------------------------------------
+
+// RecordView: POST /api/profile/views {"productId": "..."} -> 204.
+// The product page calls it on open; 404 if the product doesn't exist.
+func (h *Handler) RecordView(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ProductID string `json:"productId"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body); err != nil || body.ProductID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": `body must be {"productId": "..."}`})
+		return
+	}
+	if err := h.Profiles.RecordView(r.Context(), middleware.UserFrom(r.Context()).UID, body.ProductID); err != nil {
+		writeErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- Cart (guests too) ---------------------------------------------------

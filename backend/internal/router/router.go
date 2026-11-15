@@ -34,12 +34,15 @@ func New(h *handler.Handler, verifier middleware.TokenVerifier, corsOrigins []st
 			r.Get("/me", h.Me)
 		})
 
-		// Orders belong to a browser guest id while login is switched off
-		// (DECISIONS #20). To require login again: RequireAuth(verifier) here.
+		// Orders and profiles belong to a browser guest id while login is switched
+		// off (DECISIONS #20, #25). To require login again: RequireAuth(verifier) here.
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireGuest())
 			r.Post("/orders", h.Checkout)
 			r.Get("/orders", h.ListOrders)
+			r.Post("/profile/views", h.RecordView)
+			r.Get("/home/recently-viewed", h.RecentlyViewed)
+			r.Get("/home/recommended", h.Recommended)
 		})
 	})
 	return r

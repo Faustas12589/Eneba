@@ -62,11 +62,24 @@ type Orders interface {
 	ListUserOrders(ctx context.Context, userID string) ([]domain.Order, error)
 }
 
+// ProfileFunc is a service rule that changes a profile (e.g. adds a view).
+type ProfileFunc func(p *domain.Profile) error
+
+type Profiles interface {
+	// GetProfile returns ErrNotFound for a user who has no profile yet.
+	GetProfile(ctx context.Context, userID string) (*domain.Profile, error)
+	// UpdateProfile reads the profile (an empty one if missing), calls apply and
+	// saves the result in one atomic step. apply may run more than once if
+	// Firestore retries the transaction.
+	UpdateProfile(ctx context.Context, userID string, apply ProfileFunc) (*domain.Profile, error)
+}
+
 // Store is everything the API needs; both Memory and Firestore implement it.
 type Store interface {
 	Catalog
 	Reservations
 	Orders
+	Profiles
 }
 
 // reservationOf is a cart line seen as a reservation (zero value if no line).

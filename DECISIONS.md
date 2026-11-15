@@ -245,3 +245,22 @@ Rejected: copying Eneba's logo/images (brand assets, not ours: the logo is plain
 a CSS framework (Tailwind etc.: new dependency, and tokens already do the job);
 Google Fonts Montserrat (close, but the real font is free to self-host).
 Follow-up: on phones the store filters should collapse behind a button like Eneba's.
+
+## 25. Profiles per user id: recently viewed + recommendations
+`profiles/{userId}` stores the user's last 20 viewed product ids (newest first). The user id is
+whatever the request's user is: `guest:<id>` while login is off (#20), the Firebase uid once it is
+back, so nothing needs rewriting then. Purchases are not copied into the profile; they are read
+from the user's orders (one source of truth).
+- The product page calls `POST /api/profile/views` (fire and forget). Reloading the product that
+  is already first skips the write (Firestore quota).
+- `GET /api/home/recently-viewed` and `GET /api/home/recommended` are their own endpoints like
+  every homepage block (#6), behind `RequireGuest`. Recently viewed is hidden while empty.
+- `recommend` is a pure function: each product not viewed or bought scores +3 per history item
+  with the same genre, +2 same category, +1 same platform; ties and new users fall back to sales.
+  `addView` (move to front, dedupe, cap) is pure too. Both are unit tested.
+Rejected: login first (blocked Firestore testing before; Eneba shows these blocks to guests too);
+storing views in localStorage (recommendations need purchases, which live on the server, and a
+profile can follow the user once login returns); collaborative filtering ("people who bought X
+also bought Y": needs far more orders than a demo has, and is harder to explain).
+Trade-off: one Firestore write per product page view (~fine at demo traffic, 20k/day free).
+When login returns, a guest's profile could be merged into the account; not built yet.

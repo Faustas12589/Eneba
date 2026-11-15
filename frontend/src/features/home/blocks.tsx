@@ -40,7 +40,23 @@ export function BestSellersBlock() {
   return <Status state={state}>{({ items }) => <ProductRail title="Perkamiausi" items={items} />}</Status>;
 }
 
+/** "Neseniai peržiūrėta": hidden until the browser has viewed something, like on Eneba. */
+export function RecentlyViewedBlock() {
+  const state = useAsync(() => api.recentlyViewed(), []);
+  return (
+    <Status state={state}>
+      {({ items }) => (items.length > 0 ? <ProductRail title="Neseniai peržiūrėta" items={items} /> : null)}
+    </Status>
+  );
+}
+
+export function RecommendedBlock() {
+  const state = useAsync(() => api.recommended(), []);
+  return <Status state={state}>{({ items }) => <ProductRail title="Rekomenduojama tau" items={items} />}</Status>;
+}
+
 export function DealsBlock() {
   const state = useAsync(() => api.deals(), []);
   return <Status state={state}>{({ items }) => <ProductRail title="Geriausi pasiūlymai" items={items} />}</Status>;
 }
+

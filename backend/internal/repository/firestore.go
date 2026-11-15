@@ -20,6 +20,7 @@ const (
 	ColBanners  = "banners"
 	ColKeys     = "keys"
 	ColOrders   = "orders" // carts are orders with status "cart"
+	ColProfiles = "profiles" // doc id = user id (guest:<id> while login is off)
 
 	// ColReservations held cart lines before they moved into orders.
 	// Only cmd/seed still uses it, to delete leftovers.
@@ -262,4 +263,28 @@ func listAll[T any](ctx context.Context, q firestore.Query) ([]T, error) {
 		}
 		out = append(out, v)
 	}
+}
+
+func (f *Firestore) GetProfile(ctx context.Context, userID string) (*domain.Profile, error) {
+	return decode[domain.Profile](f.c.Collection(ColProfiles).Doc(userID).Get(ctx))
+}
+
+func (f *Firestore) UpdateProfile(ctx context.Context, userID string, apply ProfileFunc) (*domain.Profile, error) {
+	ref := f.c.Collection(ColProfiles).Doc(userID)
+	var out *domain.Profile
+	err := f.c.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		p, err := decode[domain.Profile](tx.Get(ref))
+		if errors.Is(err, ErrNotFound) {
+			p, err = &domain.Profile{UserID: userID}, nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := apply(p); err != nil {
+			return err
+		}
+		out = p
+		return tx.Set(ref, p)
+	})
+	return out, err
 }

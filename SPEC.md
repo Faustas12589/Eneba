@@ -9,7 +9,7 @@ status; the "why" column is what I will say when asked.
 | Area | Status | Depth / why |
 |---|---|---|
 | Store (filters, sort, search, pagination) | Scaffolded | Core of a marketplace. Filters + sort in Go (see DECISIONS #2). Aim: polish + tests. |
-| Homepage blocks | Scaffolded | 3 blocks (banners, best sellers, deals), each own endpoint. Add 1-2 more if time. |
+| Homepage blocks | In progress | Banners, recently viewed + recommended (per-user profile, DECISIONS #25), best sellers. Next: gift cards, top-ups, pre-orders, category counts, alternating bands; drop deals. |
 | Search | Scaffolded | Typo/partial tolerant (trigram), header dropdown + results via store page. |
 | Product page + seller offers | Scaffolded | Offer comparison table with add-to-cart per offer. |
 | Auth | Switched off | Firebase Auth email/password code is kept but not used: orders belong to a browser guest id for now (DECISIONS #20). Dev mode without Firebase (#10). TODO: turn back on; Google sign-in? (optional) |

@@ -16,14 +16,15 @@ type Memory struct {
 	products []domain.Product
 	banners  []domain.Banner
 
-	mu     sync.Mutex // guards offers (stock), keys and orders
-	offers []domain.Offer
-	keys   []domain.Key
-	orders map[string]domain.Order
+	mu       sync.Mutex // guards offers (stock), keys, orders and profiles
+	offers   []domain.Offer
+	keys     []domain.Key
+	orders   map[string]domain.Order
+	profiles map[string]domain.Profile
 }
 
 func NewMemory() (*Memory, error) {
-	m := &Memory{orders: map[string]domain.Order{}}
+	m := &Memory{orders: map[string]domain.Order{}, profiles: map[string]domain.Profile{}}
 	if err := seeds.Load("products", &m.products); err != nil {
 		return nil, err
 	}
@@ -251,4 +252,32 @@ func cloneOrder(o domain.Order) domain.Order {
 		o.Items[i].Keys = slices.Clone(o.Items[i].Keys)
 	}
 	return o
+}
+
+func (m *Memory) GetProfile(_ context.Context, userID string) (*domain.Profile, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.profiles[userID]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	p.RecentlyViewed = slices.Clone(p.RecentlyViewed) // callers can't change the stored copy
+	return &p, nil
+}
+
+func (m *Memory) UpdateProfile(_ context.Context, userID string, apply ProfileFunc) (*domain.Profile, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.profiles[userID]
+	if !ok {
+		p = domain.Profile{UserID: userID}
+	}
+	p.RecentlyViewed = slices.Clone(p.RecentlyViewed)
+	if err := apply(&p); err != nil {
+		return nil, err
+	}
+	m.profiles[userID] = p
+	out := p
+	out.RecentlyViewed = slices.Clone(p.RecentlyViewed)
+	return &out, nil
 }

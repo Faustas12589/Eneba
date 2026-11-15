@@ -38,6 +38,7 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
     signal: opts.signal,
   });
   if (!res.ok) throw new ApiError(res.status, res.statusText, await res.json().catch(() => null));
+  if (res.status === 204) return undefined as T; // no body
   return res.json() as Promise<T>;
 }
 
@@ -76,6 +77,12 @@ export const api = {
   banners: () => request<{ items: Banner[] }>("/api/home/banners"),
   bestSellers: () => request<{ items: Product[] }>("/api/home/best-sellers"),
   deals: () => request<{ items: Product[] }>("/api/home/deals"),
+  /** Personal blocks: built from this browser's profile (guest id while login is off). */
+  recentlyViewed: () => request<{ items: Product[] }>("/api/home/recently-viewed", { guest: true }),
+  recommended: () => request<{ items: Product[] }>("/api/home/recommended", { guest: true }),
+  /** Remember that this browser opened a product page (feeds the two blocks above). */
+  recordView: (productId: string) =>
+    request<void>("/api/profile/views", { guest: true, method: "POST", body: { productId } }),
   /**
    * Reserve/release stock so the cart holds exactly `quantity` (0 = remove).
    * Returns the cart as stored. 409 = not enough stock, 410 = cart already paid.
