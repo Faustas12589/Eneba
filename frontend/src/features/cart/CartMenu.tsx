@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { formatPrice } from "../../lib/format";
 import { useCart } from "./CartContext";
 import { CartLine } from "./CartLine";
+import { CartIcon } from "../../components/Icons";
 
 /** Header cart button + dropdown with the cart's lines, sum and two actions. */
 export function CartMenu() {
@@ -34,8 +35,9 @@ export function CartMenu() {
 
   return (
     <div className="cart-menu" ref={ref}>
-      <button type="button" className="nav-btn" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        Krepšelis{count > 0 && <span className="cart-count">{count}</span>}
+      <button type="button" className="nav-btn cart-btn" aria-expanded={open} aria-label={`Krepšelis (${count})`} title="Krepšelis" onClick={() => setOpen((o) => !o)}>
+        <CartIcon size={28} />
+        {count > 0 && <span className="cart-count">{count}</span>}
       </button>
       {open && (
         <div className="cart-dropdown">

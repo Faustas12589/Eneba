@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { formatPrice } from "../../lib/format";
 import type { Product } from "../../types";
+import { SearchIcon } from "../../components/Icons";
 
 /** Header search: debounced suggestions; Enter goes to /store?q=... (full results with filters). */
 export function SearchBox() {
@@ -34,10 +35,7 @@ export function SearchBox() {
 
   return (
     <form className="search" onSubmit={submit} onBlur={() => setTimeout(() => setOpen(false), 150)}>
-      <svg className="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-        <circle cx="11" cy="11" r="7" />
-        <path d="M20 20l-4-4" />
-      </svg>
+      <span className="search-icon"><SearchIcon size={26} /></span>
       <input
         value={q}
         placeholder="Ieškoti žaidimų, papildymų ir daugiau"

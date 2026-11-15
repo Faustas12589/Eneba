@@ -14,13 +14,13 @@ export function HomePage() {
   return (
     <div className="home">
       <BannerBlock />
+      <CategoriesBlock />
       <RecentlyViewedBlock />
       <RecommendedBlock />
       <BestSellersBlock />
       <GiftCardsBlock />
       <TopUpsBlock />
       <PreOrdersBlock />
-      <CategoriesBlock />
     </div>
   );
 }

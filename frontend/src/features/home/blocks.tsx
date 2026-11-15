@@ -5,6 +5,7 @@ import { categoryLabel } from "../../lib/categories";
 import { formatItemCount } from "../../lib/format";
 import { Status } from "../../components/Status";
 import { ProductCard } from "../../components/ProductCard";
+import { CategoryIcon } from "../../components/Icons";
 import type { Product } from "../../types";
 
 // Each block fetches from its OWN endpoint and handles its own loading/error,
@@ -42,23 +43,22 @@ function RailBlock({ title, load, more }: { title: string; load: () => Promise<{
   );
 }
 
+/** Full-bleed hero like Eneba's: the first banner is wide, the rest are narrow tall tiles. */
 export function BannerBlock() {
   const state = useAsync(() => api.banners(), []);
   return (
-    <Band>
+    <section className="hero">
       <Status state={state}>
-        {({ items }) => (
-          <div className="banner-row">
-            {items.map((b) => (
-              <Link key={b.id} to={b.linkUrl} className="banner" style={b.imageUrl ? { backgroundImage: `url(${b.imageUrl})`, backgroundSize: "cover" } : undefined}>
-                <h2>{b.title}</h2>
-                <p>{b.subtitle}</p>
-              </Link>
-            ))}
-          </div>
-        )}
+        {({ items }) =>
+          items.map((b) => (
+            <Link key={b.id} to={b.linkUrl} className="banner" style={b.imageUrl ? { backgroundImage: `url(${b.imageUrl})`, backgroundSize: "cover" } : undefined}>
+              <h2>{b.title}</h2>
+              <p>{b.subtitle}</p>
+            </Link>
+          ))
+        }
       </Status>
-    </Band>
+    </section>
   );
 }
 
@@ -83,24 +83,26 @@ export const TopUpsBlock = () => (
 );
 export const PreOrdersBlock = () => <RailBlock title="Įsigyk iš anksto" load={api.preOrders} />;
 
-/** Category tiles with how many products each has; a tile opens the filtered store. */
+/** Eneba's icon row under the hero: icon, category name and how many products it has. */
 export function CategoriesBlock() {
   const state = useAsync(() => api.categoryCounts(), []);
   return (
-    <Band>
-      <h2>Kategorijos</h2>
-      <Status state={state}>
-        {({ items }) => (
-          <div className="category-tiles">
-            {items.map((c) => (
-              <Link key={c.category} to={`/store?category=${c.category}`} className="category-tile">
-                <span className="category-tile-name">{categoryLabel(c.category)}</span>
-                <span className="muted small">{formatItemCount(c.count)}</span>
-              </Link>
-            ))}
-          </div>
-        )}
-      </Status>
-    </Band>
+    <section className="category-strip">
+      <div className="container">
+        <Status state={state}>
+          {({ items }) => (
+            <nav className="category-icons" aria-label="Kategorijos">
+              {items.map((c) => (
+                <Link key={c.category} to={`/store?category=${c.category}`} className="category-icon">
+                  <CategoryIcon id={c.category} />
+                  <span className="category-icon-name">{categoryLabel(c.category)}</span>
+                  <span className="muted">{formatItemCount(c.count)}</span>
+                </Link>
+              ))}
+            </nav>
+          )}
+        </Status>
+      </div>
+    </section>
   );
 }

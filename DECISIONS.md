@@ -282,3 +282,14 @@ breaks the pattern.
   Added a Roblox card (top-ups) and 3 pre-orders (release dates are demo data).
 Rejected: a stored `isPreOrder` flag (goes stale on release day); one generic
 `/api/home/block?type=` endpoint (breaks "one endpoint per block").
+
+## 27. Second design pass from a side-by-side screenshot
+Matched `docs/screens/desired.png` (Eneba) against `current.png`: icon header (cart with red
+badge, avatar linking to orders), "☰ Kategorijos" row, full-bleed hero (first banner spans 3
+grid columns, the others 1), category icon row with counts moved under the hero, 32px section
+titles, 214px cards, thin themed scrollbar. Icons are hand-written inline SVG in
+`components/Icons.tsx` using `currentColor`, so colors still come from tokens; one new token
+(`--color-badge`).
+Skipped on purpose: wishlist heart and language/currency picker (no such features, a dead icon
+would only be decoration); Eneba's logo and banner art (their brand assets).
+Rejected: an icon library such as lucide-react (new dependency for 9 icons).

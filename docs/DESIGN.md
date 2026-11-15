@@ -54,3 +54,11 @@ Eneba sets `html { font-size: 62.5% }`, so its `1.4rem` = 14px. Below everything
 - **Offer table (product page):** sellers listed cheapest first on panels, price + yellow buy button.
 - **Footer:** white strip with payment logos, then a dark `#1F0A4D` block with help text and
   a small copyright line.
+
+## Homepage layout (from `docs/screens/desired.png`, Eneba at ~940px wide)
+- Header row ~92px: logo, search 56px tall with a 2px white border and 18px semibold text,
+  then a cart icon with a red count badge (`#D32252`) and a round avatar.
+- Category row ~52px on the darker band: "☰ Kategorijos" + 16px semibold links.
+- Hero: full-bleed, no gaps or radius, ~280px tall. First banner wide (~60%), the rest narrow tiles.
+- Category icon row under the hero: line icon, name, (ours) product count.
+- Section titles ~32px extra-bold; cards ~214px wide with ~24px gaps; no visible scrollbar.

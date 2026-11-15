@@ -5,7 +5,7 @@
 :root {
   /* colors */
   --color-bg: #4618ac;
-  --color-band: #3c1395;        /* second header row, alternate sections */
+  --color-band: #341281;        /* second header row, alternate sections */
   --color-surface: #351183;     /* panels: cart, summary, menus */
   --color-surface-2: #2c0e6c;   /* blocks inside a panel */
   --color-card: #1f0a4d;        /* product card info area, footer */
@@ -19,6 +19,7 @@
   --color-secondary-hover: #7a4edf;
   --color-accent: #fad318;
   --color-danger: #e76a8c;
+  --color-badge: #d32252;       /* red count badge on the cart icon */
   --color-success: #23c299;
   --color-overlay: rgba(31, 10, 77, 0.75);
   --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
