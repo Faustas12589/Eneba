@@ -1,89 +1,23 @@
-// Pure cart logic: no React, no storage, no network. Every function returns a new array.
-import type { Offer, Product, ServerLine } from "../../types";
+// Pure cart helpers: no React, no storage, no network.
+// The cart itself is the server's order document (status "cart"); the browser
+// never builds or stores its own copy of the lines.
+import type { Order, OrderItem } from "../../types";
 
 /** Same cap as the backend (service.MaxPerLine). */
 export const MAX_PER_LINE = 10;
 
-/**
- * One line per OFFER (a product can be in the cart from two sellers).
- * `quantity` is what the server has reserved for this cart; `stock` is how many
- * more units are still available to anyone (both come from the server's reply).
- * Name/price are a display snapshot; checkout re-reads prices on the server.
- */
-export interface CartItem {
-  offerId: string;
-  productId: string;
-  productName: string;
-  imageUrl: string;
-  sellerName: string;
-  price: number; // cents
-  currency: string;
-  stock: number;
-  quantity: number;
-  expiresAt?: string; // ISO time the server releases this reservation
+/** An empty cart, shown before the server answered or after checkout. */
+export function emptyCart(id: string): Order {
+  return { id, status: "cart", items: [], total: 0, currency: "EUR", createdAt: "", paidAt: null, deliveredAt: null };
 }
 
-/**
- * Makes the local cart match the server: lines the server no longer holds
- * (reservation expired) are dropped. `lost` tells the UI to warn the shopper.
- */
-export function reconcile(items: CartItem[], server: ServerLine[]): { items: CartItem[]; lost: boolean } {
-  const byId = new Map(server.map((l) => [l.offerId, l]));
-  let lost = false;
-  const next: CartItem[] = [];
-  for (const item of items) {
-    const line = byId.get(item.offerId);
-    if (!line) {
-      lost = true;
-      continue;
-    }
-    if (line.quantity < item.quantity) lost = true;
-    next.push({ ...item, quantity: line.quantity, expiresAt: line.expiresAt });
-  }
-  return { items: next, lost };
-}
-
-export function quantityOf(items: CartItem[], offerId: string): number {
+export function quantityOf(items: OrderItem[], offerId: string): number {
   return items.find((i) => i.offerId === offerId)?.quantity ?? 0;
 }
 
-/** Saves the server's answer for one offer: new quantity (0 = line removed), stock, expiry. */
-export function applyServerLine(
-  items: CartItem[],
-  offerId: string,
-  quantity: number,
-  stock: number,
-  expiresAt?: string,
-): CartItem[] {
-  if (quantity === 0) return items.filter((i) => i.offerId !== offerId);
-  return items.map((i) => (i.offerId === offerId ? { ...i, quantity, stock, expiresAt: expiresAt ?? i.expiresAt } : i));
-}
-
-/** Adds a line the server just reserved (or updates it if it's already there). */
-export function addServerLine(
-  items: CartItem[],
-  product: Product,
-  offer: Offer,
-  quantity: number,
-  stock: number,
-  expiresAt?: string,
-): CartItem[] {
-  if (items.some((i) => i.offerId === offer.id)) return applyServerLine(items, offer.id, quantity, stock, expiresAt);
-  return [
-    ...items,
-    {
-      offerId: offer.id,
-      productId: product.id,
-      productName: product.name,
-      imageUrl: product.imageUrl,
-      sellerName: offer.sellerName,
-      price: offer.price,
-      currency: offer.currency,
-      stock,
-      quantity,
-      expiresAt,
-    },
-  ];
+/** True if the server holds less than before: a line expired or shrank. */
+export function lostLines(before: OrderItem[], after: OrderItem[]): boolean {
+  return before.some((b) => quantityOf(after, b.offerId) < b.quantity);
 }
 
 /** Error text when the server refused because stock ran out. */
@@ -93,10 +27,6 @@ export function outOfStockMessage(stock: number, inCart: number): string {
   return "Šis pasiūlymas jau išparduotas.";
 }
 
-export function itemCount(items: CartItem[]): number {
+export function itemCount(items: OrderItem[]): number {
   return items.reduce((n, i) => n + i.quantity, 0);
-}
-
-export function totalCents(items: CartItem[]): number {
-  return items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 }

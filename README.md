@@ -43,7 +43,7 @@ you in as a local dev user (only accepted by a `STORE=memory` backend). See `DEC
 6. Seed and run:
    ```bash
    cd backend
-   go run ./cmd/seed    # idempotent: re-running overwrites by id
+   go run ./cmd/seed    # idempotent full reset: products, offers, key pool; deletes carts/orders
    go run ./cmd/api     # log should say store=firestore
    ```
 
@@ -54,5 +54,11 @@ you in as a local dev user (only accepted by a `STORE=memory` backend). See `DEC
 4. Note: the free API service sleeps when idle; the first request can take ~30-60s.
 
 ## Status
-Done (scaffold): catalog, filters/sort/search, homepage blocks, product page with offers, auth plumbing.
-TODO: cart, checkout + key delivery, order history, Eneba styling pass. See `SPEC.md`.
+Done: catalog, filters/sort/search, homepage blocks, product page with offers,
+cart with server-side key reservation, checkout (simulated payment) + key delivery, order history.
+Login is switched off for now: orders belong to a random per-browser guest id (`DECISIONS.md` #20).
+TODO: Eneba styling pass, deploy. See `SPEC.md`.
+
+Firestore collections: `products`, `offers` (stock = available keys), `banners`,
+`keys` (`offerId, code, status: available|reserved|sold, orderId`) and
+`orders` (`status: cart -> paid -> delivered`; a cart is an order with status `cart`).

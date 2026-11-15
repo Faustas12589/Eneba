@@ -13,14 +13,9 @@ export function Header() {
         <nav className="nav">
           <Link to="/store">Parduotuvė</Link>
           <CartMenu />
-          {user ? (
-            <>
-              <Link to="/orders">Užsakymai</Link>
-              <button className="btn secondary" onClick={signOut}>Atsijungti</button>
-            </>
-          ) : (
-            <Link to="/login" className="btn">Prisijungti</Link>
-          )}
+          <Link to="/orders">Užsakymai</Link>
+          {/* Login is off for now (DECISIONS #20). Only shown if someone signed in earlier. */}
+          {user && <button className="btn secondary" onClick={signOut}>Atsijungti</button>}
         </nav>
       </div>
     </header>

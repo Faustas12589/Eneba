@@ -39,97 +39,95 @@ func (e *OutOfStockError) Error() string {
 // carts can't block an offer forever.
 const ReservationTTL = 30 * time.Minute
 
-// CartLine is the answer to a change: what the cart holds for one offer and
-// how many units are left for everyone else.
-type CartLine struct {
-	OfferID   string    `json:"offerId"`
-	Quantity  int       `json:"quantity"`
-	Stock     int       `json:"stock"`
-	ExpiresAt time.Time `json:"expiresAt,omitzero"` // zero when the line was removed
-}
-
-// ReservedLine is one line of GET /api/carts/{id}: what the server still holds.
-type ReservedLine struct {
-	OfferID   string    `json:"offerId"`
-	Quantity  int       `json:"quantity"`
-	ExpiresAt time.Time `json:"expiresAt"`
+// CartUpdate is the answer to a change: the cart as now stored, plus how many
+// units of the changed offer are left for everyone else.
+type CartUpdate struct {
+	Cart    domain.Order `json:"cart"`
+	OfferID string       `json:"offerId"`
+	Stock   int          `json:"stock"`
 }
 
 // errNotExpired: the line was touched again after we listed it; leave it alone.
 var errNotExpired = errors.New("reservation not expired")
 
-type Cart struct {
-	repo repository.Reservations
+// CartStore is what the cart needs: reservations, plus reading the cart order.
+type CartStore interface {
+	repository.Reservations
+	GetOrder(ctx context.Context, id string) (*domain.Order, error)
 }
 
-func NewCart(repo repository.Reservations) *Cart { return &Cart{repo: repo} }
+type Cart struct {
+	repo CartStore
+}
+
+func NewCart(repo CartStore) *Cart { return &Cart{repo: repo} }
 
 // SetQuantity makes the cart hold exactly `qty` units of an offer (0 = remove).
-// Stock is reserved the moment an item goes into the cart and returned when it
-// leaves. Setting an absolute number (not "+1") makes retries harmless.
-func (c *Cart) SetQuantity(ctx context.Context, cartID, offerID string, qty int) (*CartLine, error) {
+// Stock (and that many keys) is reserved the moment an item goes into the cart
+// and returned when it leaves. Setting an absolute number (not "+1") makes
+// retries harmless. A paid cart returns repository.ErrCartClosed.
+func (c *Cart) SetQuantity(ctx context.Context, cartID, offerID string, qty int) (*CartUpdate, error) {
 	if !cartIDPattern.MatchString(cartID) {
 		return nil, ErrInvalidCartID
 	}
 	if qty < 0 || qty > MaxPerLine {
 		return nil, ErrInvalidQuantity
 	}
-	var line CartLine
-	err := c.repo.UpdateReservation(ctx, cartID, offerID, func(stock int, cur domain.Reservation) (int, int, error) {
+	var stockLeft int
+	cart, err := c.repo.UpdateReservation(ctx, cartID, offerID, func(stock int, cur domain.Reservation) (int, domain.Reservation, error) {
 		newStock, err := reserve(stock, cur.Quantity, qty)
 		if err != nil {
-			return 0, 0, err
+			return 0, domain.Reservation{}, err
 		}
-		line = CartLine{OfferID: offerID, Quantity: qty, Stock: newStock}
-		if qty > 0 {
-			line.ExpiresAt = time.Now().Add(ReservationTTL)
-		}
-		return newStock, qty, nil
+		stockLeft = newStock
+		return newStock, domain.Reservation{Quantity: qty, ExpiresAt: time.Now().Add(ReservationTTL)}, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &line, nil
+	return &CartUpdate{Cart: cart.Public(), OfferID: offerID, Stock: stockLeft}, nil
 }
 
-// Lines returns what the server still holds for a cart, so the browser can
-// drop lines whose reservation expired.
-func (c *Cart) Lines(ctx context.Context, cartID string) ([]ReservedLine, error) {
+// Get returns the cart order as stored (an empty cart if it has no lines yet).
+// The browser renders the cart from this. A paid cart is ErrCartClosed.
+func (c *Cart) Get(ctx context.Context, cartID string) (*domain.Order, error) {
 	if !cartIDPattern.MatchString(cartID) {
 		return nil, ErrInvalidCartID
 	}
-	rs, err := c.repo.ListCartReservations(ctx, cartID)
+	o, err := c.repo.GetOrder(ctx, cartID)
+	if errors.Is(err, repository.ErrNotFound) {
+		return &domain.Order{ID: cartID, Status: domain.OrderCart, Items: []domain.OrderItem{}}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	lines := make([]ReservedLine, 0, len(rs))
-	for _, r := range rs {
-		lines = append(lines, ReservedLine{OfferID: r.OfferID, Quantity: r.Quantity, ExpiresAt: r.UpdatedAt.Add(ReservationTTL)})
+	if o.Status != domain.OrderCart {
+		return nil, repository.ErrCartClosed
 	}
-	return lines, nil
+	pub := o.Public()
+	return &pub, nil
 }
 
-// ReleaseExpired puts every reservation older than ReservationTTL back into
-// stock and returns how many lines it released. The API runs it every minute.
-// Each release is its own transaction that re-checks the timestamp, so a line
+// ReleaseExpired puts every cart line whose reservation ended back into stock
+// and returns how many lines it released. The API runs it every minute.
+// Each release is its own transaction that re-checks the expiry, so a line
 // the shopper touched a moment ago (after we listed it) is skipped.
 func (c *Cart) ReleaseExpired(ctx context.Context, now time.Time) (int, error) {
-	cutoff := now.Add(-ReservationTTL)
-	expired, err := c.repo.ListReservationsBefore(ctx, cutoff)
+	expired, err := c.repo.ListExpiredReservations(ctx, now)
 	if err != nil {
 		return 0, err
 	}
 	released := 0
 	for _, r := range expired {
-		err := c.repo.UpdateReservation(ctx, r.CartID, r.OfferID, func(stock int, cur domain.Reservation) (int, int, error) {
-			if cur.Quantity == 0 || cur.UpdatedAt.After(cutoff) {
-				return 0, 0, errNotExpired
+		_, err := c.repo.UpdateReservation(ctx, r.CartID, r.OfferID, func(stock int, cur domain.Reservation) (int, domain.Reservation, error) {
+			if cur.Quantity == 0 || !cur.ExpiresAt.Before(now) {
+				return 0, domain.Reservation{}, errNotExpired
 			}
-			return stock + cur.Quantity, 0, nil
+			return stock + cur.Quantity, domain.Reservation{}, nil
 		})
 		switch {
-		case errors.Is(err, errNotExpired), errors.Is(err, repository.ErrNotFound):
-			// touched again, already gone, or the offer was deleted: skip
+		case errors.Is(err, errNotExpired), errors.Is(err, repository.ErrNotFound), errors.Is(err, repository.ErrCartClosed):
+			// touched again, already gone, offer deleted, or paid meanwhile: skip
 		case err != nil:
 			return released, err
 		default:

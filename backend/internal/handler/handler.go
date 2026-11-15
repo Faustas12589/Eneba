@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"eneba-marketplace/backend/internal/domain"
 	"eneba-marketplace/backend/internal/middleware"
 	"eneba-marketplace/backend/internal/repository"
 	"eneba-marketplace/backend/internal/service"
@@ -19,6 +20,7 @@ import (
 type Handler struct {
 	Catalog *service.Catalog
 	Cart    *service.Cart
+	Orders  *service.Orders
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -116,6 +118,7 @@ func (h *Handler) Deals(w http.ResponseWriter, r *http.Request) {
 
 // SetCartItem: PUT /api/carts/{cartId}/items/{offerId}  body {"quantity": n}
 // Reserves or releases stock so the cart holds exactly n units (0 = remove).
+// 200 -> {"cart": <cart order as stored>, "offerId", "stock": units left}.
 // 409 when there isn't enough stock; the body says how many are available.
 func (h *Handler) SetCartItem(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -135,6 +138,9 @@ func (h *Handler) SetCartItem(w http.ResponseWriter, r *http.Request) {
 		})
 	case errors.Is(err, service.ErrInvalidCartID), errors.Is(err, service.ErrInvalidQuantity):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	case errors.Is(err, repository.ErrCartClosed):
+		// 410 Gone: this cart is now an order; the browser starts a new cart.
+		writeJSON(w, http.StatusGone, map[string]string{"error": err.Error()})
 	case err != nil:
 		writeErr(w, err)
 	default:
@@ -142,19 +148,21 @@ func (h *Handler) SetCartItem(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GetCart: GET /api/carts/{cartId} -> {"items": [{offerId, quantity, expiresAt}]}
-// What the server still reserves; lines missing here have expired.
+// GetCart: GET /api/carts/{cartId} -> the cart order as stored (status "cart").
+// The browser renders the cart from this; expired lines are simply gone.
+// 410 once the cart was paid.
 func (h *Handler) GetCart(w http.ResponseWriter, r *http.Request) {
-	lines, err := h.Cart.Lines(r.Context(), chi.URLParam(r, "cartId"))
-	if errors.Is(err, service.ErrInvalidCartID) {
+	cart, err := h.Cart.Get(r.Context(), chi.URLParam(r, "cartId"))
+	switch {
+	case errors.Is(err, service.ErrInvalidCartID):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	if err != nil {
+	case errors.Is(err, repository.ErrCartClosed):
+		writeJSON(w, http.StatusGone, map[string]string{"error": err.Error()})
+	case err != nil:
 		writeErr(w, err)
-		return
+	default:
+		writeJSON(w, http.StatusOK, cart)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": lines})
 }
 
 // --- Auth-protected ---------------------------------------------------
@@ -163,6 +171,44 @@ func (h *Handler) GetCart(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
 	writeJSON(w, http.StatusOK, map[string]string{"uid": u.UID, "email": u.Email})
+}
+
+// Checkout: POST /api/orders  body {"cartId": "..."} -> 201 with the delivered order.
+// Simulated payment: the cart's reserved keys are sold to the request's user
+// (for now a browser guest id, see router).
+// Safe to retry: a paid-but-undelivered order is finished, a delivered one returned.
+func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		CartID string `json:"cartId"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": `body must be {"cartId": "..."}`})
+		return
+	}
+	order, err := h.Orders.Checkout(r.Context(), middleware.UserFrom(r.Context()).UID, body.CartID)
+	switch {
+	case errors.Is(err, service.ErrInvalidCartID), errors.Is(err, service.ErrEmptyCart):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	case errors.Is(err, service.ErrNotYourOrder):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"}) // don't confirm it exists
+	case err != nil:
+		writeErr(w, err)
+	default:
+		writeJSON(w, http.StatusCreated, order)
+	}
+}
+
+// ListOrders: GET /api/orders -> {"items": [order...]} for the request's user, newest first.
+func (h *Handler) ListOrders(w http.ResponseWriter, r *http.Request) {
+	orders, err := h.Orders.List(r.Context(), middleware.UserFrom(r.Context()).UID)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if orders == nil {
+		orders = []domain.Order{} // JSON [] instead of null
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": orders})
 }
 
 // --- helpers ----------------------------------------------------------

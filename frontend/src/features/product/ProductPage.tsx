@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import type { Offer, Product } from "../../types";
+import type { Offer } from "../../types";
 import { api } from "../../lib/api";
 import { useAsync } from "../../lib/useAsync";
 import { formatPrice } from "../../lib/format";
@@ -15,9 +15,9 @@ export function ProductPage() {
   const inCart = (offerId: string) => items.find((i) => i.offerId === offerId)?.quantity ?? 0;
   // Stock changes as carts reserve it; prefer the newest number the server gave us.
   const stockOf = (o: Offer) => liveStock[o.id] ?? o.stock;
-  const onAdd = async (p: Product, o: Offer) => {
+  const onAdd = async (o: Offer) => {
     setPending(o.id);
-    await add(p, o); // reserves on the server; the popup shows success or the error
+    await add(o.id); // reserves on the server; the popup shows success or the error
     setPending(null);
   };
   return (
@@ -46,7 +46,7 @@ export function ProductPage() {
                         <button
                           className="btn"
                           disabled={stockOf(o) < 1 || pending === o.id}
-                          onClick={() => onAdd(p, o)}
+                          onClick={() => onAdd(o)}
                         >
                           {stockOf(o) < 1 ? "Išparduota" : "Į krepšelį"}
                         </button>

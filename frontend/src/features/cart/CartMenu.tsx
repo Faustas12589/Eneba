@@ -6,7 +6,7 @@ import { CartLine } from "./CartLine";
 
 /** Header cart button + dropdown with the cart's lines, sum and two actions. */
 export function CartMenu() {
-  const { items, count, total } = useCart();
+  const { items, count, total, currency } = useCart();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { pathname } = useLocation();
@@ -49,7 +49,7 @@ export function CartMenu() {
               <div className="cart-dropdown-footer">
                 <div className="cart-total">
                   <span>Suma</span>
-                  <span className="price">{formatPrice(total, items[0].currency)}</span>
+                  <span className="price">{formatPrice(total, currency)}</span>
                 </div>
                 <Link to="/cart" className="btn secondary block" onClick={close}>Peržiūrėti krepšelį</Link>
                 <Link to="/checkout" className="btn block" onClick={close}>Atsiskaityti dabar</Link>

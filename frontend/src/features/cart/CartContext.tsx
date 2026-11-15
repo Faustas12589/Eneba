@@ -1,139 +1,107 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../../lib/api";
-import type { Offer, Product } from "../../types";
-import {
-  addServerLine,
-  applyServerLine,
-  itemCount,
-  MAX_PER_LINE,
-  outOfStockMessage,
-  quantityOf,
-  reconcile,
-  totalCents,
-  type CartItem,
-} from "./cart";
+import type { Order, OrderItem, OutOfStock } from "../../types";
+import { emptyCart, itemCount, lostLines, MAX_PER_LINE, outOfStockMessage, quantityOf } from "./cart";
 
 /** What the add-to-cart popup shows: success, or why the add failed. */
 export type CartNotice = { kind: "added" } | { kind: "error"; title?: string; message: string };
 
 interface CartValue {
-  items: CartItem[];
+  /** The cart order as the server stores it (DECISIONS #21). */
+  items: OrderItem[];
   count: number; // total quantity, for the header badge and popup
-  total: number; // cents
-  /** Latest stock the server reported per offer id (for the product page table). */
+  total: number; // cents, from the server
+  currency: string;
+  /** Latest stock the server reported per offer id (product page table, cart lines). */
   liveStock: Record<string, number>;
   /** Reserves one more unit on the server, then opens the popup (success or error). */
-  add: (product: Product, offer: Offer) => Promise<void>;
+  add: (offerId: string) => Promise<void>;
   /** Sets a line's quantity on the server (0 = remove). Returns an error message or null. */
   setQty: (offerId: string, qty: number) => Promise<string | null>;
+  /** Simulated payment; starts a new cart and returns the delivered order. Throws on failure. */
+  checkout: () => Promise<Order>;
   notice: CartNotice | null;
   closeNotice: () => void;
 }
 
 const Ctx = createContext<CartValue | null>(null);
-// v2: lines are now server reservations; older local-only carts are dropped.
-const ITEMS_KEY = "cart.v2";
 const ID_KEY = "cartId";
 const FAILED = "Nepavyko atnaujinti krepšelio. Bandykite dar kartą.";
 const EXPIRED = "Rezervacija baigėsi: kai kurios prekės grąžintos į sandėlį ir pašalintos iš krepšelio.";
+const CLOSED = "Šis krepšelis jau apmokėtas, todėl pradėtas naujas. Bandykite dar kartą.";
 const TOO_MANY = `Vienam pasiūlymui galima daugiausia ${MAX_PER_LINE} vnt.`;
-
-function loadItems(): CartItem[] {
-  try {
-    const raw = localStorage.getItem(ITEMS_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? (parsed as CartItem[]) : [];
-  } catch {
-    return []; // corrupt JSON or storage blocked: start empty
-  }
-}
 
 /** Random id that names this browser's cart on the server (like a guest session). */
 function loadCartId(): string {
   try {
-    let id = localStorage.getItem(ID_KEY);
-    if (!id) {
-      id = crypto.randomUUID();
-      localStorage.setItem(ID_KEY, id);
-    }
-    return id;
+    return localStorage.getItem(ID_KEY) ?? newCartId();
   } catch {
     return crypto.randomUUID(); // storage blocked: cart lives for this page load only
   }
 }
 
-type SyncResult =
-  | { ok: true; quantity: number; stock: number; expiresAt?: string }
-  | { ok: false; error: string };
+/** A fresh cart id. The old one now names a paid order, which can't change. */
+function newCartId(): string {
+  const id = crypto.randomUUID();
+  try {
+    localStorage.setItem(ID_KEY, id);
+  } catch {
+    // storage blocked: the new id lasts for this page load only
+  }
+  return id;
+}
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>(loadItems);
-  const [cartId] = useState(loadCartId);
+  // The id lives in a ref: it changes after checkout and async code must see
+  // the new one. useState just reads localStorage once instead of every render.
+  const [initialCartId] = useState(loadCartId);
+  const cartId = useRef(initialCartId);
+  // The server's cart document. Only the id is kept in the browser; lines,
+  // names, prices and the total always come from the server.
+  const [cart, setCart] = useState<Order>(() => emptyCart(initialCartId));
+  const loaded = useRef(false); // false until the first GET answered
   const [liveStock, setLiveStock] = useState<Record<string, number>>({});
   const [notice, setNotice] = useState<CartNotice | null>(null);
-  // Latest items for async functions: after `await`, the `items` variable
-  // they closed over may be out of date.
-  const itemsRef = useRef(items);
+  // Latest cart for async functions: after `await`, a closed-over value may be old.
+  const cartRef = useRef(cart);
+  cartRef.current = cart;
   // Changes in flight + a counter bumped by every change. A background refresh
   // only applies its answer if no change started or finished while it ran.
   const inFlight = useRef(0);
   const changeSeq = useRef(0);
 
-  useEffect(() => {
-    itemsRef.current = items;
-    try {
-      localStorage.setItem(ITEMS_KEY, JSON.stringify(items));
-    } catch {
-      // storage blocked: cart just won't survive a reload
-    }
-  }, [items]);
+  /** Forget the paid/closed cart and use a new server cart id. */
+  function startNewCart() {
+    cartId.current = newCartId();
+    setCart(emptyCart(cartId.current));
+  }
 
   /**
-   * Asks the server to make this cart hold `want` units of an offer. The server
-   * reserves/releases the stock atomically. On "not enough stock" (409) the
-   * server also says what we really hold, so the cart is corrected to match.
-   */
-  const sync = async (offerId: string, want: number): Promise<SyncResult> => {
-    if (want > MAX_PER_LINE) return { ok: false, error: TOO_MANY };
-    inFlight.current++;
-    changeSeq.current++;
-    try {
-      const line = await api.setCartItem(cartId, offerId, want);
-      setLiveStock((s) => ({ ...s, [offerId]: line.stock }));
-      return { ok: true, quantity: line.quantity, stock: line.stock, expiresAt: line.expiresAt };
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
-        const body = e.body as { stock: number; quantity: number };
-        setLiveStock((s) => ({ ...s, [offerId]: body.stock }));
-        setItems((cur) => applyServerLine(cur, offerId, body.quantity, body.stock));
-        return { ok: false, error: outOfStockMessage(body.stock, body.quantity) };
-      }
-      return { ok: false, error: FAILED };
-    } finally {
-      inFlight.current--;
-      changeSeq.current++;
-    }
-  };
-
-  /**
-   * Reservations expire on the server after 30 min (DECISIONS #16). This asks
-   * what the server still holds and drops expired lines, warning the shopper.
+   * Reads the cart from the server. Reservations expire after 30 min
+   * (DECISIONS #16): if lines are gone, the shopper gets a warning.
    */
   const refresh = useCallback(async () => {
-    if (itemsRef.current.length === 0 || inFlight.current > 0) return;
+    if (inFlight.current > 0) return;
+    if (loaded.current && cartRef.current.items.length === 0) return; // nothing to expire
     const seq = changeSeq.current;
     try {
-      const { items: server } = await api.cart(cartId);
+      const next = await api.cart(cartId.current);
       if (seq !== changeSeq.current) return; // a change ran meanwhile; its answer wins
-      const { items: next, lost } = reconcile(itemsRef.current, server);
-      setItems(next);
-      if (lost) setNotice({ kind: "error", title: "Krepšelis atnaujintas", message: EXPIRED });
-    } catch {
+      if (loaded.current && lostLines(cartRef.current.items, next.items)) {
+        setNotice({ kind: "error", title: "Krepšelis atnaujintas", message: EXPIRED });
+      }
+      loaded.current = true;
+      setCart(next);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 410) {
+        loaded.current = true;
+        startNewCart(); // paid in another tab: it's an order now
+      }
       // offline or server down: try again on the next tick
     }
-  }, [cartId]);
+  }, []);
 
-  // Check on load, every minute, and when the shopper comes back to the tab.
+  // Load on start, then check every minute and when the shopper comes back to the tab.
   useEffect(() => {
     void refresh();
     const timer = setInterval(refresh, 60_000);
@@ -144,32 +112,80 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
   }, [refresh]);
 
-  const add = async (product: Product, offer: Offer) => {
-    const res = await sync(offer.id, quantityOf(itemsRef.current, offer.id) + 1);
-    if (!res.ok) {
-      setNotice({ kind: "error", message: res.error });
-      return;
+  /**
+   * Runs one cart change on the server and shows its answer. Counted as a
+   * change, so a background refresh started earlier can't overwrite it.
+   */
+  const change = async <T,>(run: () => Promise<T>): Promise<T> => {
+    inFlight.current++;
+    changeSeq.current++;
+    try {
+      return await run();
+    } finally {
+      inFlight.current--;
+      changeSeq.current++;
     }
-    setItems((cur) => addServerLine(cur, product, offer, res.quantity, res.stock, res.expiresAt));
-    setNotice({ kind: "added" });
   };
 
-  const setQty = async (offerId: string, qty: number): Promise<string | null> => {
-    const res = await sync(offerId, qty);
-    if (!res.ok) return res.error;
-    setItems((cur) => applyServerLine(cur, offerId, res.quantity, res.stock, res.expiresAt));
-    return null;
+  /**
+   * Asks the server to make this cart hold `want` units of an offer. The server
+   * reserves/releases stock and keys atomically and returns the stored cart.
+   * Returns an error message, or null on success.
+   */
+  const sync = (offerId: string, want: number): Promise<string | null> =>
+    change(async () => {
+      if (want > MAX_PER_LINE) return TOO_MANY;
+      try {
+        const res = await api.setCartItem(cartId.current, offerId, want);
+        setCart(res.cart);
+        setLiveStock((s) => ({ ...s, [offerId]: res.stock }));
+        return null;
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 410) {
+          startNewCart();
+          return CLOSED;
+        }
+        if (e instanceof ApiError && e.status === 409) {
+          const body = e.body as OutOfStock;
+          setLiveStock((s) => ({ ...s, [offerId]: body.stock }));
+          // Show what the server really holds now.
+          await api.cart(cartId.current).then(setCart, () => {});
+          return outOfStockMessage(body.stock, body.quantity);
+        }
+        return FAILED;
+      }
+    });
+
+  const add = async (offerId: string) => {
+    const error = await sync(offerId, quantityOf(cartRef.current.items, offerId) + 1);
+    setNotice(error ? { kind: "error", message: error } : { kind: "added" });
   };
+
+  const setQty = (offerId: string, qty: number) => sync(offerId, qty);
+
+  /**
+   * Pays for the cart (simulated) and returns the delivered order with its keys.
+   * Counts as a change, so a background refresh can't see the now-paid cart and
+   * show a wrong warning. Throws ApiError on failure.
+   */
+  const checkout = () =>
+    change(async () => {
+      const order = await api.checkout(cartId.current);
+      startNewCart();
+      return order;
+    });
 
   const closeNotice = useCallback(() => setNotice(null), []);
 
   const value: CartValue = {
-    items,
-    count: itemCount(items),
-    total: totalCents(items),
+    items: cart.items,
+    count: itemCount(cart.items),
+    total: cart.total,
+    currency: cart.currency,
     liveStock,
     add,
     setQty,
+    checkout,
     notice,
     closeNotice,
   };

@@ -7,7 +7,7 @@ Export with `/export` in Claude Code and paste/append below.
 
 https://claude.ai/share/45444832-590f-442f-be05-df277d2d21cf
 
-## Session 2 - 2026-12-13 cleaning up the skeleton + connecting db
+## Session 2 - 2026-11-13 cleaning up the skeleton + connecting db
 
 > read thourgh the folders and get to know this project. Check for any
   inconsistancies in the CLAUDE.MD, DECISIONS.MD, SPEC.md
@@ -1163,7 +1163,7 @@ code 0)
   (eneba-58152) and the local path to your key file. Neither is a secret, and
   the key itself never appeared in the chat, so the log is safe to commit.
 
-  ## Session 2 - 2026-12-14 adding the cart features with updating quantity
+  ## Session 3 - 2026-11-14 adding the cart features with updating quantity
 
 
 > Lets do a simple cart implementation now
@@ -4924,7 +4924,4739 @@ code 0)
   to AI_LOG.md. I can't run that command myself. Your .gitignore and
   package-lock.json changes, and AI_CHAT_LOG.md, are still uncommitted.
 
-  ## Session 2 - 2026-12-13 cleaning up the skeleton + connecting db
+  ## Session 4 - 2026-11-15 Added cart, checkout and keys logic. 
+
+
+> <ide_selection>The user selected the lines 4904 to 4909 from
+  c:\Projects\eneba\AI_CHAT_LOG.md:
+    2. Checkout and key delivery. This is the biggest slice. Placing an order
+       turns the cart's reservations into an order, hands out the keys, and
+  clears
+       the cart, with simulated payment. First decide how DECISIONS #11 ("stock
+  =
+       unsold keys") fits with stock now being reserved at cart time. My
+       suggestion is to seed exactly as many keys per offer as its stock, so
+  the
+       two always match.
+
+  This may or may not be related to the current task.</ide_selection>
+
+> Let's do the checkout and key delivery implementation. Make the keys only
+  obtainable from the pool of unreserverd ones. keys should have their own
+  section in db with offer_id code, status, order_id. Also let's add orders
+  section and make cart one of the stages, so it goes like this cart -> paid ->
+  delivered, because it links up nicely
+
+● I'll start by reading the backend and frontend code that this touches.
+
+  Ran 5 shell commands (ctrl+o to expand)
+
+● Let me see the rest of the tests and the frontend helpers I'll reuse.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● I've settled the design: keys move from available to reserved when added to a
+  cart, the cart doubles as the order document, and checkout runs as two
+  transactions. Next I'll start implementing it. · summary
+
+  Read 1 file (ctrl+o to expand)
+
+● Starting with the domain types.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● No Python here, so I'll use the edit tools.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(backend\internal\domain\domain.go)
+  ⎿  Added 89 lines, removed 7 lines
+       39    LinkURL  string `json:"linkUrl" firestore:"linkUrl"`
+       40  }
+       41  
+       42 -// Reservation is how many units of one offer a cart is holdin
+          -g. Those units are                                            
+       43 -// already taken out of Offer.Stock, so Offer.Stock is what an
+          -yone else can still add.                                      
+       42 +// Reservation is one cart line seen from the stock side: how 
+          +many units of an                                              
+       43 +// offer a cart holds. It is not stored on its own: it is read
+          + from the cart's                                              
+       44 +// Order (status "cart"). Those units' keys are "reserved", so
+          + Offer.Stock                                                  
+       45 +// (= available keys) is what anyone else can still add.      
+       46  type Reservation struct {
+       45 -  CartID    string    `json:"cartId" firestore:"cartId"`      
+       46 -  OfferID   string    `json:"offerId" firestore:"offerId"`    
+       47 -  Quantity  int       `json:"quantity" firestore:"quantity"`  
+       48 -  UpdatedAt time.Time `json:"updatedAt" firestore:"updatedAt"`
+       47 +  CartID    string    `json:"cartId"`                         
+       48 +  OfferID   string    `json:"offerId"`                        
+       49 +  Quantity  int       `json:"quantity"`                       
+       50 +  UpdatedAt time.Time `json:"updatedAt"`                      
+       51  }
+       52  
+       51 -// TODO (checkout slice): Order, OrderItem, DigitalKey.       
+       53 +// Key statuses: available -> reserved (in a cart) -> sold (de
+          +livered).                                                     
+       54 +// A reserved key goes back to available if its cart line is r
+          +emoved or expires.                                            
+       55 +const (                                                       
+       56 +  KeyAvailable = "available"                                  
+       57 +  KeyReserved  = "reserved"                                   
+       58 +  KeySold      = "sold"                                       
+       59 +)                                                             
+       60 +                                                              
+       61 +// Key is one digital game key. Each offer has a pool of them;
+          + the offer's                                                  
+       62 +// Stock always equals how many of its keys are available.    
+       63 +type Key struct {                                             
+       64 +  ID      string `json:"id" firestore:"id"`                   
+       65 +  OfferID string `json:"offerId" firestore:"offerId"`         
+       66 +  Code    string `json:"code" firestore:"code"`               
+       67 +  Status  string `json:"status" firestore:"status"`           
+       68 +  OrderID string `json:"orderId" firestore:"orderId"` // empty
+          + while available                                              
+       69 +}                                                             
+       70 +                                                              
+       71 +// Order statuses. The cart is the first stage of an order:   
+       72 +// cart (keys reserved) -> paid (prices fixed) -> delivered (k
+          +eys sold, codes shown).                                       
+       73 +const (                                                       
+       74 +  OrderCart      = "cart"                                     
+       75 +  OrderPaid      = "paid"                                     
+       76 +  OrderDelivered = "delivered"                                
+       77 +)                                                             
+       78 +                                                              
+       79 +// Order is a cart that becomes a purchase. Its ID is the brow
+          +ser's cart id.                                                
+       80 +// While it is a cart only OfferID, ProductID, Quantity and Re
+          +servedAt are set;                                             
+       81 +// paying fills in prices and names, delivery fills in the key
+          + codes.                                                       
+       82 +type Order struct {                                           
+       83 +  ID          string      `json:"id" firestore:"id"`          
+       84 +  UserID      string      `json:"-" firestore:"userId"` // emp
+          +ty while it is a guest cart                                   
+       85 +  Status      string      `json:"status" firestore:"status"`  
+       86 +  Items       []OrderItem `json:"items" firestore:"items"`    
+       87 +  Total       int         `json:"total" firestore:"total"` // 
+          +cents, set when paid                                          
+       88 +  Currency    string      `json:"currency" firestore:"currency
+          +"`                                                            
+       89 +  CreatedAt   time.Time   `json:"createdAt" firestore:"created
+          +At"`                                                          
+       90 +  PaidAt      time.Time   `json:"paidAt,omitzero" firestore:"p
+          +aidAt"`                                                       
+       91 +  DeliveredAt time.Time   `json:"deliveredAt,omitzero" firesto
+          +re:"deliveredAt"`                                             
+       92 +}                                                             
+       93 +                                                              
+       94 +// OrderItem is one offer in an order.                        
+       95 +type OrderItem struct {                                       
+       96 +  OfferID     string    `json:"offerId" firestore:"offerId"`  
+       97 +  ProductID   string    `json:"productId" firestore:"productId
+          +"`                                                            
+       98 +  ProductName string    `json:"productName" firestore:"product
+          +Name"`                                                        
+       99 +  ImageURL    string    `json:"imageUrl" firestore:"imageUrl"`
+      100 +  SellerName  string    `json:"sellerName" firestore:"sellerNa
+          +me"`                                                          
+      101 +  Price       int       `json:"price" firestore:"price"` // ce
+          +nts per unit, set when paid                                   
+      102 +  Quantity    int       `json:"quantity" firestore:"quantity"`
+      103 +  ReservedAt  time.Time `json:"-" firestore:"reservedAt"` // l
+          +ast change while in the cart; expiry counts from here         
+      104 +  Keys        []string  `json:"keys" firestore:"keys"`    // c
+          +odes, set when delivered                                      
+      105 +}                                                             
+      106 +                                                              
+      107 +// Item returns the line for an offer, or nil if the order has
+          + none.                                                        
+      108 +func (o *Order) Item(offerID string) *OrderItem {             
+      109 +  for i := range o.Items {                                    
+      110 +    if o.Items[i].OfferID == offerID {                        
+      111 +      return &o.Items[i]                                      
+      112 +    }                                                         
+      113 +  }                                                           
+      114 +  return nil                                                  
+      115 +}                                                             
+      116 +                                                              
+      117 +// SetCartLine makes the cart hold qty units of an offer (0 re
+          +moves the line).                                              
+      118 +func (o *Order) SetCartLine(offerID, productID string, qty int
+          +, now time.Time) {                                            
+      119 +  if it := o.Item(offerID); it != nil && qty > 0 {            
+      120 +    it.Quantity, it.ReservedAt = qty, now                     
+      121 +    return                                                    
+      122 +  }                                                           
+      123 +  var items []OrderItem                                       
+      124 +  for _, x := range o.Items {                                 
+      125 +    if x.OfferID != offerID {                                 
+      126 +      items = append(items, x)                                
+      127 +    }                                                         
+      128 +  }                                                           
+      129 +  if qty > 0 {                                                
+      130 +    items = append(items, OrderItem{OfferID: offerID, ProductI
+          +D: productID, Quantity: qty, ReservedAt: now})                
+      131 +  }                                                           
+      132 +  o.Items = items                                             
+      133 +}                                                             
+
+● Next is the key pool generator, which will produce exactly stock keys per
+  offer deterministically (about 6,000 keys), so I'm generating them in code
+  rather than in a large keys.json. · summary
+
+● Write(backend\seeds\keys.go)
+  ⎿  Wrote 37 lines to backend\seeds\keys.go
+       1 package seeds
+       2
+       3 import (
+       4   "crypto/sha256"
+       5   "fmt"
+       6
+       7   "eneba-marketplace/backend/internal/domain"
+       8 )
+       9
+      10 // Keys builds the demo key pool: exactly offer.Stock available
+     … +28 lines (ctrl+o to expand)
+
+● Now the repository interfaces, plus one small helper that both stores use for
+  moving keys.
+
+● Bash(cd /c/Projects/eneba/backend && cat > internal/repository/repository.go
+      <<'EOF'
+      // Package repository is the only layer that knows where data lives.…)
+  ⎿  Updated backend\internal\repository\repository.go (+65 -7)
+      1  // Package repository is the only layer that knows where data li
+         ves.
+      2 -// Services depend on the Catalog interface, never on Firestore 
+        -directly.                                                       
+      2 +// Services depend on these interfaces, never on Firestore direc
+        +tly.                                                            
+      3  package repository
+      4  
+      5  import (
+     ...
+      10          "eneba-marketplace/backend/internal/domain"
+      11  )
+      12  
+      13 -var ErrNotFound = errors.New("not found")                      
+      13 +var (                                                          
+      14 +        ErrNotFound = errors.New("not found")                  
+      15 +        // ErrCartClosed: the cart was already paid, so it can'
+         +t change any more.                                             
+      16 +        ErrCartClosed = errors.New("cart already checked out") 
+      17 +        // errKeyPoolMismatch means offers.stock and the availa
+         +ble keys disagree.                                             
+      18 +        // Every write changes both together, so this only happ
+         +ens with bad seed data.                                        
+      19 +        errKeyPoolMismatch = errors.New("key pool does not matc
+         +h offer stock")                                                
+      20 +)                                                              
+      21  
+      22  type Catalog interface {
+      23          ListProducts(ctx context.Context) ([]domain.Product, er
+          ror)
+     ...
+       31  // save nothing). The rule lives in the service; the repositor
+           y only makes it atomic.
+       32  type ApplyFunc func(stock int, current domain.Reservation) (ne
+           wStock, newReserved int, err error)
+       33  
+       34 +// Reservations are the lines of orders that are still carts. 
+       35  type Reservations interface {
+       28 -        // UpdateReservation reads the offer and the cart's re
+          -servation, calls apply,                                       
+       29 -        // and saves both results in one atomic step (Firestor
+          -e transaction / mutex).                                       
+       30 -        // Saving sets the reservation's UpdatedAt to now.    
+       36 +        // UpdateReservation reads the offer and the cart's li
+          +ne, calls apply, and in                                       
+       37 +        // one atomic step (Firestore transaction / mutex) sav
+          +es the new stock and                                          
+       38 +        // line and moves that many keys between "available" a
+          +nd "reserved".                                                
+       39 +        // Saving sets the line's ReservedAt to now; a cart wi
+          +th no lines is deleted.                                       
+       40          // apply may run more than once if Firestore retries t
+           he transaction.
+       32 -        // Returns ErrNotFound if the offer doesn't exist.    
+       41 +        // Returns ErrNotFound if the offer doesn't exist, Err
+          +CartClosed if the cart was paid.                              
+       42          UpdateReservation(ctx context.Context, cartID, offerID
+            string, apply ApplyFunc) error
+       43          // ListCartReservations returns everything one cart cu
+           rrently holds.
+       44          ListCartReservations(ctx context.Context, cartID strin
+           g) ([]domain.Reservation, error)
+       36 -        // ListReservationsBefore returns reservations last up
+          -dated before t (expired).                                     
+     … 58 more lines (ctrl+o to expand)
+
+● gofmt -l flags every file, which is probably just CRLF checkouts on Windows.
+  I'll ignore that and keep the formatting consistent by hand. Now the memory
+  store:
+
+● Bash(cat > internal/repository/memory.go <<'EOF'
+      package repository…)
+  ⎿  Updated backend\internal\repository\memory.go (+156 -29)
+      2  
+      3  import (
+      4          "context"
+      5 +        "slices"                                                
+      6          "sync"
+      7          "time"
+      8  
+     ...
+      11  )
+      12  
+      13  // Memory serves the embedded seed data. Handy for local dev an
+          d tests
+      13 -// before Firebase credentials are set up. Stock changes live u
+         -ntil restart.                                                  
+      14 +// before Firebase credentials are set up. Changes live until r
+         +estart.                                                        
+      15  type Memory struct {
+      16          products []domain.Product
+      17          banners  []domain.Banner
+      18  
+      18 -        mu           sync.Mutex // guards offers (stock) and re
+         -servations                                                     
+      19 -        offers       []domain.Offer                            
+      20 -        reservations map[string]domain.Reservation // key: cart
+         -ID + "_" + offerID                                             
+      19 +        mu     sync.Mutex // guards offers (stock), keys and or
+         +ders                                                           
+      20 +        offers []domain.Offer                                  
+      21 +        keys   []domain.Key                                    
+      22 +        orders map[string]domain.Order                         
+      23  }
+      24  
+      25  func NewMemory() (*Memory, error) {
+      24 -        m := &Memory{reservations: map[string]domain.Reservatio
+         -n{}}                                                           
+      26 +        m := &Memory{orders: map[string]domain.Order{}}        
+      27          if err := seeds.Load("products", &m.products); err != n
+          il {
+      28                  return nil, err
+      29          }
+     ...
+      33          if err := seeds.Load("banners", &m.banners); err != nil
+           {
+      34                  return nil, err
+      35          }
+      36 +        m.keys = seeds.Keys(m.offers)                          
+      37          return m, nil
+      38  }
+      39  
+     ...
+       73          m.mu.Lock()
+       74          defer m.mu.Unlock()
+     … 196 more lines (ctrl+o to expand)
+
+● Now the Firestore store:
+
+● Bash(cat > internal/repository/firestore.go <<'EOF'
+      package repository…)
+  ⎿  Updated backend\internal\repository\firestore.go (+152 -37)
+      18          ColProducts = "products"
+      19          ColOffers   = "offers"
+      20          ColBanners  = "banners"
+      21 +        ColKeys     = "keys"                                   
+      22 +        ColOrders   = "orders" // carts are orders with status 
+         +"cart"                                                         
+      23  
+      24 +        // ColReservations held cart lines before they moved in
+         +to orders.                                                     
+      25 +        // Only cmd/seed still uses it, to delete leftovers.   
+      26          ColReservations = "reservations"
+      27  )
+      28  
+     ...
+      38  
+      39  func (f *Firestore) GetProduct(ctx context.Context, id string) 
+          (*domain.Product, error) {
+      40          snap, err := f.c.Collection(ColProducts).Doc(id).Get(ct
+          x)
+      37 -        if status.Code(err) == codes.NotFound {                
+      38 -                return nil, ErrNotFound                        
+      39 -        }                                                      
+      40 -        if err != nil {                                        
+      41 -                return nil, err                                
+      42 -        }                                                      
+      43 -        var p domain.Product                                   
+      44 -        if err := snap.DataTo(&p); err != nil {                
+      45 -                return nil, err                                
+      46 -        }                                                      
+      47 -        return &p, nil                                         
+      41 +        return decode[domain.Product](snap, err)               
+      42  }
+      43  
+      44  func (f *Firestore) ListOffers(ctx context.Context, productID s
+          tring) ([]domain.Offer, error) {
+     ...
+       50  }
+       51  
+       52  // UpdateReservation runs in a Firestore transaction: if anoth
+           er request changes
+       59 -// the offer's stock between our read and write, Firestore ret
+          -ries the whole                                                
+       60 -// function with fresh data, so two carts can never take the s
+          -ame last unit.                                                
+       53 +// the offer, the cart or one of the picked keys between our r
+          +ead and write,                                                
+       54 +// Firestore retries the whole function with fresh data, so tw
+          +o carts can never                                             
+       55 +// take the same last unit or the same key.                   
+       56  func (f *Firestore) UpdateReservation(ctx context.Context, car
+           tID, offerID string, apply ApplyFunc) error {
+       57          offerRef := f.c.Collection(ColOffers).Doc(offerID)
+       63 -        resRef := f.c.Collection(ColReservations).Doc(reservat
+          -ionID(cartID, offerID))                                       
+     … 196 more lines (ctrl+o to expand)
+
+● It builds. Now the order service. pay and deliver are pure functions, like
+  reserve, so the rules are easy to test and explain.
+
+● Bash(cat > internal/service/orders.go <<'EOF'
+      package service…)
+  ⎿  Created backend\internal\service\orders.go (+151 -0)
+        1 +package service                                               
+        2 +                                                              
+        3 +import (                                                      
+        4 +        "context"                                             
+        5 +        "errors"                                              
+        6 +        "fmt"                                                 
+        7 +        "sort"                                                
+        8 +        "time"                                                
+        9 +                                                              
+       10 +        "eneba-marketplace/backend/internal/domain"           
+       11 +        "eneba-marketplace/backend/internal/repository"       
+       12 +)                                                             
+       13 +                                                              
+       14 +var (                                                         
+       15 +        ErrEmptyCart = errors.New("cart is empty")            
+       16 +        // ErrCartChanged: the cart changed while checking out
+          + (e.g. another tab); try again.                               
+       17 +        ErrCartChanged = errors.New("cart changed during check
+          +out")                                                         
+       18 +        // ErrNotYourOrder: a signed-in user tried to check ou
+          +t someone else's cart.                                        
+       19 +        ErrNotYourOrder = errors.New("order belongs to another
+          + user")                                                       
+       20 +        // errKeysMissing: a paid order holds fewer reserved k
+          +eys than it bought.                                           
+       21 +        // Reserving keys and stock together makes this imposs
+          +ible unless data is broken.                                   
+       22 +        errKeysMissing = errors.New("not enough reserved keys 
+          +for order")                                                   
+       23 +)                                                             
+       24 +                                                              
+       25 +// OrderStore is what checkout needs: orders, plus products fo
+          +r names/images.                                               
+       26 +type OrderStore interface {                                   
+       27 +        repository.Orders                                     
+       28 +        GetProduct(ctx context.Context, id string) (*domain.Pr
+          +oduct, error)                                                 
+       29 +}                                                             
+       30 +                                                              
+       31 +type Orders struct {                                          
+       32 +        repo OrderStore                                       
+       33 +}                                                             
+       34 +                                                              
+       35 +func NewOrders(repo OrderStore) *Orders { return &Orders{repo:
+          + repo} }                                                      
+       36 +                                                              
+       37 +// Checkout turns a cart into a delivered order: cart -> paid 
+          +-> delivered.                                                 
+       38 +// Payment is simulated (DECISIONS #8). Each step is one trans
+          +action. The keys                                              
+       39 +// were reserved when the items went into the cart, so deliver
+          +y can't run out.                                              
+       40 +// If delivery fails after payment, calling Checkout again fin
+          +ishes it.                                                     
+     … 111 more lines (ctrl+o to expand)
+
+● The cart service needs one change: the expiry sweep has to skip carts that
+  were paid while it was running.
+
+● Update(backend\internal\service\cart.go)
+  ⎿  Added 2 lines, removed 2 lines
+      128        return stock + cur.Quantity, 0, nil
+      129      })
+      130      switch {
+      131 -    case errors.Is(err, errNotExpired), errors.Is(err, reposit
+          -ory.ErrNotFound):                                             
+      132 -      // touched again, already gone, or the offer was deleted
+          -: skip                                                        
+      131 +    case errors.Is(err, errNotExpired), errors.Is(err, reposit
+          +ory.ErrNotFound), errors.Is(err, repository.ErrCartClosed):   
+      132 +      // touched again, already gone, offer deleted, or paid m
+          +eanwhile: skip                                                
+      133      case err != nil:
+      134        return released, err
+      135      default:
+
+● Update(backend\internal\service\cart.go)
+  ⎿  Added 3 lines, removed 2 lines
+      65  func NewCart(repo repository.Reservations) *Cart { return &Cart
+          {repo: repo} }
+      66  
+      67  // SetQuantity makes the cart hold exactly `qty` units of an of
+          fer (0 = remove).
+      68 -// Stock is reserved the moment an item goes into the cart and 
+         -returned when it                                               
+      69 -// leaves. Setting an absolute number (not "+1") makes retries 
+         -harmless.                                                      
+      68 +// Stock (and that many keys) is reserved the moment an item go
+         +es into the cart                                               
+      69 +// and returned when it leaves. Setting an absolute number (not
+         + "+1") makes                                                   
+      70 +// retries harmless. A paid cart returns repository.ErrCartClos
+         +ed.                                                            
+      71  func (c *Cart) SetQuantity(ctx context.Context, cartID, offerID
+           string, qty int) (*CartLine, error) {
+      72    if !cartIDPattern.MatchString(cartID) {
+      73      return nil, ErrInvalidCartID
+
+● Now the handlers, routes and wiring:
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(backend\internal\handler\handler.go)
+  ⎿  Added 1 line
+      19  type Handler struct {
+      20    Catalog *service.Catalog
+      21    Cart    *service.Cart
+      22 +  Orders  *service.Orders                                      
+      23  }
+      24  
+      25  func writeJSON(w http.ResponseWriter, status int, v any) {
+● Update(backend\internal\handler\handler.go)
+  ⎿  Added 3 lines
+      136      })
+      137    case errors.Is(err, service.ErrInvalidCartID), errors.Is(err
+           , service.ErrInvalidQuantity):
+      138      writeJSON(w, http.StatusBadRequest, map[string]string{"err
+           or": err.Error()})
+      139 +  case errors.Is(err, repository.ErrCartClosed):              
+      140 +    // 410 Gone: this cart is now an order; the browser starts
+          + a new cart.                                                  
+      141 +    writeJSON(w, http.StatusGone, map[string]string{"error": e
+          +rr.Error()})                                                  
+      142    case err != nil:
+      143      writeErr(w, err)
+      144    default:
+
+● Update(backend\internal\handler\handler.go)
+  ⎿  Added 39 lines
+      169    writeJSON(w, http.StatusOK, map[string]string{"uid": u.UID, 
+           "email": u.Email})
+      170  }
+      171  
+      172 +// Checkout: POST /api/orders  body {"cartId": "..."} -> 201 w
+          +ith the delivered order.                                      
+      173 +// Simulated payment: the cart's reserved keys are sold to the
+          + signed-in user.                                              
+      174 +// Safe to retry: a paid-but-undelivered order is finished, a 
+          +delivered one returned.                                       
+      175 +func (h *Handler) Checkout(w http.ResponseWriter, r *http.Requ
+          +est) {                                                        
+      176 +  var body struct {                                           
+      177 +    CartID string `json:"cartId"`                             
+      178 +  }                                                           
+      179 +  if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 102
+          +4)).Decode(&body); err != nil {                               
+      180 +    writeJSON(w, http.StatusBadRequest, map[string]string{"err
+          +or": `body must be {"cartId": "..."}`})                       
+      181 +    return                                                    
+      182 +  }                                                           
+      183 +  order, err := h.Orders.Checkout(r.Context(), middleware.User
+          +From(r.Context()).UID, body.CartID)                           
+      184 +  switch {                                                    
+      185 +  case errors.Is(err, service.ErrInvalidCartID), errors.Is(err
+          +, service.ErrEmptyCart):                                      
+      186 +    writeJSON(w, http.StatusBadRequest, map[string]string{"err
+          +or": err.Error()})                                            
+      187 +  case errors.Is(err, service.ErrNotYourOrder):               
+      188 +    writeJSON(w, http.StatusNotFound, map[string]string{"error
+          +": "not found"}) // don't confirm it exists                   
+      189 +  case errors.Is(err, service.ErrCartChanged):                
+      190 +    writeJSON(w, http.StatusConflict, map[string]string{"error
+          +": err.Error()})                                              
+      191 +  case err != nil:                                            
+      192 +    writeErr(w, err)                                          
+      193 +  default:                                                    
+      194 +    writeJSON(w, http.StatusCreated, order)                   
+      195 +  }                                                           
+      196 +}                                                             
+      197 +                                                              
+      198 +// ListOrders: GET /api/orders -> {"items": [order...]} for th
+          +e signed-in user, newest first.                               
+      199 +func (h *Handler) ListOrders(w http.ResponseWriter, r *http.Re
+          +quest) {                                                      
+      200 +  orders, err := h.Orders.List(r.Context(), middleware.UserFro
+          +m(r.Context()).UID)                                           
+      201 +  if err != nil {                                             
+      202 +    writeErr(w, err)                                          
+      203 +    return                                                    
+      204 +  }                                                           
+      205 +  if orders == nil {                                          
+      206 +    orders = []domain.Order{} // JSON [] instead of null      
+      207 +  }                                                           
+      208 +  writeJSON(w, http.StatusOK, map[string]any{"items": orders})
+      209 +}                                                             
+      210 +                                                              
+      211  // --- helpers -----------------------------------------------
+           -----------
+      212  
+      213  func atoi(s string) int {
+
+● Update(backend\internal\handler\handler.go)
+  ⎿  Added 1 line
+      11  
+      12    "github.com/go-chi/chi/v5"
+      13  
+      14 +  "eneba-marketplace/backend/internal/domain"                  
+      15    "eneba-marketplace/backend/internal/middleware"
+      16    "eneba-marketplace/backend/internal/repository"
+      17    "eneba-marketplace/backend/internal/service"
+
+● Update(backend\internal\router\router.go)
+  ⎿  Added 2 lines, removed 1 line
+      32      r.Group(func(r chi.Router) {
+      33        r.Use(middleware.RequireAuth(verifier))
+      34        r.Get("/me", h.Me)
+      35 -      // TODO: checkout, orders                                
+      35 +      r.Post("/orders", h.Checkout)                            
+      36 +      r.Get("/orders", h.ListOrders)                           
+      37      })
+      38    })
+      39    return r
+
+● Update(backend\cmd\api\main.go)
+  ⎿  Added 1 line, removed 1 line
+      62    cart := service.NewCart(repo)
+      63    go sweepExpiredReservations(ctx, cart)
+      64  
+      65 -  h := &handler.Handler{Catalog: service.NewCatalog(repo), Cart
+         -: cart}                                                        
+      65 +  h := &handler.Handler{Catalog: service.NewCatalog(repo), Cart
+         +: cart, Orders: service.NewOrders(repo)}                       
+      66    srv := &http.Server{
+      67      Addr:              ":" + cfg.Port,
+      68      Handler:           router.New(h, verifier, cfg.CORSOrigins)
+          ,
+
+● I'm resetting the seeder by wiping keys, orders and old reservations, then
+  writing the fresh key pool, with deletes and writes in separate BulkWriters so
+  they can't reorder. · summary
+
+● Bash(cat > cmd/seed/main.go <<'EOF'
+      // Seeds Firestore from the embedded JSON files plus a generated key
+      pool.…)
+  ⎿  Updated backend\cmd\seed\main.go (+26 -11)
+      1 -// Seeds Firestore from the embedded JSON files. Idempotent: doc
+        -uments are                                                      
+      2 -// keyed by id, so re-running overwrites instead of duplicating.
+      1 +// Seeds Firestore from the embedded JSON files plus a generated
+        + key pool.                                                      
+      2 +// Idempotent: documents are keyed by id, so re-running overwrit
+        +es instead of                                                   
+      3 +// duplicating. It is a full demo reset: carts and orders are de
+        +leted too.                                                      
+      4  //
+      5  //      FIREBASE_PROJECT_ID=... GOOGLE_APPLICATION_CREDENTIALS=.
+         /sa.json go run ./cmd/seed
+      6  package main
+     ...
+      40          must(seeds.Load("products", &products))
+      41          must(seeds.Load("offers", &offers))
+      42          must(seeds.Load("banners", &banners))
+      43 +        keys := seeds.Keys(offers)                             
+      44  
+      43 -        bw := fs.BulkWriter(ctx)                               
+      44 -        // Re-seeding resets offer stock, so old cart reservati
+         -ons must go too,                                               
+      45 -        // or carts would "hold" units that are already back in
+         - stock.                                                        
+      46 -        oldRes, err := fs.Collection(repository.ColReservations
+         -).Documents(ctx).GetAll()                                      
+      47 -        must(err)                                              
+      48 -        for _, d := range oldRes {                             
+      49 -                _, err := bw.Delete(d.Ref)                     
+      45 +        // Step 1: delete. Re-seeding resets offer stock and th
+         +e key pool, so carts                                           
+      46 +        // and orders that point at old keys must go too. Old "
+         +reservations" docs                                             
+      47 +        // are from before carts became orders.                
+      48 +        del := fs.BulkWriter(ctx)                              
+      49 +        deleted := 0                                           
+      50 +        for _, col := range []string{repository.ColKeys, reposi
+         +tory.ColOrders, repository.ColReservations} {                  
+      51 +                docs, err := fs.Collection(col).Documents(ctx).
+         +GetAll()                                                       
+      52                  must(err)
+      53 +                for _, d := range docs {                       
+      54 +                        _, err := del.Delete(d.Ref)            
+      55 +                        must(err)                              
+      56 +                }                                              
+      57 +                deleted += len(docs)                           
+      58          }
+      59 +        del.End() // wait, so no delete can land after a write 
+         +below                                                          
+      60 +                                                               
+      61 +        // Step 2: write.                                      
+      62 +        bw := fs.BulkWriter(ctx)                               
+      63          for _, p := range products {
+      64                  _, err := bw.Set(fs.Collection(repository.ColPr
+          oducts).Doc(p.ID), p)
+     … 16 more lines (ctrl+o to expand)
+
+● All existing tests pass on the new model, including the 190-goroutine
+  no-oversell race. Next, tests for the new behaviour:
+
+● Bash(cat > internal/service/orders_test.go <<'EOF'
+      package service…)
+  ⎿  Created backend\internal\service\orders_test.go (+152 -0)
+        1 +package service                                               
+        2 +                                                              
+        3 +import (                                                      
+        4 +        "context"                                             
+        5 +        "errors"                                              
+        6 +        "testing"                                             
+        7 +        "time"                                                
+        8 +                                                              
+        9 +        "eneba-marketplace/backend/internal/domain"           
+       10 +        "eneba-marketplace/backend/internal/repository"       
+       11 +)                                                             
+       12 +                                                              
+       13 +const otherOffer = "p001-o2" // GameVault, 36.60 EUR          
+       14 +                                                              
+       15 +// checkKeys fails unless the offer's stock equals its availab
+          +le keys and                                                   
+       16 +// `reserved` / `sold` keys are in those states.              
+       17 +func checkKeys(t *testing.T, m *repository.Memory, offerID str
+          +ing, reserved, sold int) {                                    
+       18 +        t.Helper()                                            
+       19 +        c := m.KeyCounts(offerID)                             
+       20 +        if c[domain.KeyAvailable] != stockOf(t, m, offerID) ||
+          + c[domain.KeyReserved] != reserved || c[domain.KeySold] != sol
+          +d {                                                           
+       21 +                t.Fatalf("%s: keys %v, stock %d; want reserved
+          +=%d sold=%d", offerID, c, stockOf(t, m, offerID), reserved, so
+          +ld)                                                           
+       22 +        }                                                     
+       23 +}                                                             
+       24 +                                                              
+       25 +func TestCartReservesKeys(t *testing.T) {                     
+       26 +        s, m := newCartSvc(t)                                 
+       27 +        ctx := context.Background()                           
+       28 +        checkKeys(t, m, testOffer, 0, 0) // seed: one availabl
+          +e key per unit of stock                                       
+       29 +                                                              
+       30 +        for _, step := range []struct{ qty, reserved int }{{3,
+          + 3}, {5, 5}, {1, 1}, {0, 0}} {                                
+       31 +                if _, err := s.SetQuantity(ctx, testCart, test
+          +Offer, step.qty); err != nil {                                
+       32 +                        t.Fatal(err)                          
+       33 +                }                                             
+       34 +                checkKeys(t, m, testOffer, step.reserved, 0)  
+       35 +        }                                                     
+       36 +        if _, err := m.GetOrder(ctx, testCart); !errors.Is(err
+          +, repository.ErrNotFound) {                                   
+       37 +                t.Fatalf("an empty cart should not be stored, 
+          +got %v", err)                                                 
+       38 +        }                                                     
+       39 +}                                                             
+       40 +                                                              
+     … 112 more lines (ctrl+o to expand)
+  ⎿  Created backend\seeds\keys_test.go (+32 -0)
+       1 +package seeds                                                  
+       2 +                                                               
+       3 +import (                                                       
+       4 +        "testing"                                              
+       5 +                                                               
+       6 +        "eneba-marketplace/backend/internal/domain"            
+       7 +)                                                              
+       8 +                                                               
+       9 +func TestKeysMatchStock(t *testing.T) {                        
+      10 +        var offers []domain.Offer                              
+      11 +        if err := Load("offers", &offers); err != nil {        
+      12 +                t.Fatal(err)                                   
+      13 +        }                                                      
+      14 +        keys := Keys(offers)                                   
+      15 +        perOffer := map[string]int{}                           
+      16 +        codes := map[string]bool{}                             
+      17 +        for _, k := range keys {                               
+      18 +                perOffer[k.OfferID]++                          
+      19 +                codes[k.Code] = true                           
+      20 +                if k.Status != domain.KeyAvailable || k.OrderID
+         + != "" {                                                       
+      21 +                        t.Fatalf("seed key not available: %+v",
+         + k)                                                            
+      22 +                }                                              
+      23 +        }                                                      
+      24 +        for _, o := range offers {                             
+      25 +                if perOffer[o.ID] != o.Stock {                 
+      26 +                        t.Errorf("%s: %d keys, stock %d", o.ID,
+         + perOffer[o.ID], o.Stock)                                      
+      27 +                }                                              
+      28 +        }                                                      
+      29 +        if len(codes) != len(keys) {                           
+      30 +                t.Errorf("duplicate codes: %d unique of %d", le
+         +n(codes), len(keys))                                           
+      31 +        }                                                      
+      32 +}                                                              
+
+● All pass. I'll also make the expiry and race tests check that keys and stock
+  stay in sync:
+
+● Update(backend\internal\service\cart_test.go)
+  ⎿  Added 1 line
+      172    if lines, _ := s.Lines(ctx, testCart); len(lines) != 0 {
+      173      t.Fatalf("expired line still in cart: %+v", lines)
+      174    }
+      175 +  checkKeys(t, m, testOffer, 0, 0) // reserved keys are availa
+          +ble again                                                     
+      176  }
+
+● Update(backend\internal\service\cart_test.go)
+  ⎿  Added 2 lines
+      143    if won != stock || stockOf(t, m, testOffer) != 0 {
+      144      t.Fatalf("won=%d (want %d), stock left=%d", won, stock, st
+           ockOf(t, m, testOffer))
+      145    }
+      146 +  checkKeys(t, m, testOffer, stock, 0) // every winner holds e
+          +xactly one key                                                
+      147  }
+      148 +}                                                             
+      149  
+      150  func TestReleaseExpired(t *testing.T) {
+      151    s, m := newCartSvc(t)
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● I added an extra closing brace in the race test. Fixing it:
+
+● Update(backend\internal\service\cart_test.go)
+  ⎿  Removed 1 line
+      145    }
+      146    checkKeys(t, m, testOffer, stock, 0) // every winner holds e
+           xactly one key
+      147  }
+      148 -}                                                             
+      148  
+      149  func TestReleaseExpired(t *testing.T) {
+      150    s, m := newCartSvc(t)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Backend is green. Now the frontend, starting with types and the API client:
+
+● Bash(cd /c/Projects/eneba/frontend/src && cat >> types/index.ts <<'EOF'…)
+  ⎿  Updated frontend\src\types\index.ts (+25 -0)
+      63  
+      64  /** GET /api/carts/{id}: what the server still reserves for one
+           offer. */
+      65  export type ServerLine = Omit<CartLine, "stock">; // offerId, q
+          uantity, expiresAt
+      66 +                                                               
+      67 +/** cart -> paid -> delivered. Only paid/delivered orders reach
+         + the browser. */                                               
+      68 +export type OrderStatus = "cart" | "paid" | "delivered";       
+      69 +                                                               
+      70 +export interface OrderItem {                                   
+      71 +  offerId: string;                                             
+      72 +  productId: string;                                           
+      73 +  productName: string;                                         
+      74 +  imageUrl: string;                                            
+      75 +  sellerName: string;                                          
+      76 +  price: number; // cents per unit, fixed when paid            
+      77 +  quantity: number;                                            
+      78 +  keys: string[] | null; // key codes, set when delivered      
+      79 +}                                                              
+      80 +                                                               
+      81 +export interface Order {                                       
+      82 +  id: string;                                                  
+      83 +  status: OrderStatus;                                         
+      84 +  items: OrderItem[];                                          
+      85 +  total: number; // cents                                      
+      86 +  currency: string;                                            
+      87 +  createdAt: string;                                           
+      88 +  paidAt?: string;                                             
+      89 +  deliveredAt?: string;                                        
+      90 +}                                                              
+
+● Update(frontend\src\lib\api.ts)
+  ⎿  Added 4 lines
+      81    cart: (cartId: string) =>
+      82      request<{ items: ServerLine[] }>(`/api/carts/${encodeURICom
+          ponent(cartId)}`),
+      83    me: () => request<{ uid: string; email: string }>("/api/me", 
+          { auth: true }),
+      84 +  /** Simulated payment: turns the cart into a delivered order 
+         +with its keys. Safe to retry. */                               
+      85 +  checkout: (cartId: string) =>                                
+      86 +    request<Order>("/api/orders", { auth: true, method: "POST",
+         + body: { cartId } }),                                          
+      87 +  orders: (signal?: AbortSignal) => request<{ items: Order[] }>
+         +("/api/orders", { auth: true, signal }),                       
+      88  };
+
+● Update(frontend\src\lib\api.ts)
+  ⎿  Added 1 line, removed 1 line
+      1  import { getIdToken } from "./firebase";
+      2 -import type { Banner, CartLine, Product, ProductDetail, ProductP
+        -age, ServerLine } from "../types";                              
+      2 +import type { Banner, CartLine, Order, Product, ProductDetail, P
+        +roductPage, ServerLine } from "../types";                       
+      3  
+      4  const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/,
+          "");
+      5  
+
+● I'm updating CartContext so it can start a fresh cart id after checkout or a
+  410, and checkout counts as an in-flight change so the background refresh
+  won't drop the paid cart. · summary
+
+● Update(frontend\src\features\cart\CartContext.tsx)
+  ⎿  Added 12 lines, removed 6 lines
+      51  /** Random id that names this browser's cart on the server (lik
+          e a guest session). */
+      52  function loadCartId(): string {
+      53    try {
+      54 -    let id = localStorage.getItem(ID_KEY);                     
+      55 -    if (!id) {                                                 
+      56 -      id = crypto.randomUUID();                                
+      57 -      localStorage.setItem(ID_KEY, id);                        
+      58 -    }                                                          
+      59 -    return id;                                                 
+      54 +    return localStorage.getItem(ID_KEY) ?? newCartId();        
+      55    } catch {
+      56      return crypto.randomUUID(); // storage blocked: cart lives 
+          for this page load only
+      57    }
+      58  }
+      59  
+      60 +/** A fresh cart id. The old one now names a paid order, which 
+         +can't change. */                                               
+      61 +function newCartId(): string {                                 
+      62 +  const id = crypto.randomUUID();                              
+      63 +  try {                                                        
+      64 +    localStorage.setItem(ID_KEY, id);                          
+      65 +  } catch {                                                    
+      66 +    // storage blocked: the new id lasts for this page load onl
+         +y                                                              
+      67 +  }                                                            
+      68 +  return id;                                                   
+      69 +}                                                              
+      70 +                                                               
+      71  type SyncResult =
+      72    | { ok: true; quantity: number; stock: number; expiresAt?: st
+          ring }
+      73    | { ok: false; error: string };
+
+● Update(frontend\src\features\cart\CartContext.tsx)
+  ⎿  Added 3 lines, removed 1 line
+      74  
+      75  export function CartProvider({ children }: { children: React.Re
+          actNode }) {
+      76    const [items, setItems] = useState<CartItem[]>(loadItems);
+      77 -  const [cartId] = useState(loadCartId);                       
+      77 +  // A ref, not state: it changes after checkout and async code
+         + must see the new one.                                         
+      78 +  const cartId = useRef<string>(null as unknown as string);    
+      79 +  if (cartId.current === null) cartId.current = loadCartId();  
+      80    const [liveStock, setLiveStock] = useState<Record<string, num
+          ber>>({});
+      81    const [notice, setNotice] = useState<CartNotice | null>(null)
+          ;
+      82    // Latest items for async functions: after `await`, the `item
+          s` variable
+
+● That ref initialisation is too clever. Replacing it with something plainer:
+
+● Update(frontend\src\features\cart\CartContext.tsx)  ⎿  Added 4 lines, removed 3 lines
+      74  
+      75  export function CartProvider({ children }: { children: React.Re
+          actNode }) {
+      76    const [items, setItems] = useState<CartItem[]>(loadItems);
+      77 -  // A ref, not state: it changes after checkout and async code
+         - must see the new one.                                         
+      78 -  const cartId = useRef<string>(null as unknown as string);    
+      79 -  if (cartId.current === null) cartId.current = loadCartId();  
+      77 +  // The id lives in a ref: it changes after checkout and async
+         + code must see                                                 
+      78 +  // the new one. useState just reads localStorage once instead
+         + of every render.                                              
+      79 +  const [initialCartId] = useState(loadCartId);                
+      80 +  const cartId = useRef(initialCartId);                        
+      81    const [liveStock, setLiveStock] = useState<Record<string, num
+          ber>>({});
+      82    const [notice, setNotice] = useState<CartNotice | null>(null)
+          ;
+      83    // Latest items for async functions: after `await`, the `item
+          s` variable
+
+● Update(frontend\src\features\cart\CartContext.tsx)
+  ⎿  Added 6 lines, removed 1 line
+      107      inFlight.current++;
+      108      changeSeq.current++;
+      109      try {
+      110 -      const line = await api.setCartItem(cartId, offerId, want
+          -);                                                            
+      110 +      const line = await api.setCartItem(cartId.current, offer
+          +Id, want);                                                    
+      111        setLiveStock((s) => ({ ...s, [offerId]: line.stock }));
+      112        return { ok: true, quantity: line.quantity, stock: line.
+           stock, expiresAt: line.expiresAt };
+      113      } catch (e) {
+      114 +      if (e instanceof ApiError && e.status === 410) {        
+      115 +        // This cart was paid (e.g. in another tab): it is an 
+          +order now.                                                    
+      116 +        startNewCart();                                       
+      117 +        return { ok: false, error: CLOSED };                  
+      118 +      }                                                       
+      119        if (e instanceof ApiError && e.status === 409) {
+      120          const body = e.body as { stock: number; quantity: numb
+           er };
+      121          setLiveStock((s) => ({ ...s, [offerId]: body.stock }))
+           ;
+
+● Update(frontend\src\features\cart\CartContext.tsx)
+  ⎿  Added 2 lines, removed 2 lines
+      137      if (itemsRef.current.length === 0 || inFlight.current > 0)
+            return;
+      138      const seq = changeSeq.current;
+      139      try {
+      140 -      const { items: server } = await api.cart(cartId);       
+      140 +      const { items: server } = await api.cart(cartId.current)
+          +;                                                             
+      141        if (seq !== changeSeq.current) return; // a change ran m
+           eanwhile; its answer wins
+      142        const { items: next, lost } = reconcile(itemsRef.current
+           , server);
+      143        setItems(next);
+     ...
+      145      } catch {
+      146        // offline or server down: try again on the next tick
+      147      }
+      148 -  }, [cartId]);                                               
+      148 +  }, []);                                                     
+      149  
+      150    // Check on load, every minute, and when the shopper comes b
+           ack to the tab.
+      151    useEffect(() => {
+
+● Update(frontend\src\features\cart\CartContext.tsx)
+  ⎿  Added 25 lines
+      175      return null;
+      176    };
+      177  
+      178 +  /** Forget the local cart and use a new server cart id. */  
+      179 +  function startNewCart() {                                   
+      180 +    cartId.current = newCartId();                             
+      181 +    setItems([]);                                             
+      182 +  }                                                           
+      183 +                                                              
+      184 +  /**                                                         
+      185 +   * Pays for the cart (simulated) and returns the delivered o
+          +rder with its keys.                                           
+      186 +   * Counts as a change, so a background refresh can't see the
+          + now-paid cart as                                             
+      187 +   * "expired" and show a wrong warning. Throws ApiError on fa
+          +ilure.                                                        
+      188 +   */                                                         
+      189 +  const checkout = async (): Promise<Order> => {              
+      190 +    inFlight.current++;                                       
+      191 +    changeSeq.current++;                                      
+      192 +    try {                                                     
+      193 +      const order = await api.checkout(cartId.current);       
+      194 +      startNewCart();                                         
+      195 +      return order;                                           
+      196 +    } finally {                                               
+      197 +      inFlight.current--;                                     
+      198 +      changeSeq.current++;                                    
+      199 +    }                                                         
+      200 +  };                                                          
+      201 +                                                              
+      202    const closeNotice = useCallback(() => setNotice(null), []);
+      203  
+      204    const value: CartValue = {
+     ...
+      208      liveStock,
+      209      add,
+      210      setQty,
+      211 +    checkout,                                                 
+      212      notice,
+      213      closeNotice,
+      214    };
+
+● Update(frontend\src\features\cart\CartContext.tsx)
+  ⎿  Added 2 lines
+      26    add: (product: Product, offer: Offer) => Promise<void>;
+      27    /** Sets a line's quantity on the server (0 = remove). Return
+          s an error message or null. */
+      28    setQty: (offerId: string, qty: number) => Promise<string | nu
+          ll>;
+      29 +  /** Simulated payment; clears the cart and returns the delive
+         +red order. Throws on failure. */                               
+      30 +  checkout: () => Promise<Order>;                              
+      31    notice: CartNotice | null;
+      32    closeNotice: () => void;
+      33  }
+
+● Update(frontend\src\features\cart\CartContext.tsx)
+  ⎿  Added 1 line, removed 1 line
+      1  import { createContext, useCallback, useContext, useEffect, useR
+         ef, useState } from "react";
+      2  import { api, ApiError } from "../../lib/api";
+      3 -import type { Offer, Product } from "../../types";              
+      3 +import type { Offer, Order, Product } from "../../types";       
+      4  import {
+      5    addServerLine,
+      6    applyServerLine,
+
+● Update(frontend\src\features\cart\CartContext.tsx)
+  ⎿  Added 2 lines, removed 1 line
+      38  const ID_KEY = "cartId";
+      39  const FAILED = "Nepavyko atnaujinti krepšelio. Bandykite dar ka
+          rtą.";
+      40  const EXPIRED = "Rezervacija baigėsi: kai kurios prekės grąžint
+          os į sandėlį ir pašalintos iš krepšelio.";
+      41 -const TOO_MANY = `Vienam pasiūlymui galima daugiausia ${MAX_PER
+         -_LINE} vnt.`;                                                  
+      41 +const CLOSED = "Šis krepšelis jau apmokėtas, todėl pradėtas nau
+         +jas. Bandykite dar kartą.";                                    
+      42 +const TOO_MANY =`Vienam pasiūlymui galima daugiausia ${MAX_PER_
+         +LINE} vnt.`;                                                   
+      43  
+      44  function loadItems(): CartItem[] {
+      45    try {
+
+● Now the shared order card plus the checkout and order history pages:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The heredocs tripped up bash's quoting. I'll write the files with the Write
+  tool instead:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Nothing was written, so all four files need to go in fresh:
+
+● Write(frontend\src\features\orders\OrderCard.tsx)
+  ⎿  Wrote 63 lines to frontend\src\features\orders\OrderCard.tsx
+       1 import { useState } from "react";
+       2 import { Link } from "react-router-dom";
+       3 import { formatPrice } from "../../lib/format";
+       4 import type { Order, OrderStatus } from "../../types";
+       5
+       6 const STATUS: Record<OrderStatus, string> = {
+       7   cart: "Krepšelis",
+       8   paid: "Apmokėta",
+       9   delivered: "Pristatyta",
+      10 };
+     … +53 lines (ctrl+o to expand)
+
+● Write(frontend\src\features\orders\OrdersPage.tsx)
+  ⎿  Added 23 lines, removed 3 lines
+       1 -// TODO (orders slice): GET /api/orders (auth) -> list past ord
+         -ers with their keys.                                           
+       1 +import { Link } from "react-router-dom";                       
+       2 +import { api } from "../../lib/api";                           
+       3 +import { useAsync } from "../../lib/useAsync";                 
+       4 +import { Status } from "../../components/Status";              
+       5 +import { OrderCard } from "./OrderCard";                       
+       6 +                                                               
+       7 +/** The signed-in user's past orders (newest first) with their 
+         +key codes. */                                                  
+       8  export function OrdersPage() {
+       9 +  const state = useAsync((signal) => api.orders(signal), []);  
+      10    return (
+       4 -    <div className="page container">                           
+      11 +    <div className="page container narrow">                    
+      12        <h1>Mano užsakymai</h1>
+       6 -      <p className="muted">Dar neįgyvendinta.</p>              
+      13 +      <Status state={state}>                                   
+      14 +        {({ items }) =>                                        
+      15 +          items.length === 0 ? (                               
+      16 +            <>                                                 
+      17 +              <p className="muted">Užsakymų dar nėra.</p>      
+      18 +              <Link to="/store" className="btn">Į parduotuvę</L
+         +ink>                                                           
+      19 +            </>                                                
+      20 +          ) : (                                                
+      21 +            <div className="orders">                           
+      22 +              {items.map((o) => <OrderCard key={o.id} order={o}
+         + />)}                                                          
+      23 +            </div>                                             
+      24 +          )                                                    
+      25 +        }                                                      
+      26 +      </Status>                                                
+      27      </div>
+      28    );
+      29  }
+
+● Write(frontend\src\features\checkout\CheckoutPage.tsx)
+  ⎿  Added 83 lines, removed 4 lines
+       1 -// TODO (checkout slice): simulated payment -> POST /api/orders
+         - -> reveal digital key(s).                                     
+       2 -// Route is wrapped in <RequireAuth>.                          
+       1 +import { useState } from "react";                              
+       2 +import { Link } from "react-router-dom";                       
+       3 +import { ApiError } from "../../lib/api";                      
+       4 +import { formatItemCount, formatPrice } from "../../lib/format"
+         +;                                                              
+       5 +import { useCart } from "../cart/CartContext";                 
+       6 +import { OrderCard } from "../orders/OrderCard";               
+       7 +import type { Order } from "../../types";                      
+       8 +                                                               
+       9 +/** Why checkout failed, in words the shopper can act on. */   
+      10 +function checkoutError(e: unknown): string {                   
+      11 +  if (e instanceof ApiError && e.status === 400) return "Krepše
+         +lis tuščias arba rezervacija baigėsi. Grįžkite į krepšelį.";   
+      12 +  if (e instanceof ApiError && e.status === 409) return "Krepše
+         +lis pasikeitė apmokant. Bandykite dar kartą.";                 
+      13 +  return "Nepavyko apmokėti. Bandykite dar kartą: dvigubai nenu
+         +skaičiuosime.";                                                
+      14 +}                                                              
+      15 +                                                               
+      16 +/**                                                            
+      17 + * Simulated payment (DECISIONS #8). The server turns the cart 
+         +into an order,                                                 
+      18 + * cart -> paid -> delivered, and returns the keys that were re
+         +served for it.                                                 
+      19 + */                                                            
+      20  export function CheckoutPage() {
+      21 +  const { items, count, total, checkout } = useCart();         
+      22 +  const [busy, setBusy] = useState(false);                     
+      23 +  const [error, setError] = useState<string | null>(null);     
+      24 +  const [order, setOrder] = useState<Order | null>(null);      
+      25 +                                                               
+      26 +  const pay = async () => {                                    
+      27 +    setBusy(true);                                             
+      28 +    setError(null);                                            
+      29 +    try {                                                      
+      30 +      setOrder(await checkout());                              
+      31 +    } catch (e) {                                              
+      32 +      setError(checkoutError(e));                              
+      33 +    } finally {                                                
+      34 +      setBusy(false);                                          
+      35 +    }                                                          
+      36 +  };                                                           
+      37 +                                                               
+      38 +  if (order) {                                                 
+      39 +    return (                                                   
+      40 +      <div className="page container narrow">                  
+      41 +        <h1><span className="ok-icon">✓</span> Ačiū! Užsakymas 
+         +pristatytas</h1>                                               
+      42 +        <p className="muted">Jūsų raktai žemiau. Juos visada ra
+         +site skiltyje „Mano užsakymai“.</p>                            
+      43 +        <OrderCard order={order} />                            
+      44 +        <div className="modal-actions">                        
+      45 +          <Link to="/orders" className="btn">Mano užsakymai</Li
+         +nk>                                                            
+      46 +          <Link to="/store" className="btn secondary">Pirkti to
+         +liau</Link>                                                    
+      47 +        </div>                                                 
+      48 +      </div>                                                   
+      49 +    );                                                         
+      50 +  }                                                            
+      51 +                                                               
+      52 +  if (items.length === 0) {                                    
+      53 +    return (                                                   
+      54 +      <div className="page container">                         
+      55 +        <h1>Atsiskaitymas</h1>                                 
+      56 +        <p className="muted">Krepšelis tuščias.</p>            
+      57 +        <Link to="/store" className="btn">Į parduotuvę</Link>  
+      58 +      </div>                                                   
+      59 +    );                                                         
+      60 +  }                                                            
+      61 +                                                               
+      62    return (
+       5 -    <div className="page container">                           
+      63 +    <div className="page container narrow">                    
+      64        <h1>Atsiskaitymas</h1>
+       7 -      <p className="muted">Dar neįgyvendinta.</p>              
+      65 +      <section className="order">                              
+      66 +        <ul className="order-items">                           
+      67 +          {items.map((i) => (                                  
+      68 +            <li key={i.offerId} className="checkout-line">     
+      69 +              <span>{i.productName} <span className="muted smal
+         +l">· {i.sellerName}</span></span>                              
+      70 +              <span>{i.quantity} × {formatPrice(i.price, i.curr
+         +ency)}</span>                                                  
+      71 +            </li>                                              
+      72 +          ))}                                                  
+      73 +        </ul>                                                  
+      74 +        <div className="cart-total">                           
+      75 +          <span>Suma ({formatItemCount(count)})</span>         
+      76 +          <span className="price">{formatPrice(total, items[0].
+         +currency)}</span>                                              
+      77 +        </div>                                                 
+      78 +        <p className="muted small">                            
+      79 +          Mokėjimas imituojamas: pinigai nenuskaičiuojami. Apmo
+         +kėjus rezervuoti raktai iškart tampa jūsų.                     
+      80 +        </p>                                                   
+      81 +        {error && <p className="error" role="alert">{error}</p>
+         +}                                                              
+      82 +        <button type="button" className="btn block" disabled={b
+         +usy} onClick={pay}>                                            
+      83 +          {busy ? "Apmokama…" : `Apmokėti ${formatPrice(total, 
+         +items[0].currency)}`}                                          
+      84 +        </button>                                              
+      85 +        <Link to="/cart" className="link-btn">Grįžti į krepšelį
+         +</Link>                                                        
+      86 +      </section>                                               
+      87      </div>
+      88    );
+      89  }
+
+● Update(frontend\src\styles\global.css)
+  ⎿  Added 20 lines
+      156  .cart-summary { background: var(--color-surface); border-radiu
+           s: var(--radius-lg); padding: var(--space-4); display: flex; f
+           lex-direction: column; gap: var(--space-3); }
+      157  .cart-summary .btn { text-align: center; }
+      158  .cart-total { display: flex; justify-content: space-between; a
+           lign-items: center; }
+      159 +                                                              
+      160 +/* checkout + orders */                                       
+      161 +.narrow { max-width: 720px; }                                 
+      162 +.orders { display: flex; flex-direction: column; gap: var(--sp
+          +ace-4); }                                                     
+      163 +.order { background: var(--color-surface); border-radius: var(
+          +--radius-lg); padding: var(--space-4); display: flex; flex-dir
+          +ection: column; gap: var(--space-3); align-items: stretch; }  
+      164 +.order > .link-btn { align-self: center; }                    
+      165 +.order-head { display: flex; justify-content: space-between; a
+          +lign-items: center; gap: var(--space-3); }                    
+      166 +.order-items { list-style: none; margin: 0; padding: 0; displa
+          +y: flex; flex-direction: column; gap: var(--space-3); }       
+      167 +.order-item { display: grid; grid-template-columns: 64px 1fr; 
+          +grid-template-areas: "img info"; gap: var(--space-4); }       
+      168 +.checkout-line { display: flex; justify-content: space-between
+          +; gap: var(--space-3); border-bottom: 1px solid var(--color-bo
+          +rder); padding-bottom: var(--space-2); }                      
+      169 +.status { border-radius: 999px; padding: 0 var(--space-2); fon
+          +t-size: var(--text-sm); font-weight: 700; background: var(--co
+          +lor-surface-2); }                                             
+      170 +.status-paid { background: var(--color-accent); color: var(--c
+          +olor-bg); }                                                   
+      171 +.status-delivered { background: var(--color-success); color: v
+          +ar(--color-bg); }                                             
+      172 +.key-row { display: flex; align-items: center; flex-wrap: wrap
+          +; gap: var(--space-3); }                                      
+      173 +.key-code {                                                   
+      174 +  font-family: var(--font-mono); letter-spacing: 0.05em;      
+      175 +  background: var(--color-surface-2); border: 1px dashed var(-
+          +-color-border);                                               
+      176 +  border-radius: var(--radius); padding: var(--space-1) var(--
+          +space-2);                                                     
+      177 +}                                                             
+      178 +.key-row .link-btn:hover { color: var(--color-text); }        
+
+● Update(frontend\src\styles\tokens.css)
+  ⎿  Added 1 line
+      21  
+      22    /* typography */
+      23    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sa
+          ns-serif;
+      24 +  --font-mono: ui-monospace, Consolas, "Courier New", monospace
+         +;                                                              
+      25    --text-sm: 0.875rem;
+      26    --text-base: 1rem;
+      27    --text-lg: 1.25rem;
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The frontend builds. Next, an end-to-end run against the real HTTP API (memory
+  store, dev token): add to the cart, check out, retry, change the paid cart,
+  list orders.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All the checks pass, covering auth, idempotent retries, the paid-cart cases
+  and order history. I'm updating the docs next: DECISIONS, SPEC and README.
+  · summary
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Update(README.md)
+  ⎿  Added 1 line, removed 1 line
+      43  6. Seed and run:
+      44     ```bash
+      45     cd backend
+      46 -   go run ./cmd/seed    # idempotent: re-running overwrites by 
+         -id                                                             
+      46 +   go run ./cmd/seed    # idempotent full reset: products, offe
+         +rs, key pool; deletes carts/orders                             
+      47     go run ./cmd/api     # log should say store=firestore
+      48     ```
+      49  
+
+● Update(README.md)
+  ⎿  Added 7 lines, removed 2 lines
+      54  4. Note: the free API service sleeps when idle; the first reque
+          st can take ~30-60s.
+      55  
+      56  ## Status
+      57 -Done (scaffold): catalog, filters/sort/search, homepage blocks,
+         - product page with offers, auth plumbing.                      
+      58 -TODO: cart, checkout + key delivery, order history, Eneba styli
+         -ng pass. See `SPEC.md`.                                        
+      57 +Done: catalog, filters/sort/search, homepage blocks, product pa
+         +ge with offers, auth,                                          
+      58 +cart with server-side key reservation, checkout (simulated paym
+         +ent) + key delivery, order history.                            
+      59 +TODO: Eneba styling pass, deploy. See `SPEC.md`.               
+      60 +                                                               
+      61 +Firestore collections: `products`, `offers` (stock = available 
+         +keys), `banners`,                                              
+      62 +`keys` (`offerId, code, status: available|reserved|sold, orderI
+         +d`) and                                                        
+      63 +`orders` (`status: cart -> paid -> delivered`; a cart is an ord
+         +er with status `cart`).                                        
+
+● Update(SPEC.md)
+  ⎿  Added 2 lines, removed 2 lines
+      14  | Product page + seller offers | Scaffolded | Offer comparison 
+          table with add-to-cart per offer. |
+      15  | Auth | Scaffolded | Firebase Auth email/password; backend ver
+          ifies tokens. Dev mode without Firebase (DECISIONS #10). TODO: 
+          Google sign-in? (optional) |
+      16  | Cart | Done | Client-side cart, but stock is reserved on the 
+          server when an item is added (DECISIONS #15). Popup, header dro
+          pdown, live stock errors. |
+      17 -| Checkout + key delivery | TODO | Simulated payment (DECISIONS
+         - #8). Keys come from a seeded pool per offer; stock = unsold ke
+         -ys. Transaction: claim key(s), create order (DECISIONS #11). Ne
+         -eds `Order`/`Key` types, `seeds/keys.json`, Firestore + memory 
+         -orders repo. |                                                 
+      18 -| Order history | TODO | Signed-in only. |                     
+      17 +| Checkout + key delivery | Done | Cart is the first stage of a
+         +n order: cart -> paid -> delivered. Keys are reserved from the 
+         +available pool when added to the cart, sold on delivery. Simula
+         +ted payment (DECISIONS #8, #19). |                             
+      18 +| Order history | Done | Signed-in only; `GET /api/orders`, pag
+         +e lists orders with copyable key codes. |                      
+      19  | Eneba styling | TODO | Tokens-driven (tokens.css is still pla
+          ceholder). Extract real values into docs/DESIGN.md first. |
+      20  
+      21  ## Explicitly out of scope (and why)
+
+● Update(SPEC.md)  ⎿  Added 6 lines, removed 9 lines
+      30  
+      31  ## Next tasks (in order)
+      32  1. **Run on real Firestore.** Fill `backend/.env` + `frontend/.
+          env.local`, `STORE=firestore`,
+      33 -   `go run ./cmd/seed`. Check in the console: adding to cart lo
+         -wers `offers.stock` and creates                                
+      34 -   a `reservations` doc; it comes back after 30 min. (Transacti
+         -ons are only tested in memory so far.)                         
+      35 -2. **Checkout + key delivery** (biggest slice). `POST /api/orde
+         -rs` (signed in): turns the                                     
+      36 -   cart's reservations into an order in one transaction, claims
+         - that many keys per offer from                                 
+      37 -   `seeds/keys.json`, deletes the reservations; the frontend cl
+         -ears the cart and shows the keys.                              
+      38 -   Simulated payment (#8). First decide how #11 ("stock = unsol
+         -d keys") fits #15 (stock is a                                  
+      39 -   counter reserved at cart time), e.g. seed exactly `stock` ke
+         -ys per offer so the counter and                                
+      40 -   the key pool always agree. Needs `Order`/`Key` types, memory
+         - + Firestore repo, tests.                                      
+      41 -3. **Order history.** `GET /api/orders` (signed in) + a page li
+         -sting past orders with their keys.                             
+      33 +   `go run ./cmd/seed` (writes ~6000 keys). Check in the consol
+         +e: adding to cart lowers                                       
+      34 +   `offers.stock`, creates an `orders` doc with status `cart` a
+         +nd flips that many `keys` to                                   
+      35 +   `reserved`; checkout makes them `sold` and the order `delive
+         +red`; an abandoned cart's keys                                 
+      36 +   come back after 30 min. (Transactions are only tested in mem
+         +ory so far.)                                                   
+      37 +2. ~~Checkout + key delivery~~ Done (DECISIONS #19).           
+      38 +3. ~~Order history~~ Done.                                     
+      39  4. **Eneba styling.** Fill `docs/DESIGN.md` from eneba.com (col
+          ors, fonts, spacing, components),
+      40     copy the values into `tokens.css`, polish header, cards, pro
+          duct page, cart dropdown, popup.
+      41  5. **Deploy to Render** with `render.yaml`, set env vars, test 
+          the live site end to end
+
+● Update(DECISIONS.md)
+  ⎿  Added 1 line, removed 1 line
+      56  Rejected: returning 503 without Firebase (checkout untestable o
+          ffline);
+      57  a Firebase Auth emulator (extra tooling to install and explain)
+          .
+      58  
+      59 -## 11. Digital keys: seeded pool per offer (planned, checkout s
+         -lice)                                                          
+      59 +## 11. Digital keys: seeded pool per offer (built differently, 
+         +see #19)                                                       
+      60  `seeds/keys.json` holds fake keys per offer; an offer's stock =
+           its unsold keys.
+      61  Checkout runs one Firestore transaction: read the cart's offers
+          , claim N unsold
+      62  keys (mark sold + orderId), write the order. Two buyers can't g
+          et the same key
+
+● Bash(cat >> DECISIONS.md <<'EOF'…)
+  ⎿  Updated DECISIONS.md (+26 -0)
+      141  Rejected for now: migrating to Postgres (rewrite of the reposi
+           tory layer and stock
+      142  transactions, a new `pgx` dependency, new hosting, for no visi
+           ble gain at this size);
+      143  a separate search service (one more thing to deploy and keep i
+           n sync).
+      144 +                                                              
+      145 +## 19. The cart is an order; keys are reserved from the pool a
+          +t cart time (supersedes #11, storage part of #15)             
+      146 +Two new collections. `keys`: `{offerId, code, status, orderId}
+          +`, status                                                     
+      147 +`available -> reserved -> sold`. `orders`: status `cart -> pai
+          +d -> delivered`. A cart is                                    
+      148 +simply an order in status `cart` (doc id = the browser's cartI
+          +d), so one document goes                                      
+      149 +from basket to receipt, and a key's `orderId` points at it the
+          + whole way.                                                   
+      150 +- Add to cart (#15 rule unchanged): the same transaction moves
+          + stock, updates the cart's                                    
+      151 +  line and flips that many keys `available -> reserved` (order
+          +Id = cart). Removing or                                       
+      152 +  expiring (#16) flips them back. So a key can only be taken f
+          +rom the unreserved pool,                                      
+      153 +  and `offers.stock` always equals the offer's available keys 
+          +(seed: exactly `stock`                                        
+      154 +  keys per offer, generated in `seeds/keys.go`). The counter s
+          +tays so the product page                                      
+      155 +  doesn't have to count keys. Tests check stock == available k
+          +eys after every step.                                         
+      156 +- Checkout `POST /api/orders {cartId}` (signed in), two transa
+          +ctions:                                                       
+      157 +  pay (cart -> paid: owner, server prices, total) then deliver
+          + (paid -> delivered: the                                      
+      158 +  reserved keys become sold, codes copied into the order as a 
+          +receipt). Delivery can't                                      
+      159 +  run out because the keys were reserved earlier. Retrying fin
+          +ishes a paid order or                                         
+      160 +  returns the delivered one; another user's cart answers 404. 
+      161 +- A paid cart is closed: changing it returns 410, and the brow
+          +ser starts a new cartId.                                      
+      162 +- Rules (`pay`, `deliver`, `reserve`) are pure functions in `s
+          +ervice`; repositories run them atomically.                    
+      163 +Rejected: claiming keys only at checkout (#11's plan: reservat
+          +ion would be a counter                                        
+      164 +without real keys behind it); keeping a separate `reservations
+          +` collection next to orders                                   
+      165 +(two places describe the same cart); one transaction for pay +
+          + deliver (the `paid`                                          
+      166 +stage would never be visible, and a failed delivery would undo
+          + the payment).                                                
+      167 +Trade-offs: everyone adding the same offer queries the same fi
+          +rst available keys, so                                        
+      168 +Firestore retries under heavy contention (fine at demo traffic
+          +). Seeded codes are                                           
+      169 +deterministic, i.e. fake. Re-seeding wipes carts and orders.  
+
+● Checkout and key delivery now work end to end. Backend tests pass, the
+  frontend builds, and I ran the whole flow against the HTTP API. Everything is
+  tested against the in-memory store only; the Firestore code compiles but has
+  never run against real Firestore.
+
+  How it works
+  - keys collection: {id, offerId, code, status, orderId}, where status goes
+    available → reserved → sold. I named the fields in camelCase (offerId, not
+    offer_id) to match the rest of the database.
+  - orders collection: status goes cart → paid → delivered. A cart is just an
+    order with status cart, and its document id is the browser's cart id. Its
+    lines replace the old reservations documents.
+  - Adding to the cart takes keys only from the available pool. In the same
+    transaction that lowers the stock, that many keys switch to reserved with
+    orderId set to the cart. Removing a line, or the 30-minute expiry, switches
+    them back. offers.stock always equals the number of available keys, and the
+    tests check this after every step, including the 190-buyer race test.
+  - Checkout (POST /api/orders, signed in) runs two transactions.
+    - Pay (cart → paid): records the buyer and takes prices from the server, not
+      the browser.
+    - Deliver (paid → delivered): the reserved keys become sold and their codes
+      are copied onto the order.
+    - Delivery can't run out of keys, because they were reserved when the items
+      went into the cart.
+    - Calling checkout again finishes a paid order or returns the delivered one,
+      and someone else's cart gets a 404.
+  - A paid cart is closed. Changing it returns 410, and the browser starts a new
+    cart.
+
+  Frontend
+  - The checkout page shows a summary and a "pay" button (payment is simulated),
+    then the delivered keys with copy buttons.
+  - "Mano užsakymai" lists past orders with their keys.
+
+  Things to know
+  - The seeder now generates about 6,000 keys, exactly as many as each offer's
+    stock. It's a full reset: it deletes all carts, orders and old reservations.
+    The key codes are made up and the same on every seed.
+  - When many shoppers add the same offer at once, Firestore will retry
+    transactions more often. That's fine at demo traffic.
+  - The next step in SPEC is running this on real Firestore and watching the
+    keys change status in the console.
+
+  Docs: I added DECISIONS #19 (what, why, alternatives rejected) and marked #11
+  as superseded. SPEC and README are updated.
+
+  I haven't committed yet, so you can review it first. The design is a bigger
+  change than the SPEC plan, because carts now live in orders. The working tree
+  also has a deletion of AI_LOG.md that I didn't make; I left it out of this
+  work. Say if you want me to commit this slice without it.
+
+> can you run it against firestore? The db doesnt match the changes made and
+  the for now remove the login auth
+
+● First I'll check how the env is set up for Firestore, since that decides how
+  the login part should be handled.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Firestore is set up and the credentials are in place. Next I'll swap sign-in
+  for a random guest id sent as X-Guest-Id, re-seed the new keys/orders
+  structure, then run the API on Firestore and test the full flow. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Write(backend\internal\middleware\guest.go)
+  ⎿  Wrote 33 lines to backend\internal\middleware\guest.go
+       1 package middleware
+       2
+       3 import (
+       4   "context"
+       5   "net/http"
+       6   "regexp"
+       7 )
+       8
+       9 // GuestHeader carries a random id the browser makes once and ke
+         eps in
+     … +24 lines (ctrl+o to expand)
+
+● Update(backend\internal\middleware\middleware.go)
+  ⎿  Added 1 line, removed 1 line
+      13    return cors.Handler(cors.Options{
+      14      AllowedOrigins:   origins,
+      15      AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", 
+          "OPTIONS"},
+      16 -    AllowedHeaders:   []string{"Authorization", "Content-Type"}
+         -,                                                              
+      16 +    AllowedHeaders:   []string{"Authorization", "Content-Type",
+         + GuestHeader},                                                 
+      17      AllowCredentials: false,
+      18      MaxAge:           300,
+      19    })
+
+● Update(backend\internal\router\router.go)
+  ⎿  Added 6 lines
+      32      r.Group(func(r chi.Router) {
+      33        r.Use(middleware.RequireAuth(verifier))
+      34        r.Get("/me", h.Me)
+      35 +    })                                                         
+      36 +                                                               
+      37 +    // Orders belong to a browser guest id while login is switc
+         +hed off                                                        
+      38 +    // (DECISIONS #20). To require login again: RequireAuth(ver
+         +ifier) here.                                                   
+      39 +    r.Group(func(r chi.Router) {                               
+      40 +      r.Use(middleware.RequireGuest())                         
+      41        r.Post("/orders", h.Checkout)
+      42        r.Get("/orders", h.ListOrders)
+      43      })
+
+● Update(backend\internal\handler\handler.go)
+  ⎿  Added 2 lines, removed 1 line
+      171  }
+      172  
+      173  // Checkout: POST /api/orders  body {"cartId": "..."} -> 201 w
+           ith the delivered order.
+      174 -// Simulated payment: the cart's reserved keys are sold to the
+          - signed-in user.                                              
+      174 +// Simulated payment: the cart's reserved keys are sold to the
+          + request's user                                               
+      175 +// (for now a browser guest id, see router).                  
+      176  // Safe to retry: a paid-but-undelivered order is finished, a 
+           delivered one returned.
+      177  func (h *Handler) Checkout(w http.ResponseWriter, r *http.Requ
+           est) {
+      178    var body struct {
+
+● Update(backend\internal\handler\handler.go)
+  ⎿  Added 1 line, removed 1 line
+      197    }
+      198  }
+      199  
+      200 -// ListOrders: GET /api/orders -> {"items": [order...]} for th
+          -e signed-in user, newest first.                               
+      200 +// ListOrders: GET /api/orders -> {"items": [order...]} for th
+          +e request's user, newest first.                               
+      201  func (h *Handler) ListOrders(w http.ResponseWriter, r *http.Re
+           quest) {
+      202    orders, err := h.Orders.List(r.Context(), middleware.UserFro
+           m(r.Context()).UID)
+      203    if err != nil {
+
+● I'll add a test for the guest middleware next to the existing auth tests:
+
+  Read 1 file (ctrl+o to expand)
+
+● Bash(cat > internal/middleware/guest_test.go <<'EOF'
+      package middleware…)
+  ⎿  Created backend\internal\middleware\guest_test.go (+39 -0)
+       1 +package middleware                                             
+       2 +                                                               
+       3 +import (                                                       
+       4 +        "net/http"                                             
+       5 +        "net/http/httptest"                                    
+       6 +        "testing"                                              
+       7 +)                                                              
+       8 +                                                               
+       9 +func TestRequireGuest(t *testing.T) {                          
+      10 +        var gotUID string                                      
+      11 +        h := RequireGuest()(http.HandlerFunc(func(w http.Respon
+         +seWriter, r *http.Request) {                                   
+      12 +                gotUID = UserFrom(r.Context()).UID             
+      13 +        }))                                                    
+      14 +                                                               
+      15 +        const id = "0f8c2a1e-5b7d-4c3a-9e2f-1a2b3c4d5e6f"      
+      16 +        cases := []struct {                                    
+      17 +                header string                                  
+      18 +                want   int                                     
+      19 +        }{                                                     
+      20 +                {"", http.StatusUnauthorized},          // no h
+         +eader                                                          
+      21 +                {"short", http.StatusUnauthorized},     // too 
+         +short to be random                                             
+      22 +                {"bad id with spaces!!", http.StatusUnauthorize
+         +d},                                                            
+      23 +                {id, http.StatusOK},                           
+      24 +        }                                                      
+      25 +        for _, c := range cases {                              
+      26 +                req := httptest.NewRequest(http.MethodGet, "/ap
+         +i/orders", nil)                                                
+      27 +                if c.header != "" {                            
+      28 +                        req.Header.Set(GuestHeader, c.header)  
+      29 +                }                                              
+      30 +                rec := httptest.NewRecorder()                  
+      31 +                h.ServeHTTP(rec, req)                          
+      32 +                if rec.Code != c.want {                        
+      33 +                        t.Errorf("%s %q: got %d, want %d", Gues
+         +tHeader, c.header, rec.Code, c.want)                           
+      34 +                }                                              
+      35 +        }                                                      
+      36 +        if gotUID != "guest:"+id {                             
+      37 +                t.Errorf("handler saw uid %q", gotUID)         
+      38 +        }                                                      
+      39 +}                                                              
+
+● Backend done. Now the frontend: a guest id helper, the API client sends it,
+  and the login wall plus header login button come out.
+
+● Write(frontend\src\lib\guest.ts)
+  ⎿  Wrote 18 lines to frontend\src\lib\guest.ts
+       1 // Login is switched off for now (DECISIONS #20). Orders belong
+         to this browser
+       2 // instead: a random id made once and kept in localStorage, sent
+          as X-Guest-Id.
+       3 const KEY = "guestId";
+       4 let fallback: string | null = null; // used when storage is bloc
+         ked: lasts one page load
+       5
+       6 export function guestId(): string {
+       7   try {
+     … +11 lines (ctrl+o to expand)
+
+● Update(frontend\src\lib\api.ts)
+  ⎿  Added 1 line
+      16  
+      17  interface RequestOpts {
+      18    auth?: boolean;
+      19 +  guest?: boolean; // send this browser's guest id (orders, whi
+         +le login is off)                                               
+      20    signal?: AbortSignal;
+      21    method?: "GET" | "PUT" | "POST";
+      22    body?: unknown; // sent as JSON
+
+● Update(frontend\src\lib\api.ts)
+  ⎿  Added 1 line
+      28      const token = await getIdToken();
+      29      if (token) headers.Authorization = `Bearer ${token}`;
+      30    }
+      31 +  if (opts.guest) headers["X-Guest-Id"] = guestId();           
+      32    if (opts.body !== undefined) headers["Content-Type"] = "appli
+          cation/json";
+      33    const res = await fetch(`${BASE}${path}`, {
+      34      method: opts.method ?? "GET",
+
+● Update(frontend\src\lib\api.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      85    me: () => request<{ uid: string; email: string }>("/api/me", 
+          { auth: true }),
+      86    /** Simulated payment: turns the cart into a delivered order 
+          with its keys. Safe to retry. */
+      87    checkout: (cartId: string) =>
+      88 -    request<Order>("/api/orders", { auth: true, method: "POST",
+         - body: { cartId } }),                                          
+      89 -  orders: (signal?: AbortSignal) => request<{ items: Order[] }>
+         -("/api/orders", { auth: true, signal }),                       
+      88 +    request<Order>("/api/orders", { guest: true, method: "POST"
+         +, body: { cartId } }),                                         
+      89 +  orders: (signal?: AbortSignal) => request<{ items: Order[] }>
+         +("/api/orders", { guest: true, signal }),                      
+      90  };
+
+● Update(frontend\src\lib\api.ts)
+  ⎿  Added 1 line
+      1  import { getIdToken } from "./firebase";
+      2 +import { guestId } from "./guest";                              
+      3  import type { Banner, CartLine, Order, Product, ProductDetail, P
+         roductPage, ServerLine } from "../types";
+      4  
+      5  const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/,
+          "");
+
+● Update(frontend\src\app\App.tsx)
+  ⎿  Added 3 lines, removed 2 lines
+      36              <Route path="/product/:id" element={<ProductPage />
+          } />
+      37              <Route path="/cart" element={<CartPage />} />
+      38              <Route path="/login" element={<LoginPage />} />
+      39 -            <Route path="/checkout" element={<RequireAuth><Chec
+         -koutPage /></RequireAuth>} />                                  
+      40 -            <Route path="/orders" element={<RequireAuth><Orders
+         -Page /></RequireAuth>} />                                      
+      39 +            {/* Login is off for now (DECISIONS #20); wrap in <
+         +RequireAuth> to bring it back. */}                             
+      40 +            <Route path="/checkout" element={<CheckoutPage />} 
+         +/>                                                             
+      41 +            <Route path="/orders" element={<OrdersPage />} />  
+      42              <Route path="*" element={<div className="page conta
+          iner"><h1>Puslapis nerastas</h1></div>} />
+      43            </Route>
+      44          </Routes>
+
+● Update(frontend\src\app\App.tsx)
+  ⎿  Removed 1 line
+      1  import { BrowserRouter, Outlet, Route, Routes } from "react-rout
+         er-dom";
+      2  import { AuthProvider } from "../features/auth/AuthContext";
+      3 -import { RequireAuth } from "../features/auth/RequireAuth";     
+      3  import { LoginPage } from "../features/auth/LoginPage";
+      4  import { HomePage } from "../features/home/HomePage";
+      5  import { StorePage } from "../features/store/StorePage";
+● Update(frontend\src\components\Header.tsx)
+  ⎿  Added 3 lines, removed 8 lines
+      13          <nav className="nav">
+      14            <Link to="/store">Parduotuvė</Link>
+      15            <CartMenu />
+      16 -          {user ? (                                            
+      17 -            <>                                                 
+      18 -              <Link to="/orders">Užsakymai</Link>              
+      19 -              <button className="btn secondary" onClick={signOu
+         -t}>Atsijungti</button>                                         
+      20 -            </>                                                
+      21 -          ) : (                                                
+      22 -            <Link to="/login" className="btn">Prisijungti</Link
+         ->                                                              
+      23 -          )}                                                   
+      16 +          <Link to="/orders">Užsakymai</Link>                  
+      17 +          {/* Login is off for now (DECISIONS #20). Only shown 
+         +if someone signed in earlier. */}                              
+      18 +          {user && <button className="btn secondary" onClick={s
+         +ignOut}>Atsijungti</button>}                                   
+      19          </nav>
+      20        </div>
+      21      </header>
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Both build. Now re-seeding Firestore with the new structure. This deletes the
+  old reservations, orders and keys docs and writes ~6,000 keys:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The seed worked: 16 products, 48 offers, 5,559 keys (one per unit of stock).
+  Now running the API on Firestore and testing the full flow with a guest id:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The whole flow runs on Firestore, including the three-equality key queries,
+  which needed no extra index. I'm checking the keys collection directly next,
+  and I'll delete the temporary checker afterwards. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The database checks out: all 48 offers have stock matching their available
+  keys, and the sold keys link to the delivered guest order. I'm checking the
+  API log for sweeper errors next. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● No errors after re-seeding Firestore, but each cart change takes about 1.5–2s
+  because the transaction makes several database round trips. I'm recording the
+  auth change in the docs next. · summary
+
+● Bash(cd /c/Projects/eneba && cat >> DECISIONS.md <<'EOF'…)
+  ⎿  Updated DECISIONS.md (+13 -0)
+      167  Trade-offs: everyone adding the same offer queries the same fi
+           rst available keys, so
+      168  Firestore retries under heavy contention (fine at demo traffic
+           ). Seeded codes are
+      169  deterministic, i.e. fake. Re-seeding wipes carts and orders.
+      170 +                                                              
+      171 +## 20. Login switched off for now: orders belong to a browser 
+          +guest id                                                      
+      172 +Checkout and order history no longer need sign-in. The browser
+          + makes a random id once                                       
+      173 +(`lib/guest.ts`, localStorage) and sends it as `X-Guest-Id`; `
+          +middleware.RequireGuest`                                      
+      174 +turns it into the user `guest:<id>`, so handlers, services and
+          + the `orders.userId` field                                    
+      175 +are unchanged. Same trust model as cart ids (#15): long, rando
+          +m, unguessable.                                               
+      176 +Why: real Firebase sign-in blocked testing on Firestore, and t
+          +he dev token (#10) only                                       
+      177 +works in memory mode. Undo: use `RequireAuth(verifier)` for th
+          +e orders group in                                             
+      178 +`router.go`, wrap `/checkout` and `/orders` in `<RequireAuth>`
+          +, restore the header login                                    
+      179 +button. The Firebase auth code is kept.                       
+      180 +Trade-off: orders live in one browser; clearing storage or swi
+          +tching device loses the                                       
+      181 +history (the orders stay in Firestore). Rejected: one shared f
+          +ake user (every visitor                                       
+      182 +would see everyone's keys).                                   
+
+● Update(SPEC.md)
+  ⎿  Added 1 line, removed 1 line
+      15  | Auth | Scaffolded | Firebase Auth email/password; backend ver
+          ifies tokens. Dev mode without Firebase (DECISIONS #10). TODO: 
+          Google sign-in? (optional) |
+      16  | Cart | Done | Client-side cart, but stock is reserved on the 
+          server when an item is added (DECISIONS #15). Popup, header dro
+          pdown, live stock errors. |
+      17  | Checkout + key delivery | Done | Cart is the first stage of a
+          n order: cart -> paid -> delivered. Keys are reserved from the 
+          available pool when added to the cart, sold on delivery. Simula
+          ted payment (DECISIONS #8, #19). |
+      18 -| Order history | Done | Signed-in only; `GET /api/orders`, pag
+         -e lists orders with copyable key codes. |                      
+      18 +| Order history | Done | Per browser guest id while login is of
+         +f (DECISIONS #20); `GET /api/orders`, page lists orders with co
+         +pyable key codes. |                                            
+      19  | Eneba styling | TODO | Tokens-driven (tokens.css is still pla
+          ceholder). Extract real values into docs/DESIGN.md first. |
+      20  
+      21  ## Explicitly out of scope (and why)
+
+● Update(SPEC.md)
+  ⎿  Added 5 lines, removed 5 lines
+      29  - UI language: Lithuanian only (matches eneba.lt). Seed data (n
+          ames, descriptions) stays English.
+      30  
+      31  ## Next tasks (in order)
+      32 -1. **Run on real Firestore.** Fill `backend/.env` + `frontend/.
+         -env.local`, `STORE=firestore`,                                 
+      33 -   `go run ./cmd/seed` (writes ~6000 keys). Check in the consol
+         -e: adding to cart lowers                                       
+      34 -   `offers.stock`, creates an `orders` doc with status `cart` a
+         -nd flips that many `keys` to                                   
+      35 -   `reserved`; checkout makes them `sold` and the order `delive
+         -red`; an abandoned cart's keys                                 
+      36 -   come back after 30 min. (Transactions are only tested in mem
+         -ory so far.)                                                   
+      32 +1. ~~Run on real Firestore~~ Done 2026-11-15: seeded 5559 keys;
+         + cart -> checkout -> history                                   
+      33 +   checked over HTTP, and stock == available keys for all 48 of
+         +fers afterwards.                                               
+      34 +   Not yet seen live: the 30-min expiry sweep on Firestore. Car
+         +t changes take ~1.5-2s                                         
+      35 +   (transaction round trips); consider an optimistic UI if it f
+         +eels slow.                                                     
+      36 +   Login is switched off for now (DECISIONS #20); bring it back
+         + before or after deploy.                                       
+      37  2. ~~Checkout + key delivery~~ Done (DECISIONS #19).
+      38  3. ~~Order history~~ Done.
+      39  4. **Eneba styling.** Fill `docs/DESIGN.md` from eneba.com (col
+          ors, fonts, spacing, components),
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Update(SPEC.md)
+  ⎿  Added 1 line, removed 1 line
+      12  | Homepage blocks | Scaffolded | 3 blocks (banners, best seller
+          s, deals), each own endpoint. Add 1-2 more if time. |
+      13  | Search | Scaffolded | Typo/partial tolerant (trigram), header
+           dropdown + results via store page. |
+      14  | Product page + seller offers | Scaffolded | Offer comparison 
+          table with add-to-cart per offer. |
+      15 -| Auth | Scaffolded | Firebase Auth email/password; backend ver
+         -ifies tokens. Dev mode without Firebase (DECISIONS #10). TODO: 
+         -Google sign-in? (optional) |                                   
+      15 +| Auth | Switched off | Firebase Auth email/password code is ke
+         +pt but not used: orders belong to a browser guest id for now (D
+         +ECISIONS #20). Dev mode without Firebase (#10). TODO: turn back
+         + on; Google sign-in? (optional) |                              
+      16  | Cart | Done | Client-side cart, but stock is reserved on the 
+          server when an item is added (DECISIONS #15). Popup, header dro
+          pdown, live stock errors. |
+      17  | Checkout + key delivery | Done | Cart is the first stage of a
+          n order: cart -> paid -> delivered. Keys are reserved from the 
+          available pool when added to the cart, sold on delivery. Simula
+          ted payment (DECISIONS #8, #19). |
+      18  | Order history | Done | Per browser guest id while login is of
+          f (DECISIONS #20); `GET /api/orders`, page lists orders with co
+          pyable key codes. |
+
+● Update(README.md)
+  ⎿  Added 2 lines, removed 1 line
+      54  4. Note: the free API service sleeps when idle; the first reque
+          st can take ~30-60s.
+      55  
+      56  ## Status
+      57 -Done: catalog, filters/sort/search, homepage blocks, product pa
+         -ge with offers, auth,                                          
+      57 +Done: catalog, filters/sort/search, homepage blocks, product pa
+         +ge with offers,                                                
+      58  cart with server-side key reservation, checkout (simulated paym
+          ent) + key delivery, order history.
+      59 +Login is switched off for now: orders belong to a random per-br
+         +owser guest id (`DECISIONS.md` #20).                           
+      60  TODO: Eneba styling pass, deploy. See `SPEC.md`.
+      61  
+      62  Firestore collections: `products`, `offers` (stock = available 
+          keys), `banners`,
+
+● Firestore now has the new structure, the whole flow works on it, and checkout
+  and order history no longer need a login.
+
+  What I did to Firestore
+  - Re-seeded it. The old cart reservations are gone. There's now a keys
+    collection with 5,559 keys (one per unit of stock), and orders holds carts
+    and purchases.
+  - Ran the API against it and tested over HTTP:
+    - Adding to the cart lowers stock and reserves that many keys, and lowering
+      the quantity gives keys back.
+    - Checkout returns the delivered order with its codes, and running it again
+      gives the same order.
+    - Another guest gets a 404 for that cart, and changing a cart after payment
+      gets a 410.
+    - Order history lists the order.
+  - Checked the data directly: after the test, stock equalled the available keys
+    for all 48 offers, and the sold keys pointed at the order.
+  - Re-seeded again so the test order isn't left in your database.
+
+  Login removed (for now)
+  - The browser makes a random guest id once, stores it, and sends it as an
+    X-Guest-Id header. Orders belong to that id, so each browser still sees only
+    its own orders.
+  - The login button and the sign-in requirement on /checkout and /orders are
+    gone.
+  - The Firebase login code is still there; DECISIONS #20 lists the three lines
+    to change to turn it back on.
+  - Downside: order history is tied to one browser. Clearing storage or
+    switching device loses it, though the orders stay in Firestore.
+
+  Worth knowing
+  - On Firestore each cart change takes about 1.5–2 seconds, because each one is
+    a database transaction with several round trips. You'll notice it when
+    clicking "+". I noted it in SPEC as a possible polish item.
+  - I haven't seen the 30-minute expiry of abandoned carts run on Firestore yet.
+
+  Backend tests pass, including a new one for the guest id, and the frontend
+  builds. DECISIONS #20, SPEC and README are updated. Nothing is committed yet;
+  say if you want this and the checkout work committed (leaving out the
+  AI_LOG.md deletion that was already in the working tree).
+
+> but the order collection is still missing. Dont you think its necessary?
+
+● Yes, it's necessary, and nothing is missing. You don't see it because
+  Firestore doesn't keep empty collections.
+
+  Why it's not in the console
+  - Firestore has no tables or schema. A collection exists only while it has at
+    least one document; when the last one is deleted, the console stops showing
+    it.
+  - The re-seed deleted every order on purpose (the test order and old data).
+    With zero orders left, orders disappeared from view.
+  - keys shows up because the seed writes 5,559 key documents into it. The seed
+    doesn't create any orders, because orders only come from shoppers.
+
+  When it appears
+  - The first time anyone adds an item to a cart, the backend writes
+    orders/{cartId} with status: "cart", and the collection shows up.
+  - That happened in the test run: after checkout the collection held the order,
+    status: delivered, owned by the guest id.
+  - To see it yourself: run the app, add something to the cart, and refresh the
+    Firestore console. You'll see orders with a cart document, and that many
+    keys switched to reserved with orderId set to it. After checkout the order
+    becomes delivered and the keys sold.
+
+  What I'd avoid: making the seed write a placeholder order just so the
+  collection is visible. It would be a fake order with no matching sold keys, so
+  the data would no longer be consistent. The code (ColOrders in firestore.go
+  (backend/internal/repository/firestore.go)) is the real definition of the
+  collection, not the console.
+
+  If you want visible example data for a demo or screenshots, I can have the
+  seed make one real demo purchase through the normal checkout code. Its keys
+  would really be sold and stock lowered to match. Should I add that?
+
+> the mapping of the order leaves productName, imageUrl, sellerName, price, key
+  empty when its in cart state don't know why. Make the paidAt and deliveredAt
+  nullable because now it looks like nonsense. Also it seems that the cart UI
+  doesnt render from the store order doc and uses local or fresh catalog
+  lookup. The data should be written once and then only edited as needed
+  depending on the stages not rebuilt. Checkout should only change the state
+  not repair missing data
+
+● Before changing anything I'll look at every place that uses the cart data, so
+  the change is complete.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● I've reworked the cart so the server writes each line's full snapshot once and
+  only later stages edit changed fields, with codes hidden until delivery and
+  the UI reading the server's order document. Next I'll start on the domain
+  types. · summary
+
+  Made 1 scratchpad edit +121, read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● Bash(cat "$TEMP/domain_head.go"
+      "C:/Users/faust/AppData/Local/Temp/claude/cceab8bcfe303331/242e8ed8-fd74-4
+      2be-9166-a5e6ee7a9bc4/scratchpad/domain_tail.go" > internal…)
+  ⎿  Updated backend\internal\domain\domain.go (+120 -92)
+       39          LinkURL  string `json:"linkUrl" firestore:"linkUrl"`
+       40  }
+       41  
+       42 -// Reservation is one cart line seen from the stock side: how 
+          -many units of an                                              
+       43 -// offer a cart holds. It is not stored on its own: it is read
+          - from the cart's                                              
+       44 -// Order (status "cart"). Those units' keys are "reserved", so
+          - Offer.Stock                                                  
+       45 -// (= available keys) is what anyone else can still add.      
+       46 -type Reservation struct {                                     
+       47 -        CartID    string    `json:"cartId"`                   
+       48 -        OfferID   string    `json:"offerId"`                  
+       49 -        Quantity  int       `json:"quantity"`                 
+       50 -        UpdatedAt time.Time `json:"updatedAt"`                
+       51 -}                                                             
+       52 -                                                              
+       53 -// Key statuses: available -> reserved (in a cart) -> sold (de
+          -livered).                                                     
+       54 -// A reserved key goes back to available if its cart line is r
+          -emoved or expires.                                            
+       55 -const (                                                       
+       56 -        KeyAvailable = "available"                            
+       57 -        KeyReserved  = "reserved"                             
+       58 -        KeySold      = "sold"                                 
+       59 -)                                                             
+       60 -                                                              
+       61 -// Key is one digital game key. Each offer has a pool of them;
+          - the offer's                                                  
+       62 -// Stock always equals how many of its keys are available.    
+       63 -type Key struct {                                             
+       64 -        ID      string `json:"id" firestore:"id"`             
+       65 -        OfferID string `json:"offerId" firestore:"offerId"`   
+       66 -        Code    string `json:"code" firestore:"code"`         
+       67 -        Status  string `json:"status" firestore:"status"`     
+       68 -        OrderID string `json:"orderId" firestore:"orderId"` //
+          - empty while available                                        
+       69 -}                                                             
+       70 -                                                              
+       71 -// Order statuses. The cart is the first stage of an order:   
+       72 -// cart (keys reserved) -> paid (prices fixed) -> delivered (k
+          -eys sold, codes shown).                                       
+       73 -const (                                                       
+       74 -        OrderCart      = "cart"                               
+       75 -        OrderPaid      = "paid"                               
+       76 -        OrderDelivered = "delivered"                          
+       77 -)                                                             
+       78 -                                                              
+     … 175 more lines (ctrl+o to expand)
+
+● Next, the repository interface and the shared line-building helper:
+
+● Bash(cat > internal/repository/repository.go <<'EOF'
+      // Package repository is the only layer that knows where data lives.…)
+  ⎿  Updated backend\internal\repository\repository.go (+63 -36)
+       5  import (
+       6          "context"
+       7          "errors"
+       8 +        "slices"                                               
+       9          "time"
+      10  
+      11          "eneba-marketplace/backend/internal/domain"
+     ...
+      27          ListBanners(ctx context.Context) ([]domain.Banner, erro
+          r)
+      28  }
+      29  
+      29 -// ApplyFunc gets an offer's current stock and the cart's curre
+         -nt reservation                                                 
+      30 -// (zero value if none), and returns the new values to save (or
+         - an error to                                                   
+      31 -// save nothing). The rule lives in the service; the repository
+         - only makes it atomic.                                         
+      32 -type ApplyFunc func(stock int, current domain.Reservation) (new
+         -Stock, newReserved int, err error)                             
+      30 +// ApplyFunc gets an offer's current stock and the cart's curre
+         +nt line as a                                                   
+      31 +// reservation (zero value if none), and returns the new stock 
+         +and line to save                                               
+      32 +// (or an error to save nothing). The rule lives in the service
+         +; the repository                                               
+      33 +// only makes it atomic.                                       
+      34 +type ApplyFunc func(stock int, current domain.Reservation) (new
+         +Stock int, next domain.Reservation, err error)                 
+      35  
+      36  // Reservations are the lines of orders that are still carts.
+      37  type Reservations interface {
+      38          // UpdateReservation reads the offer and the cart's lin
+          e, calls apply, and in
+      39          // one atomic step (Firestore transaction / mutex) save
+          s the new stock and
+      38 -        // line and moves that many keys between "available" an
+         -d "reserved".                                                  
+      39 -        // Saving sets the line's ReservedAt to now; a cart wit
+         -h no lines is deleted.                                         
+      40 +        // line and moves keys between "available" and "reserve
+         +d" to match.                                                   
+      41 +        // A new line is written whole: product name, image, se
+         +ller, price and keys.                                          
+      42 +        // A cart with no lines left is deleted. Returns the ca
+         +rt as saved.                                                   
+      43          // apply may run more than once if Firestore retries th
+          e transaction.
+      44          // Returns ErrNotFound if the offer doesn't exist, ErrC
+          artClosed if the cart was paid.
+      42 -        UpdateReservation(ctx context.Context, cartID, offerID 
+         -string, apply ApplyFunc) error                                 
+      43 -        // ListCartReservations returns everything one cart cur
+         -rently holds.                                                  
+      44 -        ListCartReservations(ctx context.Context, cartID string
+         -) ([]domain.Reservation, error)                                
+      45 -        // ListReservationsBefore returns cart lines last chang
+         -ed before t (expired).                                         
+      46 -        ListReservationsBefore(ctx context.Context, t time.Time
+         -) ([]domain.Reservation, error)                                
+      45 +        UpdateReservation(ctx context.Context, cartID, offerID 
+         +string, apply ApplyFunc) (*domain.Order, error)                
+      46 +        // ListExpiredReservations returns cart lines whose res
+         +ervation ended before now.                                     
+      47 +        ListExpiredReservations(ctx context.Context, now time.T
+         +ime) ([]domain.Reservation, error)                             
+      48  }
+     … 95 more lines (ctrl+o to expand)
+
+● Now the memory store:
+
+● Bash(cat > internal/repository/memory.go <<'EOF'
+      package repository…)
+  ⎿  Updated backend\internal\repository\memory.go (+52 -46)
+       69  
+       70  // UpdateReservation holds the mutex for the whole read-apply-
+           write, which is
+       71  // the in-memory equivalent of a Firestore transaction.
+       72 -func (m *Memory) UpdateReservation(_ context.Context, cartID, 
+          -offerID string, apply ApplyFunc) error {                      
+       72 +func (m *Memory) UpdateReservation(ctx context.Context, cartID
+          +, offerID string, apply ApplyFunc) (*domain.Order, error) {   
+       73          m.mu.Lock()
+       74          defer m.mu.Unlock()
+       75  
+       76          offer := m.offer(offerID)
+       77          if offer == nil {
+       78 -                return ErrNotFound                            
+       78 +                return nil, ErrNotFound                       
+       79          }
+       80          cart, ok := m.orders[cartID]
+       81          if ok && cart.Status != domain.OrderCart {
+       82 -                return ErrCartClosed                          
+       82 +                return nil, ErrCartClosed                     
+       83          }
+       84          if !ok {
+       85 -                cart = domain.Order{ID: cartID, Status: domain
+          -.OrderCart, CreatedAt: time.Now()}                            
+       85 +                cart = domain.Order{ID: cartID, Status: domain
+          +.OrderCart, Currency: offer.Currency, CreatedAt: time.Now()}  
+       86          }
+       87          cart = cloneOrder(cart)
+       88  
+       89 -        var cur domain.Reservation                            
+       90 -        if it := cart.Item(offerID); it != nil {              
+       91 -                cur = domain.Reservation{CartID: cartID, Offer
+          -ID: offerID, Quantity: it.Quantity, UpdatedAt: it.ReservedAt} 
+       92 -        }                                                     
+       93 -        newStock, newQty, err := apply(offer.Stock, cur)      
+       89 +        cur := cart.Item(offerID)                             
+       90 +        newStock, next, err := apply(offer.Stock, reservationO
+          +f(cartID, cur))                                               
+       91          if err != nil {
+       95 -                return err                                    
+       92 +                return nil, err                               
+       93          }
+       94  
+       98 -        // Pick the keys first, change them only once we know 
+          -there are enough.                                             
+       99 -        mv := moveFor(cartID, newQty-cur.Quantity)            
+       95 +        var product domain.Product                            
+       96 +        if cur == nil && next.Quantity > 0 {                  
+     … 129 more lines (ctrl+o to expand)
+
+● That key-picking loop calls reservationOf three times. Tidying it:
+● Update(backend\internal\repository\memory.go)
+  ⎿  Added 3 lines, removed 1 line
+      87    cart = cloneOrder(cart)
+      88  
+      89    cur := cart.Item(offerID)
+      90 -  newStock, next, err := apply(offer.Stock, reservationOf(cartI
+         -D, cur))                                                       
+      90 +  before := reservationOf(cartID, cur)                         
+      91 +  newStock, next, err := apply(offer.Stock, before)            
+      92    if err != nil {
+      93      return nil, err
+      94    }
+      95 +  need := next.Quantity - before.Quantity // keys to reserve; <
+         + 0 means some go back                                          
+      96  
+      97    var product domain.Product
+      98    if cur == nil && next.Quantity > 0 {
+
+● Update(backend\internal\repository\memory.go)
+  ⎿  Added 2 lines, removed 2 lines
+      105    // Pick keys first, change anything only once we know there 
+           are enough.
+      106    var picked []int
+      107    for i, k := range m.keys {
+      108 -    if len(picked) < next.Quantity-reservationOf(cartID, cur).
+          -Quantity && k.OfferID == offerID && k.Status == domain.KeyAvai
+          -lable {                                                       
+      108 +    if len(picked) < need && k.OfferID == offerID && k.Status 
+          +== domain.KeyAvailable {                                      
+      109        picked = append(picked, i)
+      110      }
+      111    }
+      112 -  if need := next.Quantity - reservationOf(cartID, cur).Quanti
+          -ty; len(picked) < need {                                      
+      112 +  if len(picked) < need {                                     
+      113      return nil, errKeyPoolMismatch
+      114    }
+      115    added := make([]domain.Key, len(picked))
+
+● Now the Firestore store with the same changes:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The heredoc hit the same quoting problem as before, so I'll use the Write tool
+  for this file:
+
+● Write(backend\internal\repository\firestore.go)
+  ⎿  Added 72 lines, removed 55 lines
+      37  }
+      38  
+      39  func (f *Firestore) GetProduct(ctx context.Context, id string) 
+          (*domain.Product, error) {
+      40 -  snap, err := f.c.Collection(ColProducts).Doc(id).Get(ctx)    
+      41 -  return decode[domain.Product](snap, err)                     
+      40 +  return decode[domain.Product](f.c.Collection(ColProducts).Doc
+         +(id).Get(ctx))                                                 
+      41  }
+      42  
+      43  func (f *Firestore) ListOffers(ctx context.Context, productID s
+          tring) ([]domain.Offer, error) {
+     ...
+      52  // the offer, the cart or one of the picked keys between our re
+          ad and write,
+      53  // Firestore retries the whole function with fresh data, so two
+           carts can never
+      54  // take the same last unit or the same key.
+      56 -func (f *Firestore) UpdateReservation(ctx context.Context, cart
+         -ID, offerID string, apply ApplyFunc) error {                   
+      55 +func (f *Firestore) UpdateReservation(ctx context.Context, cart
+         +ID, offerID string, apply ApplyFunc) (*domain.Order, error) {  
+      56    offerRef := f.c.Collection(ColOffers).Doc(offerID)
+      57    cartRef := f.c.Collection(ColOrders).Doc(cartID)
+      58  
+      60 -  return f.c.RunTransaction(ctx, func(ctx context.Context, tx *
+         -firestore.Transaction) error {                                 
+      59 +  var out *domain.Order                                        
+      60 +  err := f.c.RunTransaction(ctx, func(ctx context.Context, tx *
+         +firestore.Transaction) error {                                 
+      61      // Firestore transactions must do all reads before any writ
+          e.
+      62      offer, err := decode[domain.Offer](tx.Get(offerRef))
+      63      if err != nil {
+     ...
+       66      cart, err := decode[domain.Order](tx.Get(cartRef))
+       67      switch {
+       68      case errors.Is(err, ErrNotFound):
+       69 -      cart = &domain.Order{ID: cartID, Status: domain.OrderCar
+          -t, CreatedAt: time.Now()}                                     
+       69 +      cart = &domain.Order{ID: cartID, Status: domain.OrderCar
+          +t, Currency: offer.Currency, CreatedAt: time.Now()}           
+       70      case err != nil:
+       71        return err
+       72      case cart.Status != domain.OrderCart:
+       73        return ErrCartClosed
+       74      }
+       75  
+       76 -    var cur domain.Reservation                                
+       77 -    if it := cart.Item(offerID); it != nil {                  
+       78 -      cur = domain.Reservation{CartID: cartID, OfferID: offerI
+          -D, Quantity: it.Quantity, UpdatedAt: it.ReservedAt}           
+       79 -    }                                                         
+       80 -    newStock, newQty, err := apply(offer.Stock, cur)          
+       76 +    cur := cart.Item(offerID)                                 
+       77 +    before := reservationOf(cartID, cur)                      
+       78 +    newStock, next, err := apply(offer.Stock, before)         
+       79      if err != nil {
+       80        return err
+       81      }
+       82 +    need := next.Quantity - before.Quantity // keys to reserve
+          +; < 0 means some go back                                      
+       83  
+       85 -    mv := moveFor(cartID, newQty-cur.Quantity)                
+       86 -    var keys []*firestore.DocumentSnapshot                    
+       87 -    if mv.n > 0 {                                             
+       84 +    // A new line is written whole, so it needs the product's 
+          +name and image.                                               
+       85 +    var product domain.Product                                
+       86 +    if cur == nil && next.Quantity > 0 {                      
+       87 +      p, err := decode[domain.Product](tx.Get(f.c.Collection(C
+          +olProducts).Doc(offer.ProductID)))                            
+       88 +      if err != nil {                                         
+       89 +        return err                                            
+       90 +      }                                                       
+       91 +      product = *p                                            
+       92 +    }                                                         
+       93 +                                                              
+       94 +    var added []domain.Key                                    
+       95 +    var addedRefs []*firestore.DocumentRef                    
+       96 +    if need > 0 {                                             
+       97        // Equality filters only, so Firestore needs no composit
+           e index.
+       98        q := f.c.Collection(ColKeys).
+       99          Where("offerId", "==", offerID).
+       91 -        Where("status", "==", mv.fromStatus).                 
+       92 -        Where("orderId", "==", mv.fromOrder).                 
+       93 -        Limit(mv.n)                                           
+       94 -      if keys, err = tx.Documents(q).GetAll(); err != nil {   
+      100 +        Where("status", "==", domain.KeyAvailable).           
+      101 +        Limit(need)                                           
+      102 +      snaps, err := tx.Documents(q).GetAll()                  
+      103 +      if err != nil {                                         
+      104          return err
+      105        }
+       97 -      if len(keys) < mv.n {                                   
+      106 +      if len(snaps) < need {                                  
+      107          return errKeyPoolMismatch
+      108        }
+      109 +      for _, s := range snaps {                               
+      110 +        var k domain.Key                                      
+      111 +        if err := s.DataTo(&k); err != nil {                  
+      112 +          return err                                          
+      113 +        }                                                     
+      114 +        added = append(added, k)                              
+      115 +        addedRefs = append(addedRefs, s.Ref)                  
+      116 +      }                                                       
+      117      }
+      118  
+      102 -    for _, k := range keys {                                  
+      103 -      if err := tx.Update(k.Ref, []firestore.Update{          
+      104 -        {Path: "status", Value: mv.toStatus},                 
+      105 -        {Path: "orderId", Value: mv.toOrder},                 
+      106 -      }); err != nil {                                        
+      119 +    item, released := nextItem(cur, *offer, product, next, add
+          +ed)                                                           
+      120 +    for _, ref := range addedRefs {                           
+      121 +      if err := setKey(tx, ref, domain.KeyReserved, cartID); e
+          +rr != nil {                                                   
+      122          return err
+      123        }
+      124      }
+      125 +    for _, k := range released {                              
+      126 +      if err := setKey(tx, f.c.Collection(ColKeys).Doc(k.ID), 
+          +domain.KeyAvailable, ""); err != nil {                        
+      127 +        return err                                            
+      128 +      }                                                       
+      129 +    }                                                         
+      130      if err := tx.Update(offerRef, []firestore.Update{{Path: "s
+           tock", Value: newStock}}); err != nil {
+      131        return err
+      132      }
+      113 -    cart.SetCartLine(offerID, offer.ProductID, newQty, time.No
+          -w())                                                          
+      133 +    cart.PutItem(item)                                        
+      134 +    out = cart                                                
+      135      if len(cart.Items) == 0 {
+      136        return tx.Delete(cartRef)
+      137      }
+      138      return tx.Set(cartRef, cart)
+      139    })
+      119 -}                                                             
+      120 -                                                              
+      121 -func (f *Firestore) ListCartReservations(ctx context.Context, 
+          -cartID string) ([]domain.Reservation, error) {                
+      122 -  o, err := f.GetOrder(ctx, cartID)                           
+      123 -  if errors.Is(err, ErrNotFound) {                            
+      124 -    return nil, nil                                           
+      125 -  }                                                           
+      140    if err != nil {
+      141      return nil, err
+      142    }
+      129 -  return cartLines(o, all), nil                               
+      143 +  return out, nil                                             
+      144  }
+      145  
+      132 -// Lists every open cart and keeps the old lines in Go: the nu
+          -mber of open carts                                            
+      133 -// is small, and a status + time query would need a composite 
+          -index.                                                        
+      134 -func (f *Firestore) ListReservationsBefore(ctx context.Context
+          -, t time.Time) ([]domain.Reservation, error) {                
+      146 +func setKey(tx *firestore.Transaction, ref *firestore.Document
+          +Ref, status, orderID string) error {                          
+      147 +  return tx.Update(ref, []firestore.Update{{Path: "status", Va
+          +lue: status}, {Path: "orderId", Value: orderID}})             
+      148 +}                                                             
+      149 +                                                              
+      150 +// Lists every open cart and keeps the expired lines in Go: th
+          +e number of open                                              
+      151 +// carts is small, and a status + time query would need a comp
+          +osite index.                                                  
+      152 +func (f *Firestore) ListExpiredReservations(ctx context.Contex
+          +t, now time.Time) ([]domain.Reservation, error) {             
+      153    carts, err := listAll[domain.Order](ctx, f.c.Collection(ColO
+           rders).Where("status", "==", domain.OrderCart))
+      154    if err != nil {
+      155      return nil, err
+      156    }
+      157    var out []domain.Reservation
+      158    for _, o := range carts {
+      141 -    out = append(out, cartLines(&o, func(it domain.OrderItem) 
+          -bool { return it.ReservedAt.Before(t) })...)                  
+      159 +    out = append(out, expiredLines(o, now)...)                
+      160    }
+      161    return out, nil
+      162  }
+     ...
+      173      if err != nil {
+      174        return err
+      175      }
+      158 -    offers := map[string]domain.Offer{}                       
+      159 -    for _, it := range o.Items {                              
+      160 -      offer, err := decode[domain.Offer](tx.Get(f.c.Collection
+          -(ColOffers).Doc(it.OfferID)))                                 
+      161 -      if errors.Is(err, ErrNotFound) {                        
+      162 -        continue // the service decides what a missing offer m
+          -eans                                                          
+      163 -      }                                                       
+      164 -      if err != nil {                                         
+      165 -        return err                                            
+      166 -      }                                                       
+      167 -      offers[offer.ID] = *offer                               
+      168 -    }                                                         
+      169 -    if err := apply(o, offers); err != nil {                  
+      176 +    if err := apply(o); err != nil {                          
+      177        return err
+      178      }
+      179      out = o
+     ...
+      184  
+      185  func (f *Firestore) DeliverOrder(ctx context.Context, id strin
+           g, apply DeliverFunc) (*domain.Order, error) {
+      186    ref := f.c.Collection(ColOrders).Doc(id)
+      180 -  q := f.c.Collection(ColKeys).Where("orderId", "==", id).Wher
+          -e("status", "==", domain.KeyReserved)                         
+      187    var out *domain.Order
+      188    err := f.c.RunTransaction(ctx, func(ctx context.Context, tx 
+           *firestore.Transaction) error {
+      189      o, err := decode[domain.Order](tx.Get(ref))
+      190      if err != nil {
+      191        return err
+      192      }
+      187 -    snaps, err := tx.Documents(q).GetAll()                    
+      193 +    var refs []*firestore.DocumentRef // the keys listed on th
+          +e order's lines                                               
+      194 +    for _, it := range o.Items {                              
+      195 +      for _, k := range it.Keys {                             
+      196 +        refs = append(refs, f.c.Collection(ColKeys).Doc(k.ID))
+      197 +      }                                                       
+      198 +    }                                                         
+      199 +    snaps, err := tx.GetAll(refs)                             
+      200      if err != nil {
+      201        return err
+      202      }
+      191 -    keys := make([]domain.Key, len(snaps))                    
+      192 -    for i, s := range snaps {                                 
+      193 -      if err := s.DataTo(&keys[i]); err != nil {              
+      203 +    var keys []domain.Key                                     
+      204 +    for _, s := range snaps {                                 
+      205 +      if !s.Exists() {                                        
+      206 +        continue // the service notices the missing key       
+      207 +      }                                                       
+      208 +      var k domain.Key                                        
+      209 +      if err := s.DataTo(&k); err != nil {                    
+      210          return err
+      211        }
+      212 +      keys = append(keys, k)                                  
+      213      }
+      214      if err := apply(o, keys); err != nil {
+      215        return err
+      216      }
+      200 -    for i, s := range snaps {                                 
+      201 -      if err := tx.Set(s.Ref, keys[i]); err != nil {          
+      217 +    for _, k := range keys {                                  
+      218 +      if err := setKey(tx, f.c.Collection(ColKeys).Doc(k.ID), 
+          +k.Status, k.OrderID); err != nil {                            
+      219          return err
+      220        }
+      221      }
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Repositories build. Now the cart service: it returns the stored cart order
+  instead of building its own line types.
+
+  Read 1 file (ctrl+o to expand)
+
+● Bash(f=internal/service/cart.go && { sed -n '1,36p' $f; cat <<'EOF'
+      // ReservationTTL: a cart line is held this long after it was last
+      changed.…)
+  ⎿  Updated backend\internal\service\cart.go (+40 -43)
+       39  // carts can't block an offer forever.
+       40  const ReservationTTL = 30 * time.Minute
+       41  
+       42 -// CartLine is the answer to a change: what the cart holds for
+          - one offer and                                                
+       43 -// how many units are left for everyone else.                 
+       44 -type CartLine struct {                                        
+       45 -        OfferID   string    `json:"offerId"`                  
+       46 -        Quantity  int       `json:"quantity"`                 
+       47 -        Stock     int       `json:"stock"`                    
+       48 -        ExpiresAt time.Time `json:"expiresAt,omitzero"` // zer
+          -o when the line was removed                                   
+       49 -}                                                             
+       50 -                                                              
+       51 -// ReservedLine is one line of GET /api/carts/{id}: what the s
+          -erver still holds.                                            
+       52 -type ReservedLine struct {                                    
+       53 -        OfferID   string    `json:"offerId"`                  
+       54 -        Quantity  int       `json:"quantity"`                 
+       55 -        ExpiresAt time.Time `json:"expiresAt"`                
+       42 +// CartUpdate is the answer to a change: the cart as now store
+          +d, plus how many                                              
+       43 +// units of the changed offer are left for everyone else.     
+       44 +type CartUpdate struct {                                      
+       45 +        Cart    domain.Order `json:"cart"`                    
+       46 +        OfferID string       `json:"offerId"`                 
+       47 +        Stock   int          `json:"stock"`                   
+       48  }
+       49  
+       50  // errNotExpired: the line was touched again after we listed i
+           t; leave it alone.
+       51  var errNotExpired = errors.New("reservation not expired")
+       52  
+       53 +// CartStore is what the cart needs: reservations, plus readin
+          +g the cart order.                                             
+       54 +type CartStore interface {                                    
+       55 +        repository.Reservations                               
+       56 +        GetOrder(ctx context.Context, id string) (*domain.Orde
+          +r, error)                                                     
+       57 +}                                                             
+       58 +                                                              
+       59  type Cart struct {
+       62 -        repo repository.Reservations                          
+       60 +        repo CartStore                                        
+       61  }
+       62  
+       65 -func NewCart(repo repository.Reservations) *Cart { return &Car
+          -t{repo: repo} }                                               
+     … 94 more lines (ctrl+o to expand)
+
+● The cart service compiles. Now orders.go, where pay and deliver become pure
+  stage changes:
+
+● Write(backend\internal\service\orders.go)
+  ⎿  Added 48 lines, removed 74 lines
+      13  
+      14  var (
+      15    ErrEmptyCart = errors.New("cart is empty")
+      16 -  // ErrCartChanged: the cart changed while checking out (e.g. 
+         -another tab); try again.                                       
+      17 -  ErrCartChanged = errors.New("cart changed during checkout")  
+      18 -  // ErrNotYourOrder: a signed-in user tried to check out someo
+         -ne else's cart.                                                
+      16 +  // ErrNotYourOrder: someone tried to check out another buyer'
+         +s cart.                                                        
+      17    ErrNotYourOrder = errors.New("order belongs to another user")
+      20 -  // errKeysMissing: a paid order holds fewer reserved keys tha
+         -n it bought.                                                   
+      18 +  // errKeysMissing: a line's keys are not reserved for this or
+         +der any more.                                                  
+      19    // Reserving keys and stock together makes this impossible un
+          less data is broken.
+      22 -  errKeysMissing = errors.New("not enough reserved keys for ord
+         -er")                                                           
+      20 +  errKeysMissing = errors.New("order keys are not reserved for 
+         +it")                                                           
+      21  )
+      22  
+      25 -// OrderStore is what checkout needs: orders, plus products for
+         - names/images.                                                 
+      26 -type OrderStore interface {                                    
+      27 -  repository.Orders                                            
+      28 -  GetProduct(ctx context.Context, id string) (*domain.Product, 
+         -error)                                                         
+      29 -}                                                              
+      30 -                                                               
+      23  type Orders struct {
+      32 -  repo OrderStore                                              
+      24 +  repo repository.Orders                                       
+      25  }
+      26  
+      35 -func NewOrders(repo OrderStore) *Orders { return &Orders{repo: 
+         -repo} }                                                        
+      27 +func NewOrders(repo repository.Orders) *Orders { return &Orders
+         +{repo: repo} }                                                 
+      28  
+      37 -// Checkout turns a cart into a delivered order: cart -> paid -
+         -> delivered.                                                   
+      38 -// Payment is simulated (DECISIONS #8). Each step is one transa
+         -ction. The keys                                                
+      39 -// were reserved when the items went into the cart, so delivery
+         - can't run out.                                                
+      40 -// If delivery fails after payment, calling Checkout again fini
+         -shes it.                                                       
+      29 +// Checkout moves a cart through cart -> paid -> delivered. Pay
+         +ment is                                                        
+      30 +// simulated (DECISIONS #8). Each step is one transaction and o
+         +nly changes                                                    
+      31 +// status fields: names, prices, total and keys were written wh
+         +en the lines                                                   
+      32 +// went into the cart. If delivery fails after payment, calling
+         + again finishes it.                                            
+      33  func (s *Orders) Checkout(ctx context.Context, userID, cartID s
+          tring) (*domain.Order, error) {
+      34    if !cartIDPattern.MatchString(cartID) {
+      35      return nil, ErrInvalidCartID
+      36    }
+      45 -  cart, err := s.repo.GetOrder(ctx, cartID)                    
+      37 +  now := time.Now()                                            
+      38 +  _, err := s.repo.PayOrder(ctx, cartID, func(o *domain.Order) 
+         +error { return pay(o, userID, now) })                          
+      39    if errors.Is(err, repository.ErrNotFound) {
+      40      return nil, ErrEmptyCart // a cart with no lines is never s
+          tored
+      41    }
+      42    if err != nil {
+      43      return nil, err
+      44    }
+      52 -                                                               
+      53 -  // Names and images go into the order as a receipt. Read outs
+         -ide the                                                        
+      54 -  // transaction: they don't affect stock, so they don't need t
+         -o be atomic.                                                   
+      55 -  products := map[string]domain.Product{}                      
+      56 -  for _, it := range cart.Items {                              
+      57 -    p, err := s.repo.GetProduct(ctx, it.ProductID)             
+      58 -    if err != nil {                                            
+      59 -      return nil, fmt.Errorf("product %s: %w", it.ProductID, er
+         -r)                                                             
+      60 -    }                                                          
+      61 -    products[p.ID] = *p                                        
+      62 -  }                                                            
+      63 -                                                               
+      64 -  now := time.Now()                                            
+      65 -  _, err = s.repo.PayOrder(ctx, cartID, func(o *domain.Order, o
+         -ffers map[string]domain.Offer) error {                         
+      66 -    return pay(o, offers, products, userID, now)               
+      45 +  o, err := s.repo.DeliverOrder(ctx, cartID, func(o *domain.Ord
+         +er, keys []domain.Key) error {                                 
+      46 +    return deliver(o, keys, now)                               
+      47    })
+      48    if err != nil {
+      49      return nil, err
+      50    }
+      71 -  return s.repo.DeliverOrder(ctx, cartID, func(o *domain.Order,
+         - keys []domain.Key) error {                                    
+      72 -    return deliver(o, keys, now)                               
+      73 -  })                                                           
+      51 +  pub := o.Public()                                            
+      52 +  return &pub, nil                                             
+      53  }
+      54  
+      76 -// List returns a user's orders, newest first. Carts are not li
+         -sted: they have                                                
+      77 -// no user until they are paid.                                
+      55 +// List returns a user's orders, newest first, as the API shows
+         + them.                                                         
+      56 +// Carts are not listed: they have no user until they are paid.
+      57  func (s *Orders) List(ctx context.Context, userID string) ([]do
+          main.Order, error) {
+      58    orders, err := s.repo.ListUserOrders(ctx, userID)
+      59    if err != nil {
+      60      return nil, err
+      61    }
+      83 -  sort.Slice(orders, func(i, j int) bool { return orders[i].Pai
+         -dAt.After(orders[j].PaidAt) })                                 
+      62 +  sort.Slice(orders, func(i, j int) bool { return paidTime(orde
+         +rs[i]).After(paidTime(orders[j])) })                           
+      63 +  for i := range orders {                                      
+      64 +    orders[i] = orders[i].Public()                             
+      65 +  }                                                            
+      66    return orders, nil
+      67  }
+      68  
+      87 -// pay is the "cart -> paid" step: it fixes who bought it and a
+         -t what price.                                                  
+      88 -// Prices come from the offers now, never from the browser.    
+      69 +func paidTime(o domain.Order) time.Time {                      
+      70 +  if o.PaidAt == nil {                                         
+      71 +    return time.Time{}                                         
+      72 +  }                                                            
+      73 +  return *o.PaidAt                                             
+      74 +}                                                              
+      75 +                                                               
+      76 +// pay is the "cart -> paid" step: it records who bought it and
+         + when, and ends                                                
+      77 +// the reservation timer (a paid line no longer expires). Nothi
+         +ng else changes:                                               
+      78 +// the price is the one the cart showed when the line was added
+         +.                                                              
+      79  // An order that is already paid is left alone, so a retried ch
+          eckout continues.
+      90 -func pay(o *domain.Order, offers map[string]domain.Offer, produ
+         -cts map[string]domain.Product, userID string, now time.Time) er
+         -ror {                                                          
+      80 +func pay(o *domain.Order, userID string, now time.Time) error {
+      81    if o.Status != domain.OrderCart {
+      82      if o.UserID != userID {
+      83        return ErrNotYourOrder
+     ...
+       87    if len(o.Items) == 0 {
+       88      return ErrEmptyCart
+       89    }
+      100 -  total := 0                                                  
+       90    for i := range o.Items {
+      102 -    it := &o.Items[i]                                         
+      103 -    offer, ok := offers[it.OfferID]                           
+      104 -    if !ok {                                                  
+      105 -      return fmt.Errorf("offer %s: %w", it.OfferID, repository
+          -.ErrNotFound)                                                 
+      106 -    }                                                         
+      107 -    p, ok := products[it.ProductID]                           
+      108 -    if !ok {                                                  
+      109 -      return ErrCartChanged // a line was added after we read 
+          -the products                                                  
+      110 -    }                                                         
+      111 -    it.Price, it.SellerName = offer.Price, offer.SellerName   
+      112 -    it.ProductName, it.ImageURL = p.Name, p.ImageURL          
+      113 -    total += offer.Price * it.Quantity                        
+      114 -    o.Currency = offer.Currency                               
+       91 +    o.Items[i].ExpiresAt = nil                                
+       92    }
+      116 -  o.Total = total                                             
+       93    o.UserID = userID
+       94    o.Status = domain.OrderPaid
+      119 -  o.PaidAt = now                                              
+       95 +  o.PaidAt = &now                                             
+       96    return nil
+       97  }
+       98  
+      123 -// deliver is the "paid -> delivered" step: each line gets as 
+          -many of its                                                   
+      124 -// reserved keys as it bought, and those keys become sold.    
+       99 +// deliver is the "paid -> delivered" step: the keys already l
+          +isted on the                                                  
+      100 +// order become sold, and the order becomes delivered (which a
+          +lso makes the                                                 
+      101 +// API show their codes). keys are the order's keys as stored 
+          +in the pool.                                                  
+      102  func deliver(o *domain.Order, keys []domain.Key, now time.Time
+           ) error {
+      103    if o.Status == domain.OrderDelivered {
+      104      return nil // already done (retried checkout)
+     ...
+      106    if o.Status != domain.OrderPaid {
+      107      return fmt.Errorf("order %s is %q, not paid", o.ID, o.Stat
+           us)
+      108    }
+      132 -  byOffer := map[string][]int{} // offer id -> indexes into ke
+          -ys                                                            
+      133 -  for i, k := range keys {                                    
+      134 -    byOffer[k.OfferID] = append(byOffer[k.OfferID], i)        
+      109 +  byID := map[string]*domain.Key{}                            
+      110 +  for i := range keys {                                       
+      111 +    byID[keys[i].ID] = &keys[i]                               
+      112    }
+      136 -  for i := range o.Items {                                    
+      137 -    it := &o.Items[i]                                         
+      138 -    mine := byOffer[it.OfferID]                               
+      139 -    if len(mine) < it.Quantity {                              
+      140 -      return errKeysMissing                                   
+      113 +  for _, it := range o.Items {                                
+      114 +    for _, ik := range it.Keys {                              
+      115 +      k := byID[ik.ID]                                        
+      116 +      if k == nil || k.Status != domain.KeyReserved || k.Order
+          +ID != o.ID {                                                  
+      117 +        return errKeysMissing                                 
+      118 +      }                                                       
+      119 +      k.Status = domain.KeySold                               
+      120      }
+      142 -    it.Keys = nil                                             
+      143 -    for _, k := range mine[:it.Quantity] {                    
+      144 -      keys[k].Status = domain.KeySold                         
+      145 -      it.Keys = append(it.Keys, keys[k].Code)                 
+      146 -    }                                                         
+      121    }
+      122    o.Status = domain.OrderDelivered
+      149 -  o.DeliveredAt = now                                         
+      123 +  o.DeliveredAt = &now                                        
+      124    return nil
+      125  }
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Handlers next: GET /api/carts/{id} now returns the cart order, and the
+  ErrCartChanged case goes away.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Update(backend\internal\handler\handler.go)
+  ⎿  Added 11 lines, removed 9 lines
+      147    }
+      148  }
+      149  
+      150 -// GetCart: GET /api/carts/{cartId} -> {"items": [{offerId, qu
+          -antity, expiresAt}]}                                          
+      151 -// What the server still reserves; lines missing here have exp
+          -ired.                                                         
+      150 +// GetCart: GET /api/carts/{cartId} -> the cart order as store
+          +d (status "cart").                                            
+      151 +// The browser renders the cart from this; expired lines are s
+          +imply gone.                                                   
+      152 +// 410 once the cart was paid.                                
+      153  func (h *Handler) GetCart(w http.ResponseWriter, r *http.Reque
+           st) {
+      153 -  lines, err := h.Cart.Lines(r.Context(), chi.URLParam(r, "car
+          -tId"))                                                        
+      154 -  if errors.Is(err, service.ErrInvalidCartID) {               
+      154 +  cart, err := h.Cart.Get(r.Context(), chi.URLParam(r, "cartId
+          +"))                                                           
+      155 +  switch {                                                    
+      156 +  case errors.Is(err, service.ErrInvalidCartID):              
+      157      writeJSON(w, http.StatusBadRequest, map[string]string{"err
+           or": err.Error()})
+      156 -    return                                                    
+      157 -  }                                                           
+      158 -  if err != nil {                                             
+      158 +  case errors.Is(err, repository.ErrCartClosed):              
+      159 +    writeJSON(w, http.StatusGone, map[string]string{"error": e
+          +rr.Error()})                                                  
+      160 +  case err != nil:                                            
+      161      writeErr(w, err)
+      160 -    return                                                    
+      162 +  default:                                                    
+      163 +    writeJSON(w, http.StatusOK, cart)                         
+      164    }
+      162 -  writeJSON(w, http.StatusOK, map[string]any{"items": lines}) 
+      165  }
+      166  
+      167  // --- Auth-protected ----------------------------------------
+           -----------
+
+● Update(backend\internal\handler\handler.go)
+  ⎿  Removed 2 lines
+      190      writeJSON(w, http.StatusBadRequest, map[string]string{"err
+           or": err.Error()})
+      191    case errors.Is(err, service.ErrNotYourOrder):
+      192      writeJSON(w, http.StatusNotFound, map[string]string{"error
+           ": "not found"}) // don't confirm it exists
+      193 -  case errors.Is(err, service.ErrCartChanged):                
+      194 -    writeJSON(w, http.StatusConflict, map[string]string{"error
+          -": err.Error()})                                              
+      193    case err != nil:
+      194      writeErr(w, err)
+      195    default:
+
+● Update(backend\internal\handler\handler.go)
+  ⎿  Added 1 line
+      118  
+      119  // SetCartItem: PUT /api/carts/{cartId}/items/{offerId}  body 
+           {"quantity": n}
+      120  // Reserves or releases stock so the cart holds exactly n unit
+           s (0 = remove).
+      121 +// 200 -> {"cart": <cart order as stored>, "offerId", "stock":
+          + units left}.                                                 
+      122  // 409 when there isn't enough stock; the body says how many a
+           re available.
+      123  func (h *Handler) SetCartItem(w http.ResponseWriter, r *http.R
+           equest) {
+      124    var body struct {
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Everything builds. Now updating the tests for the new shapes, and adding
+  checks for exactly what you described.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Bash(f=internal/service/cart_test.go && sed -i \
+       -e '64s/line, err/res, err/' \…)
+  ⎿  Updated backend\internal\service\cart_test.go (+7 -7)
+      61          ctx := context.Background()
+      62          start := stockOf(t, m, testOffer)
+      63  
+      64 -        line, err := s.SetQuantity(ctx, testCart, testOffer, 3)
+      64 +        res, err := s.SetQuantity(ctx, testCart, testOffer, 3) 
+      65          if err != nil {
+      66                  t.Fatal(err)
+      67          }
+      68 -        if line.Quantity != 3 || line.Stock != start-3 || stock
+         -Of(t, m, testOffer) != start-3 {                               
+      69 -                t.Fatalf("after reserving 3: line=%+v stock=%d"
+         -, line, stockOf(t, m, testOffer))                              
+      68 +        if it := res.Cart.Item(testOffer); it == nil || it.Quan
+         +tity != 3 || res.Stock != start-3 || stockOf(t, m, testOffer) !
+         += start-3 {                                                    
+      69 +                t.Fatalf("after reserving 3: res=%+v stock=%d",
+         + res, stockOf(t, m, testOffer))                                
+      70          }
+      71  
+      72          // Same request again (e.g. a retry) changes nothing.
+     ...
+      158          if n, err := s.ReleaseExpired(ctx, time.Now()); err !=
+            nil || n != 0 {
+      159                  t.Fatalf("released %d too early (err %v)", n, 
+           err)
+      160          }
+      161 -        if lines, _ := s.Lines(ctx, testCart); len(lines) != 1
+          - || lines[0].Quantity != 4 {                                  
+      162 -                t.Fatalf("cart should still hold 4: %+v", line
+          -s)                                                            
+      161 +        if c, _ := s.Get(ctx, testCart); len(c.Items) != 1 || 
+          +c.Items[0].Quantity != 4 {                                    
+      162 +                t.Fatalf("cart should still hold 4: %+v", c)  
+      163          }
+      164  
+      165          // Pretend 31 minutes passed: stock comes back and the
+            cart is empty.
+     ...
+      170          if stockOf(t, m, testOffer) != start {
+      171                  t.Fatalf("stock not restored: %d, want %d", st
+           ockOf(t, m, testOffer), start)
+      172          }
+      173 -        if lines, _ := s.Lines(ctx, testCart); len(lines) != 0
+          - {                                                            
+      174 -                t.Fatalf("expired line still in cart: %+v", li
+          -nes)                                                          
+      173 +        if c, _ := s.Get(ctx, testCart); len(c.Items) != 0 {  
+      174 +                t.Fatalf("expired line still in cart: %+v", c)
+      175          }
+      176          checkKeys(t, m, testOffer, 0, 0) // reserved keys are 
+           available again
+      177  }
+
+● Rewriting the order tests around the new rules. Lines are written once at add
+  time, and checkout changes only the status fields:
+
+● Write(backend\internal\service\orders_test.go)
+  ⎿  Added 62 lines, removed 32 lines
+      3  import (
+      4    "context"
+      5    "errors"
+      6 +  "reflect"                                                     
+      7    "testing"
+      8    "time"
+      9  
+     ...
+      39    }
+      40  }
+      41  
+      41 -func TestCheckoutDeliversReservedKeys(t *testing.T) {          
+      42 +// A line is written whole when it goes into the cart; later ch
+         +anges only                                                     
+      43 +// touch quantity, keys, expiry and total.                     
+      44 +func TestCartLineWrittenOnce(t *testing.T) {                   
+      45 +  s, m := newCartSvc(t)                                        
+      46 +  ctx := context.Background()                                  
+      47 +  res, err := s.SetQuantity(ctx, testCart, testOffer, 2)       
+      48 +  if err != nil {                                              
+      49 +    t.Fatal(err)                                               
+      50 +  }                                                            
+      51 +  stored, _ := m.GetOrder(ctx, testCart)                       
+      52 +  it := stored.Items[0]                                        
+      53 +  if it.ProductName != "Elden Ring" || it.SellerName != "Digita
+         +lDragon" || it.Price != 4021 ||                                
+      54 +    it.ExpiresAt == nil || len(it.Keys) != 2 || it.Keys[0].Code
+         + == "" || stored.Total != 2*4021 {                             
+      55 +    t.Fatalf("cart line not written whole: %+v total=%d", it, s
+         +tored.Total)                                                   
+      56 +  }                                                            
+      57 +  if res.Cart.Items[0].Keys != nil {                           
+      58 +    t.Fatal("the API must not show key codes of an unpaid cart"
+         +)                                                              
+      59 +  }                                                            
+      60 +  firstKey := it.Keys[0]                                       
+      61 +                                                               
+      62 +  if _, err := s.SetQuantity(ctx, testCart, testOffer, 3); err 
+         +!= nil {                                                       
+      63 +    t.Fatal(err)                                               
+      64 +  }                                                            
+      65 +  if _, err := s.SetQuantity(ctx, testCart, testOffer, 1); err 
+         +!= nil {                                                       
+      66 +    t.Fatal(err)                                               
+      67 +  }                                                            
+      68 +  stored, _ = m.GetOrder(ctx, testCart)                        
+      69 +  it = stored.Items[0]                                         
+      70 +  if len(it.Keys) != 1 || it.Keys[0] != firstKey || stored.Tota
+         +l != 4021 || it.ProductName != "Elden Ring" {                  
+      71 +    t.Fatalf("existing line should keep its data and first key:
+         + %+v total=%d", it, stored.Total)                              
+      72 +  }                                                            
+      73 +}                                                              
+      74 +                                                               
+      75 +func TestCheckoutOnlyChangesState(t *testing.T) {              
+      76    cart, m := newCartSvc(t)
+      77    orders := NewOrders(m)
+      78    ctx := context.Background()
+     ...
+       82    if _, err := cart.SetQuantity(ctx, testCart, otherOffer, 1);
+            err != nil {
+       83      t.Fatal(err)
+       84    }
+       85 +  before, _ := m.GetOrder(ctx, testCart)                      
+       86    stockBefore := stockOf(t, m, testOffer)
+       87  
+       88    o, err := orders.Checkout(ctx, "user-1", testCart)
+       89    if err != nil {
+       90      t.Fatal(err)
+       91    }
+       57 -  if o.Status != domain.OrderDelivered || o.PaidAt.IsZero() ||
+          - o.DeliveredAt.IsZero() {                                     
+       58 -    t.Fatalf("want delivered order, got %+v", o)              
+       92 +  if o.Status != domain.OrderDelivered || o.PaidAt == nil || o
+          +.DeliveredAt == nil {                                         
+       93 +    t.Fatalf("want delivered order with both dates, got %+v", 
+          +o)                                                            
+       94    }
+       60 -  if want := 2*4021 + 1*3660; o.Total != want {               
+       61 -    t.Fatalf("total %d, want %d (server prices)", o.Total, wan
+          -t)                                                            
+       95 +                                                              
+       96 +  // Same lines, same keys, same total: only the status fields
+          + changed.                                                     
+       97 +  after, _ := m.GetOrder(ctx, testCart)                       
+       98 +  want := before.Items                                        
+       99 +  for i := range want {                                       
+      100 +    want[i].ExpiresAt = nil // a paid line no longer expires  
+      101    }
+       63 -  codes := map[string]bool{}                                  
+       64 -  for _, it := range o.Items {                                
+       65 -    if len(it.Keys) != it.Quantity || it.ProductName == "" || 
+          -it.Price == 0 {                                               
+       66 -      t.Fatalf("bad item %+v", it)                            
+       67 -    }                                                         
+       68 -    for _, c := range it.Keys {                               
+       69 -      codes[c] = true                                         
+       70 -    }                                                         
+      102 +  if !reflect.DeepEqual(after.Items, want) || after.Total != b
+          +efore.Total || after.Total != 2*4021+3660 {                   
+      103 +    t.Fatalf("checkout changed line data:\nbefore %+v\nafter  
+          +%+v", want, after.Items)                                      
+      104    }
+       72 -  if len(codes) != 3 {                                        
+       73 -    t.Fatalf("want 3 distinct key codes, got %v", codes)      
+      105 +  if len(o.Items[0].Keys) != 2 || o.Items[0].Keys[0].Code == "
+          +" {                                                           
+      106 +    t.Fatalf("a delivered order shows its codes: %+v", o.Items
+          +[0])                                                          
+      107    }
+      108  
+      109    // Keys are sold; stock was already taken when they went int
+           o the cart.
+     ...
+      113      t.Fatal("checkout must not change stock again")
+      114    }
+      115  
+       83 -  // The paid cart is closed and no longer shows up as a cart.
+      116 +  // The paid cart is closed.                                 
+      117    if _, err := cart.SetQuantity(ctx, testCart, testOffer, 3); 
+           !errors.Is(err, repository.ErrCartClosed) {
+      118      t.Fatalf("changing a paid cart: got %v", err)
+      119    }
+       87 -  if lines, _ := cart.Lines(ctx, testCart); len(lines) != 0 { 
+       88 -    t.Fatalf("paid cart still has lines: %+v", lines)         
+      120 +  if _, err := cart.Get(ctx, testCart); !errors.Is(err, reposi
+          +tory.ErrCartClosed) {                                         
+      121 +    t.Fatalf("reading a paid cart as a cart: got %v", err)    
+      122    }
+      123    if list, _ := orders.List(ctx, "user-1"); len(list) != 1 || 
+           list[0].ID != testCart {
+      124      t.Fatalf("order history: %+v", list)
+     ...
+      140      t.Fatal(err)
+      141    }
+      142    again, err := orders.Checkout(ctx, "user-1", testCart)
+      110 -  if err != nil || again.Items[0].Keys[0] != first.Items[0].Ke
+          -ys[0] {                                                       
+      111 -    t.Fatalf("retry should return the same order: %v %+v", err
+          -, again)                                                      
+      143 +  if err != nil || !reflect.DeepEqual(again, first) {         
+      144 +    t.Fatalf("retry should return the same order: %v\n%+v\n%+v
+          +", err, again, first)                                         
+      145    }
+      146    checkKeys(t, m, testOffer, 0, 1)
+      147    if _, err := orders.Checkout(ctx, "user-2", testCart); !erro
+           rs.Is(err, ErrNotYourOrder) {
+     ...
+      161    }
+      162  }
+      163  
+      131 -func TestDeliverNeedsEnoughKeys(t *testing.T) {               
+      132 -  o := &domain.Order{Status: domain.OrderPaid, Items: []domain
+          -.OrderItem{{OfferID: "a", Quantity: 2}}}                      
+      133 -  keys := []domain.Key{{OfferID: "a", Code: "K1", Status: doma
+          -in.KeyReserved}}                                              
+      164 +func TestDeliverNeedsReservedKeys(t *testing.T) {             
+      165 +  o := &domain.Order{ID: "o1", Status: domain.OrderPaid, Items
+          +: []domain.OrderItem{                                         
+      166 +    {OfferID: "a", Quantity: 2, Keys: []domain.ItemKey{{ID: "k
+          +1"}, {ID: "k2"}}},                                            
+      167 +  }}                                                          
+      168 +  keys := []domain.Key{{ID: "k1", Status: domain.KeyReserved, 
+          +OrderID: "o1"}} // k2 missing                                 
+      169    if err := deliver(o, keys, time.Now()); !errors.Is(err, errK
+           eysMissing) {
+      170      t.Fatalf("got %v", err)
+      171    }
+      137 -  if o.Status != domain.OrderPaid {                           
+      172 +  if o.Status != domain.OrderPaid || o.DeliveredAt != nil {   
+      173      t.Fatal("a failed delivery must leave the order paid")
+      174    }
+      175  }
+      176  
+      142 -func TestPayOnlyFromCart(t *testing.T) {                      
+      177 +func TestPayEmptyCart(t *testing.T) {                         
+      178    o := &domain.Order{Status: domain.OrderCart}
+      144 -  if err := pay(o, nil, nil, "u", time.Now()); !errors.Is(err,
+          - ErrEmptyCart) {                                              
+      145 -    t.Fatalf("empty: got %v", err)                            
+      179 +  if err := pay(o, "u", time.Now()); !errors.Is(err, ErrEmptyC
+          +art) || o.PaidAt != nil {                                     
+      180 +    t.Fatalf("empty: got %v, paidAt %v", err, o.PaidAt)       
+      181    }
+      147 -  o = &domain.Order{Status: domain.OrderCart, Items: []domain.
+          -OrderItem{{OfferID: "a", ProductID: "p", Quantity: 1}}}       
+      148 -  offers := map[string]domain.Offer{"a": {ID: "a", Price: 500,
+          - Currency: "EUR"}}                                            
+      149 -  if err := pay(o, offers, nil, "u", time.Now()); !errors.Is(e
+          -rr, ErrCartChanged) {                                         
+      150 -    t.Fatalf("unknown product: got %v", err)                  
+      151 -  }                                                           
+      182  }
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All backend tests pass. Now the frontend: it will render the cart from the
+  server's order document, and localStorage will keep only the cart id.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Bash(n=$(grep -n "Server's answer to a cart change" types/index.ts | cut -d:
+      -f1) && head -$((n-1)) types/index.ts > "$TEMP/types.ts" && mv
+      "$TEMP/types.ts" types/in…)
+  ⎿  Updated frontend\src\types\index.ts (+0 -35)
+      53    offers: Offer[];
+      54  }
+      55  
+      56 -/** Server's answer to a cart change (and the body of a 409, mi
+         -nus offerId). */                                               
+      57 -export interface CartLine {                                    
+      58 -  offerId: string;                                             
+      59 -  quantity: number; // units this cart now reserves            
+      60 -  stock: number; // units still available to everyone else     
+      61 -  expiresAt?: string; // ISO time the reservation is released (
+         -absent when removed)                                           
+      62 -}                                                              
+      63 -                                                               
+      64 -/** GET /api/carts/{id}: what the server still reserves for one
+         - offer. */                                                     
+      65 -export type ServerLine = Omit<CartLine, "stock">; // offerId, q
+         -uantity, expiresAt                                             
+      66 -                                                               
+      67 -/** cart -> paid -> delivered. Only paid/delivered orders reach
+         - the browser. */                                               
+      68 -export type OrderStatus = "cart" | "paid" | "delivered";       
+      69 -                                                               
+      70 -export interface OrderItem {                                   
+      71 -  offerId: string;                                             
+      72 -  productId: string;                                           
+      73 -  productName: string;                                         
+      74 -  imageUrl: string;                                            
+      75 -  sellerName: string;                                          
+      76 -  price: number; // cents per unit, fixed when paid            
+      77 -  quantity: number;                                            
+      78 -  keys: string[] | null; // key codes, set when delivered      
+      79 -}                                                              
+      80 -                                                               
+      81 -export interface Order {                                       
+      82 -  id: string;                                                  
+      83 -  status: OrderStatus;                                         
+      84 -  items: OrderItem[];                                          
+      85 -  total: number; // cents                                      
+      86 -  currency: string;                                            
+      87 -  createdAt: string;                                           
+      88 -  paidAt?: string;                                             
+      89 -  deliveredAt?: string;                                        
+      90 -}                                                              
+
+  Made 1 scratchpad edit +41 (ctrl+o to expand)
+● Bash(cat "C:/Users/faust/AppData/Local/Temp/claude/cceab8bcfe303331/242e8ed8-f
+      d74-42be-9166-a5e6ee7a9bc4/scratchpad/types_tail.ts" >> types/index.ts &&
+      grep -n "Cart…)
+  ⎿  Updated frontend\src\types\index.ts (+40 -0)
+      53    offers: Offer[];
+      54  }
+      55  
+      56 +/** cart -> paid -> delivered. The cart is the first stage of a
+         +n order. */                                                    
+      57 +export type OrderStatus = "cart" | "paid" | "delivered";       
+      58 +                                                               
+      59 +/** Mirrors domain.OrderItem: written whole when the line goes 
+         +into the cart. */                                              
+      60 +export interface OrderItem {                                   
+      61 +  offerId: string;                                             
+      62 +  productId: string;                                           
+      63 +  productName: string;                                         
+      64 +  imageUrl: string;                                            
+      65 +  sellerName: string;                                          
+      66 +  price: number; // cents per unit, as when the line was added 
+      67 +  quantity: number;                                            
+      68 +  expiresAt: string | null; // reservation end while in the car
+         +t; null once paid                                              
+      69 +  keys: { code: string }[] | null; // the server only shows cod
+         +es once delivered                                              
+      70 +}                                                              
+      71 +                                                               
+      72 +/** Mirrors domain.Order. A cart is an order with status "cart"
+         +. */                                                           
+      73 +export interface Order {                                       
+      74 +  id: string;                                                  
+      75 +  status: OrderStatus;                                         
+      76 +  items: OrderItem[];                                          
+      77 +  total: number; // cents                                      
+      78 +  currency: string;                                            
+      79 +  createdAt: string;                                           
+      80 +  paidAt: string | null;                                       
+      81 +  deliveredAt: string | null;                                  
+      82 +}                                                              
+      83 +                                                               
+      84 +/** PUT /api/carts/{id}/items/{offerId}: the cart as stored + u
+         +nits left of that offer. */                                    
+      85 +export interface CartUpdate {                                  
+      86 +  cart: Order;                                                 
+      87 +  offerId: string;                                             
+      88 +  stock: number;                                               
+      89 +}                                                              
+      90 +                                                               
+      91 +/** Body of a 409 on a cart change: units left, and what this c
+         +art still holds. */                                            
+      92 +export interface OutOfStock {                                  
+     … 3 more lines (ctrl+o to expand)
+
+● Bash(sed -i \
+       -e '3s/.*/import type { Banner, CartUpdate, Order, Product,
+      ProductDetail, ProductPage } from "..\/types";/' \…)
+  ⎿  Updated frontend\src\lib\api.ts (+91 -91)
+       1 -import { getIdToken } from "./firebase";                       
+       2 -import { guestId } from "./guest";                             
+       3 -import type { Banner, CartLine, Order, Product, ProductDetail, 
+         -ProductPage, ServerLine } from "../types";                     
+       4 -                                                               
+       5 -const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/
+         -, "");                                                         
+       6 -                                                               
+       7 -/** Non-2xx response. `body` is the parsed JSON error (e.g. {st
+         -ock, quantity} on a 409). */                                   
+       8 -export class ApiError extends Error {                          
+       9 -  status: number;                                              
+      10 -  body: unknown;                                               
+      11 -  constructor(status: number, statusText: string, body: unknown
+         -) {                                                            
+      12 -    super(`${status} ${statusText}`);                          
+      13 -    this.status = status;                                      
+      14 -    this.body = body;                                          
+      15 -  }                                                            
+      16 -}                                                              
+      17 -                                                               
+      18 -interface RequestOpts {                                        
+      19 -  auth?: boolean;                                              
+      20 -  guest?: boolean; // send this browser's guest id (orders, whi
+         -le login is off)                                               
+      21 -  signal?: AbortSignal;                                        
+      22 -  method?: "GET" | "PUT" | "POST";                             
+      23 -  body?: unknown; // sent as JSON                              
+      24 -}                                                              
+      25 -                                                               
+      26 -async function request<T>(path: string, opts: RequestOpts = {})
+         -: Promise<T> {                                                 
+      27 -  const headers: Record<string, string> = {};                  
+      28 -  if (opts.auth) {                                             
+      29 -    const token = await getIdToken();                          
+      30 -    if (token) headers.Authorization = `Bearer ${token}`;      
+      31 -  }                                                            
+      32 -  if (opts.guest) headers["X-Guest-Id"] = guestId();           
+      33 -  if (opts.body !== undefined) headers["Content-Type"] = "appli
+         -cation/json";                                                  
+      34 -  const res = await fetch(`${BASE}${path}`, {                  
+      35 -    method: opts.method ?? "GET",                              
+      36 -    headers,                                                   
+      37 -    body: opts.body === undefined ? undefined : JSON.stringify(
+         -opts.body),                                                    
+      38 -    signal: opts.signal,                                       
+      39 -  });                                                          
+      40 -  if (!res.ok) throw new ApiError(res.status, res.statusText, a
+         -wait res.json().catch(() => null));                            
+     … 142 more lines (ctrl+o to expand)
+
+● Update(frontend\src\lib\api.ts)
+  ⎿  Added 6 lines, removed 4 lines
+      74    banners: () => request<{ items: Banner[] }>("/api/home/banner
+          s"),
+      75    bestSellers: () => request<{ items: Product[] }>("/api/home/b
+          est-sellers"),
+      76    deals: () => request<{ items: Product[] }>("/api/home/deals")
+          ,
+      77 -  /** Reserve/release stock so the cart holds exactly `quantity
+         -` (0 = remove). 409 = not enough stock. */                     
+      77 +  /**                                                          
+      78 +   * Reserve/release stock so the cart holds exactly `quantity`
+         + (0 = remove).                                                 
+      79 +   * Returns the cart as stored. 409 = not enough stock, 410 = 
+         +cart already paid.                                             
+      80 +   */                                                          
+      81    setCartItem: (cartId: string, offerId: string, quantity: numb
+          er) =>
+      82      request<CartUpdate>(`/api/carts/${encodeURIComponent(cartId
+          )}/items/${encodeURIComponent(offerId)}`, {
+      83        method: "PUT",
+      84        body: { quantity },
+      85      }),
+      83 -  /** What the server still reserves for this cart (expired lin
+         -es are missing). */                                            
+      84 -  cart: (cartId: string) =>                                    
+      85 -    request<Order>(`/api/carts/${encodeURIComponent(cartId)}`),
+      86 +  /** The cart order as stored (expired lines are gone). 410 = 
+         +cart already paid. */                                          
+      87 +  cart: (cartId: string) => request<Order>(`/api/carts/${encode
+         +URIComponent(cartId)}`),                                       
+      88    me: () => request<{ uid: string; email: string }>("/api/me", 
+          { auth: true }),
+      89    /** Simulated payment: turns the cart into a delivered order 
+          with its keys. Safe to retry. */
+      90    checkout: (cartId: string) =>
+
+● Write(frontend\src\features\cart\cart.ts)
+  ⎿  Added 12 lines, removed 82 lines
+       1 -// Pure cart logic: no React, no storage, no network. Every fun
+         -ction returns a new array.                                     
+       2 -import type { Offer, Product, ServerLine } from "../../types"; 
+       1 +// Pure cart helpers: no React, no storage, no network.        
+       2 +// The cart itself is the server's order document (status "cart
+         +"); the browser                                                
+       3 +// never builds or stores its own copy of the lines.           
+       4 +import type { Order, OrderItem } from "../../types";           
+       5  
+       6  /** Same cap as the backend (service.MaxPerLine). */
+       7  export const MAX_PER_LINE = 10;
+       8  
+       7 -/**                                                            
+       8 - * One line per OFFER (a product can be in the cart from two se
+         -llers).                                                        
+       9 - * `quantity` is what the server has reserved for this cart; `s
+         -tock` is how many                                              
+      10 - * more units are still available to anyone (both come from the
+         - server's reply).                                              
+      11 - * Name/price are a display snapshot; checkout re-reads prices 
+         -on the server.                                                 
+      12 - */                                                            
+      13 -export interface CartItem {                                    
+      14 -  offerId: string;                                             
+      15 -  productId: string;                                           
+      16 -  productName: string;                                         
+      17 -  imageUrl: string;                                            
+      18 -  sellerName: string;                                          
+      19 -  price: number; // cents                                      
+      20 -  currency: string;                                            
+      21 -  stock: number;                                               
+      22 -  quantity: number;                                            
+      23 -  expiresAt?: string; // ISO time the server releases this rese
+         -rvation                                                        
+       9 +/** An empty cart, shown before the server answered or after ch
+         +eckout. */                                                     
+      10 +export function emptyCart(id: string): Order {                 
+      11 +  return { id, status: "cart", items: [], total: 0, currency: "
+         +EUR", createdAt: "", paidAt: null, deliveredAt: null };        
+      12  }
+      13  
+      26 -/**                                                            
+      27 - * Makes the local cart match the server: lines the server no l
+         -onger holds                                                    
+      28 - * (reservation expired) are dropped. `lost` tells the UI to wa
+         -rn the shopper.                                                
+      29 - */                                                            
+      30 -export function reconcile(items: CartItem[], server: ServerLine
+         -[]): { items: CartItem[]; lost: boolean } {                    
+      31 -  const byId = new Map(server.map((l) => [l.offerId, l]));     
+      32 -  let lost = false;                                            
+      33 -  const next: CartItem[] = [];                                 
+      34 -  for (const item of items) {                                  
+      35 -    const line = byId.get(item.offerId);                       
+      36 -    if (!line) {                                               
+      37 -      lost = true;                                             
+      38 -      continue;                                                
+      39 -    }                                                          
+      40 -    if (line.quantity < item.quantity) lost = true;            
+      41 -    next.push({ ...item, quantity: line.quantity, expiresAt: li
+         -ne.expiresAt });                                               
+      42 -  }                                                            
+      43 -  return { items: next, lost };                                
+      44 -}                                                              
+      45 -                                                               
+      46 -export function quantityOf(items: CartItem[], offerId: string):
+         - number {                                                      
+      14 +export function quantityOf(items: OrderItem[], offerId: string)
+         +: number {                                                     
+      15    return items.find((i) => i.offerId === offerId)?.quantity ?? 
+          0;
+      16  }
+      17  
+      50 -/** Saves the server's answer for one offer: new quantity (0 = 
+         -line removed), stock, expiry. */                               
+      51 -export function applyServerLine(                               
+      52 -  items: CartItem[],                                           
+      53 -  offerId: string,                                             
+      54 -  quantity: number,                                            
+      55 -  stock: number,                                               
+      56 -  expiresAt?: string,                                          
+      57 -): CartItem[] {                                                
+      58 -  if (quantity === 0) return items.filter((i) => i.offerId !== 
+         -offerId);                                                      
+      59 -  return items.map((i) => (i.offerId === offerId ? { ...i, quan
+         -tity, stock, expiresAt: expiresAt ?? i.expiresAt } : i));      
+      18 +/** True if the server holds less than before: a line expired o
+         +r shrank. */                                                   
+      19 +export function lostLines(before: OrderItem[], after: OrderItem
+         +[]): boolean {                                                 
+      20 +  return before.some((b) => quantityOf(after, b.offerId) < b.qu
+         +antity);                                                       
+      21  }
+      22  
+      62 -/** Adds a line the server just reserved (or updates it if it's
+         - already there). */                                            
+      63 -export function addServerLine(                                 
+      64 -  items: CartItem[],                                           
+      65 -  product: Product,                                            
+      66 -  offer: Offer,                                                
+      67 -  quantity: number,                                            
+      68 -  stock: number,                                               
+      69 -  expiresAt?: string,                                          
+      70 -): CartItem[] {                                                
+      71 -  if (items.some((i) => i.offerId === offer.id)) return applySe
+         -rverLine(items, offer.id, quantity, stock, expiresAt);         
+      72 -  return [                                                     
+      73 -    ...items,                                                  
+      74 -    {                                                          
+      75 -      offerId: offer.id,                                       
+      76 -      productId: product.id,                                   
+      77 -      productName: product.name,                               
+      78 -      imageUrl: product.imageUrl,                              
+      79 -      sellerName: offer.sellerName,                            
+      80 -      price: offer.price,                                      
+      81 -      currency: offer.currency,                                
+      82 -      stock,                                                   
+      83 -      quantity,                                                
+      84 -      expiresAt,                                               
+      85 -    },                                                         
+      86 -  ];                                                           
+      87 -}                                                              
+      88 -                                                               
+      23  /** Error text when the server refused because stock ran out. *
+          /
+      24  export function outOfStockMessage(stock: number, inCart: number
+          ): string {
+      25    if (stock > 0) return `Liko tik ${stock} vnt.`;
+     ...
+       27    return "Šis pasiūlymas jau išparduotas.";
+       28  }
+       29  
+       96 -export function itemCount(items: CartItem[]): number {        
+       30 +export function itemCount(items: OrderItem[]): number {       
+       31    return items.reduce((n, i) => n + i.quantity, 0);
+       32  }
+       99 -                                                              
+      100 -export function totalCents(items: CartItem[]): number {       
+      101 -  return items.reduce((sum, i) => sum + i.price * i.quantity, 
+          -0);                                                           
+      102 -}                                                             
+
+● Now CartContext, rewritten so the server's cart order is its only source of
+  data:
+
+● Write(frontend\src\features\cart\CartContext.tsx)
+  ⎿  Added 92 lines, removed 118 lines
+       1  import { createContext, useCallback, useContext, useEffect, use
+          Ref, useState } from "react";
+       2  import { api, ApiError } from "../../lib/api";
+       3 -import type { Offer, Order, Product } from "../../types";      
+       4 -import {                                                       
+       5 -  addServerLine,                                               
+       6 -  applyServerLine,                                             
+       7 -  itemCount,                                                   
+       8 -  MAX_PER_LINE,                                                
+       9 -  outOfStockMessage,                                           
+      10 -  quantityOf,                                                  
+      11 -  reconcile,                                                   
+      12 -  totalCents,                                                  
+      13 -  type CartItem,                                               
+      14 -} from "./cart";                                               
+       3 +import type { Order, OrderItem, OutOfStock } from "../../types"
+         +;                                                              
+       4 +import { emptyCart, itemCount, lostLines, MAX_PER_LINE, outOfSt
+         +ockMessage, quantityOf } from "./cart";                        
+       5  
+       6  /** What the add-to-cart popup shows: success, or why the add f
+          ailed. */
+       7  export type CartNotice = { kind: "added" } | { kind: "error"; t
+          itle?: string; message: string };
+       8  
+       9  interface CartValue {
+      20 -  items: CartItem[];                                           
+      10 +  /** The cart order as the server stores it (DECISIONS #21). *
+         +/                                                              
+      11 +  items: OrderItem[];                                          
+      12    count: number; // total quantity, for the header badge and po
+          pup
+      22 -  total: number; // cents                                      
+      23 -  /** Latest stock the server reported per offer id (for the pr
+         -oduct page table). */                                          
+      13 +  total: number; // cents, from the server                     
+      14 +  currency: string;                                            
+      15 +  /** Latest stock the server reported per offer id (product pa
+         +ge table, cart lines). */                                      
+      16    liveStock: Record<string, number>;
+      17    /** Reserves one more unit on the server, then opens the popu
+          p (success or error). */
+      26 -  add: (product: Product, offer: Offer) => Promise<void>;      
+      18 +  add: (offerId: string) => Promise<void>;                     
+      19    /** Sets a line's quantity on the server (0 = remove). Return
+          s an error message or null. */
+      20    setQty: (offerId: string, qty: number) => Promise<string | nu
+          ll>;
+      29 -  /** Simulated payment; clears the cart and returns the delive
+         -red order. Throws on failure. */                               
+      21 +  /** Simulated payment; starts a new cart and returns the deli
+         +vered order. Throws on failure. */                             
+      22    checkout: () => Promise<Order>;
+      23    notice: CartNotice | null;
+      24    closeNotice: () => void;
+      25  }
+      26  
+      27  const Ctx = createContext<CartValue | null>(null);
+      36 -// v2: lines are now server reservations; older local-only cart
+         -s are dropped.                                                 
+      37 -const ITEMS_KEY = "cart.v2";                                   
+      28  const ID_KEY = "cartId";
+      29  const FAILED = "Nepavyko atnaujinti krepšelio. Bandykite dar ka
+          rtą.";
+      30  const EXPIRED = "Rezervacija baigėsi: kai kurios prekės grąžint
+          os į sandėlį ir pašalintos iš krepšelio.";
+      31  const CLOSED = "Šis krepšelis jau apmokėtas, todėl pradėtas nau
+          jas. Bandykite dar kartą.";
+      42 -const TOO_MANY =`Vienam pasiūlymui galima daugiausia ${MAX_PER_
+         -LINE} vnt.`;                                                   
+      32 +const TOO_MANY = `Vienam pasiūlymui galima daugiausia ${MAX_PER
+         +_LINE} vnt.`;                                                  
+      33  
+      44 -function loadItems(): CartItem[] {                             
+      45 -  try {                                                        
+      46 -    const raw = localStorage.getItem(ITEMS_KEY);               
+      47 -    const parsed: unknown = raw ? JSON.parse(raw) : [];        
+      48 -    return Array.isArray(parsed) ? (parsed as CartItem[]) : [];
+      49 -  } catch {                                                    
+      50 -    return []; // corrupt JSON or storage blocked: start empty 
+      51 -  }                                                            
+      52 -}                                                              
+      53 -                                                               
+      34  /** Random id that names this browser's cart on the server (lik
+          e a guest session). */
+      35  function loadCartId(): string {
+      36    try {
+     ...
+       51    return id;
+       52  }
+       53  
+       74 -type SyncResult =                                             
+       75 -  | { ok: true; quantity: number; stock: number; expiresAt?: s
+          -tring }                                                       
+       76 -  | { ok: false; error: string };                             
+       77 -                                                              
+       54  export function CartProvider({ children }: { children: React.R
+           eactNode }) {
+       79 -  const [items, setItems] = useState<CartItem[]>(loadItems);  
+       55    // The id lives in a ref: it changes after checkout and asyn
+           c code must see
+       56    // the new one. useState just reads localStorage once instea
+           d of every render.
+       57    const [initialCartId] = useState(loadCartId);
+       58    const cartId = useRef(initialCartId);
+       59 +  // The server's cart document. Only the id is kept in the br
+          +owser; lines,                                                 
+       60 +  // names, prices and the total always come from the server. 
+       61 +  const [cart, setCart] = useState<Order>(() => emptyCart(init
+          +ialCartId));                                                  
+       62 +  const loaded = useRef(false); // false until the first GET a
+          +nswered                                                       
+       63    const [liveStock, setLiveStock] = useState<Record<string, nu
+           mber>>({});
+       64    const [notice, setNotice] = useState<CartNotice | null>(null
+           );
+       86 -  // Latest items for async functions: after `await`, the `ite
+          -ms` variable                                                  
+       87 -  // they closed over may be out of date.                     
+       88 -  const itemsRef = useRef(items);                             
+       65 +  // Latest cart for async functions: after `await`, a closed-
+          +over value may be old.                                        
+       66 +  const cartRef = useRef(cart);                               
+       67 +  cartRef.current = cart;                                     
+       68    // Changes in flight + a counter bumped by every change. A b
+           ackground refresh
+       69    // only applies its answer if no change started or finished 
+           while it ran.
+       70    const inFlight = useRef(0);
+       71    const changeSeq = useRef(0);
+       72  
+       94 -  useEffect(() => {                                           
+       95 -    itemsRef.current = items;                                 
+       96 -    try {                                                     
+       97 -      localStorage.setItem(ITEMS_KEY, JSON.stringify(items)); 
+       98 -    } catch {                                                 
+       99 -      // storage blocked: cart just won't survive a reload    
+      100 -    }                                                         
+      101 -  }, [items]);                                                
+       73 +  /** Forget the paid/closed cart and use a new server cart id
+          +. */                                                          
+       74 +  function startNewCart() {                                   
+       75 +    cartId.current = newCartId();                             
+       76 +    setCart(emptyCart(cartId.current));                       
+       77 +  }                                                           
+       78  
+       79    /**
+      104 -   * Asks the server to make this cart hold `want` units of an
+          - offer. The server                                            
+      105 -   * reserves/releases the stock atomically. On "not enough st
+          -ock" (409) the                                                
+      106 -   * server also says what we really hold, so the cart is corr
+          -ected to match.                                               
+       80 +   * Reads the cart from the server. Reservations expire after
+          + 30 min                                                       
+       81 +   * (DECISIONS #16): if lines are gone, the shopper gets a wa
+          +rning.                                                        
+       82     */
+      108 -  const sync = async (offerId: string, want: number): Promise<
+          -SyncResult> => {                                              
+      109 -    if (want > MAX_PER_LINE) return { ok: false, error: TOO_MA
+          -NY };                                                         
+      110 -    inFlight.current++;                                       
+      111 -    changeSeq.current++;                                      
+      112 -    try {                                                     
+      113 -      const line = await api.setCartItem(cartId.current, offer
+          -Id, want);                                                    
+      114 -      setLiveStock((s) => ({ ...s, [offerId]: line.stock })); 
+      115 -      return { ok: true, quantity: line.quantity, stock: line.
+          -stock, expiresAt: line.expiresAt };                           
+      116 -    } catch (e) {                                             
+      117 -      if (e instanceof ApiError && e.status === 410) {        
+      118 -        // This cart was paid (e.g. in another tab): it is an 
+          -order now.                                                    
+      119 -        startNewCart();                                       
+      120 -        return { ok: false, error: CLOSED };                  
+      121 -      }                                                       
+      122 -      if (e instanceof ApiError && e.status === 409) {        
+      123 -        const body = e.body as { stock: number; quantity: numb
+          -er };                                                         
+      124 -        setLiveStock((s) => ({ ...s, [offerId]: body.stock }))
+          -;                                                             
+      125 -        setItems((cur) => applyServerLine(cur, offerId, body.q
+          -uantity, body.stock));                                        
+      126 -        return { ok: false, error: outOfStockMessage(body.stoc
+          -k, body.quantity) };                                          
+      127 -      }                                                       
+      128 -      return { ok: false, error: FAILED };                    
+      129 -    } finally {                                               
+      130 -      inFlight.current--;                                     
+      131 -      changeSeq.current++;                                    
+      132 -    }                                                         
+      133 -  };                                                          
+      134 -                                                              
+      135 -  /**                                                         
+      136 -   * Reservations expire on the server after 30 min (DECISIONS
+          - #16). This asks                                              
+      137 -   * what the server still holds and drops expired lines, warn
+          -ing the shopper.                                              
+      138 -   */                                                         
+       83    const refresh = useCallback(async () => {
+      140 -    if (itemsRef.current.length === 0 || inFlight.current > 0)
+          - return;                                                      
+       84 +    if (inFlight.current > 0) return;                         
+       85 +    if (loaded.current && cartRef.current.items.length === 0) 
+          +return; // nothing to expire                                  
+       86      const seq = changeSeq.current;
+       87      try {
+      143 -      const { items: server } = await api.cart(cartId.current)
+          -;                                                             
+       88 +      const next = await api.cart(cartId.current);            
+       89        if (seq !== changeSeq.current) return; // a change ran m
+           eanwhile; its answer wins
+      145 -      const { items: next, lost } = reconcile(itemsRef.current
+          -, server);                                                    
+      146 -      setItems(next);                                         
+      147 -      if (lost) setNotice({ kind: "error", title: "Krepšelis a
+          -tnaujintas", message: EXPIRED });                             
+      148 -    } catch {                                                 
+       90 +      if (loaded.current && lostLines(cartRef.current.items, n
+          +ext.items)) {                                                 
+       91 +        setNotice({ kind: "error", title: "Krepšelis atnaujint
+          +as", message: EXPIRED });                                     
+       92 +      }                                                       
+       93 +      loaded.current = true;                                  
+       94 +      setCart(next);                                          
+       95 +    } catch (e) {                                             
+       96 +      if (e instanceof ApiError && e.status === 410) {        
+       97 +        loaded.current = true;                                
+       98 +        startNewCart(); // paid in another tab: it's an order 
+          +now                                                           
+       99 +      }                                                       
+      100        // offline or server down: try again on the next tick
+      101      }
+      102    }, []);
+      103  
+      153 -  // Check on load, every minute, and when the shopper comes b
+          -ack to the tab.                                               
+      104 +  // Load on start, then check every minute and when the shopp
+          +er comes back to the tab.                                     
+      105    useEffect(() => {
+      106      void refresh();
+      107      const timer = setInterval(refresh, 60_000);
+     ...
+      112      };
+      113    }, [refresh]);
+      114  
+      164 -  const add = async (product: Product, offer: Offer) => {     
+      165 -    const res = await sync(offer.id, quantityOf(itemsRef.curre
+          -nt, offer.id) + 1);                                           
+      166 -    if (!res.ok) {                                            
+      167 -      setNotice({ kind: "error", message: res.error });       
+      168 -      return;                                                 
+      115 +  /**                                                         
+      116 +   * Runs one cart change on the server and shows its answer. 
+          +Counted as a                                                  
+      117 +   * change, so a background refresh started earlier can't ove
+          +rwrite it.                                                    
+      118 +   */                                                         
+      119 +  const change = async <T,>(run: () => Promise<T>): Promise<T>
+          + => {                                                         
+      120 +    inFlight.current++;                                       
+      121 +    changeSeq.current++;                                      
+      122 +    try {                                                     
+      123 +      return await run();                                     
+      124 +    } finally {                                               
+      125 +      inFlight.current--;                                     
+      126 +      changeSeq.current++;                                    
+      127      }
+      170 -    setItems((cur) => addServerLine(cur, product, offer, res.q
+          -uantity, res.stock, res.expiresAt));                          
+      171 -    setNotice({ kind: "added" });                             
+      128    };
+      129  
+      174 -  const setQty = async (offerId: string, qty: number): Promise
+          -<string | null> => {                                          
+      175 -    const res = await sync(offerId, qty);                     
+      176 -    if (!res.ok) return res.error;                            
+      177 -    setItems((cur) => applyServerLine(cur, offerId, res.quanti
+          -ty, res.stock, res.expiresAt));                               
+      178 -    return null;                                              
+      130 +  /**                                                         
+      131 +   * Asks the server to make this cart hold `want` units of an
+          + offer. The server                                            
+      132 +   * reserves/releases stock and keys atomically and returns t
+          +he stored cart.                                               
+      133 +   * Returns an error message, or null on success.            
+      134 +   */                                                         
+      135 +  const sync = (offerId: string, want: number): Promise<string
+          + | null> =>                                                   
+      136 +    change(async () => {                                      
+      137 +      if (want > MAX_PER_LINE) return TOO_MANY;               
+      138 +      try {                                                   
+      139 +        const res = await api.setCartItem(cartId.current, offe
+          +rId, want);                                                   
+      140 +        setCart(res.cart);                                    
+      141 +        setLiveStock((s) => ({ ...s, [offerId]: res.stock }));
+      142 +        return null;                                          
+      143 +      } catch (e) {                                           
+      144 +        if (e instanceof ApiError && e.status === 410) {      
+      145 +          startNewCart();                                     
+      146 +          return CLOSED;                                      
+      147 +        }                                                     
+      148 +        if (e instanceof ApiError && e.status === 409) {      
+      149 +          const body = e.body as OutOfStock;                  
+      150 +          setLiveStock((s) => ({ ...s, [offerId]: body.stock }
+          +));                                                           
+      151 +          // Show what the server really holds now.           
+      152 +          await api.cart(cartId.current).then(setCart, () => {
+          +});                                                           
+      153 +          return outOfStockMessage(body.stock, body.quantity);
+      154 +        }                                                     
+      155 +        return FAILED;                                        
+      156 +      }                                                       
+      157 +    });                                                       
+      158 +                                                              
+      159 +  const add = async (offerId: string) => {                    
+      160 +    const error = await sync(offerId, quantityOf(cartRef.curre
+          +nt.items, offerId) + 1);                                      
+      161 +    setNotice(error ? { kind: "error", message: error } : { ki
+          +nd: "added" });                                               
+      162    };
+      163  
+      181 -  /** Forget the local cart and use a new server cart id. */  
+      182 -  function startNewCart() {                                   
+      183 -    cartId.current = newCartId();                             
+      184 -    setItems([]);                                             
+      185 -  }                                                           
+      164 +  const setQty = (offerId: string, qty: number) => sync(offerI
+          +d, qty);                                                      
+      165  
+      166    /**
+      167     * Pays for the cart (simulated) and returns the delivered o
+           rder with its keys.
+      189 -   * Counts as a change, so a background refresh can't see the
+          - now-paid cart as                                             
+      190 -   * "expired" and show a wrong warning. Throws ApiError on fa
+          -ilure.                                                        
+      168 +   * Counts as a change, so a background refresh can't see the
+          + now-paid cart and                                            
+      169 +   * show a wrong warning. Throws ApiError on failure.        
+      170     */
+      192 -  const checkout = async (): Promise<Order> => {              
+      193 -    inFlight.current++;                                       
+      194 -    changeSeq.current++;                                      
+      195 -    try {                                                     
+      171 +  const checkout = () =>                                      
+      172 +    change(async () => {                                      
+      173        const order = await api.checkout(cartId.current);
+      174        startNewCart();
+      175        return order;
+      199 -    } finally {                                               
+      200 -      inFlight.current--;                                     
+      201 -      changeSeq.current++;                                    
+      202 -    }                                                         
+      203 -  };                                                          
+      176 +    });                                                       
+      177  
+      178    const closeNotice = useCallback(() => setNotice(null), []);
+      179  
+      180    const value: CartValue = {
+      208 -    items,                                                    
+      209 -    count: itemCount(items),                                  
+      210 -    total: totalCents(items),                                 
+      181 +    items: cart.items,                                        
+      182 +    count: itemCount(cart.items),                             
+      183 +    total: cart.total,                                        
+      184 +    currency: cart.currency,                                  
+      185      liveStock,
+      186      add,
+      187      setQty,
+
+● Now the components that read the cart:
+
+● Bash(sed -i \
+       -e 's#import type { CartItem } from "./cart";#import type { OrderItem }
+      from "../../types";#' \…)
+  ⎿  Updated frontend\src\features\cart\CartLine.tsx (+6 -5)
+       2  import { Link } from "react-router-dom";
+       3  import { formatPrice, formatTime } from "../../lib/format";
+       4  import { useCart } from "./CartContext";
+       5 -import type { CartItem } from "./cart";                        
+       5 +import type { OrderItem } from "../../types";                  
+       6  
+       7  /**
+       8   * One cart row; used by both the cart page and the header drop
+          down (CSS sizes it).
+       9   * Every change goes to the server first (it reserves/releases 
+          stock), so the
+      10   * buttons are disabled while a request is in flight.
+      11   */
+      12 -export function CartLine({ item }: { item: CartItem }) {       
+      13 -  const { setQty } = useCart();                                
+      12 +export function CartLine({ item }: { item: OrderItem }) {      
+      13 +  const { setQty, liveStock, currency } = useCart();           
+      14 +  const stock = liveStock[item.offerId]; // known once this bro
+         +wser changed the line                                          
+      15    const [busy, setBusy] = useState(false);
+      16    const [error, setError] = useState<string | null>(null);
+      17  
+     ...
+      27        <div className="cart-info">
+      28          <Link to={`/product/${item.productId}`} className="card
+          -title">{item.productName}</Link>
+      29          <span className="muted small">Pardavėjas: {item.sellerN
+          ame}</span>
+      29 -        <span className="muted small">Dar liko: {item.stock} vn
+         -t.</span>                                                      
+      30 +        {stock !== undefined && <span className="muted small">D
+         +ar liko: {stock} vnt.</span>}                                  
+      31          {item.expiresAt && <span className="muted small">Rezerv
+          uota iki {formatTime(item.expiresAt)}</span>}
+      32          <button type="button" className="link-btn" disabled={bu
+          sy} onClick={() => change(0)}>Pašalinti</button>
+      33        </div>
+     ...
+      39          </div>
+      40          {error && <p className="error small" role="alert">{erro
+          r}</p>}
+      41        </div>
+      41 -      <span className="price">{formatPrice(item.price * item.qu
+         -antity, item.currency)}</span>                                 
+      42 +      <span className="price">{formatPrice(item.price * item.qu
+         +antity, currency)}</span>                                      
+      43      </li>
+      44    );
+      45  }
+  ⎿  Updated frontend\src\features\cart\CartMenu.tsx (+2 -2)
+       6  
+       7  /** Header cart button + dropdown with the cart's lines, sum an
+          d two actions. */
+       8  export function CartMenu() {
+       9 -  const { items, count, total } = useCart();                   
+       9 +  const { items, count, total, currency } = useCart();         
+      10    const [open, setOpen] = useState(false);
+      11    const ref = useRef<HTMLDivElement>(null);
+      12    const { pathname } = useLocation();
+     ...
+      49                <div className="cart-dropdown-footer">
+      50                  <div className="cart-total">
+      51                    <span>Suma</span>
+      52 -                  <span className="price">{formatPrice(total, i
+         -tems[0].currency)}</span>                                      
+      52 +                  <span className="price">{formatPrice(total, c
+         +urrency)}</span>                                               
+      53                  </div>
+      54                  <Link to="/cart" className="btn secondary block
+          " onClick={close}>Peržiūrėti krepšelį</Link>
+      55                  <Link to="/checkout" className="btn block" onCl
+          ick={close}>Atsiskaityti dabar</Link>
+  ⎿  Updated frontend\src\features\cart\CartPage.tsx (+2 -2)
+       4  import { CartLine } from "./CartLine";
+       5  
+       6  export function CartPage() {
+       7 -  const { items, count, total } = useCart();                   
+       7 +  const { items, count, total, currency } = useCart();         
+       8  
+       9    if (items.length === 0) {
+      10      return (
+     ...
+      26          <aside className="cart-summary">
+      27            <div className="cart-total">
+      28              <span>Suma ({formatItemCount(count)})</span>
+      29 -            <span className="price">{formatPrice(total, items[0
+         -].currency)}</span>                                            
+      29 +            <span className="price">{formatPrice(total, currenc
+         +y)}</span>                                                     
+      30            </div>
+      31            <p className="muted small">Galutinė kaina patvirtinam
+          a atsiskaitant.</p>
+      32            <Link to="/checkout" className="btn block">Atsiskaity
+          ti dabar</Link>
+  ⎿  Updated frontend\src\features\checkout\CheckoutPage.tsx (+4 -4)
+      18   * cart -> paid -> delivered, and returns the keys that were re
+          served for it.
+      19   */
+      20  export function CheckoutPage() {
+      21 -  const { items, count, total, checkout } = useCart();         
+      21 +  const { items, count, total, currency, checkout } = useCart()
+         +;                                                              
+      22    const [busy, setBusy] = useState(false);
+      23    const [error, setError] = useState<string | null>(null);
+      24    const [order, setOrder] = useState<Order | null>(null);
+     ...
+      67            {items.map((i) => (
+      68              <li key={i.offerId} className="checkout-line">
+      69                <span>{i.productName} <span className="muted smal
+          l">· {i.sellerName}</span></span>
+      70 -              <span>{i.quantity} × {formatPrice(i.price, i.curr
+         -ency)}</span>                                                  
+      70 +              <span>{i.quantity} × {formatPrice(i.price, curren
+         +cy)}</span>                                                    
+      71              </li>
+      72            ))}
+      73          </ul>
+      74          <div className="cart-total">
+      75            <span>Suma ({formatItemCount(count)})</span>
+      76 -          <span className="price">{formatPrice(total, items[0].
+         -currency)}</span>                                              
+      76 +          <span className="price">{formatPrice(total, currency)
+         +}</span>                                                       
+      77          </div>
+      78          <p className="muted small">
+      79            Mokėjimas imituojamas: pinigai nenuskaičiuojami. Apmo
+          kėjus rezervuoti raktai iškart tampa jūsų.
+      80          </p>
+      81          {error && <p className="error" role="alert">{error}</p>
+          }
+      82          <button type="button" className="btn block" disabled={b
+          usy} onClick={pay}>
+      83 -          {busy ? "Apmokama…" : `Apmokėti ${formatPrice(total, 
+         -items[0].currency)}`}                                          
+      83 +          {busy ? "Apmokama…" : `Apmokėti ${formatPrice(total, 
+         +currency)}`}                                                   
+      84          </button>
+      85          <Link to="/cart" className="link-btn">Grįžti į krepšelį
+          </Link>
+      86        </section>
+  ⎿  Updated frontend\src\features\orders\OrderCard.tsx (+1 -1)
+      28                  Pardavėjas: {it.sellerName} · {it.quantity} × {
+          formatPrice(it.price, order.currency)}
+      29                </span>
+      30                {it.keys?.length ? (
+      31 -                it.keys.map((code) => <KeyCode key={code} code=
+         -{code} />)                                                     
+      31 +                it.keys.map((k) => <KeyCode key={k.code} code={
+         +k.code} />)                                                    
+      32                ) : (
+      33                  <span className="muted small">Raktai bus parody
+          ti, kai užsakymas bus pristatytas.</span>
+      34                )}
+  ⎿  … 1 more file changed
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Bash(sed -i -e '3s/.*/import type { Offer } from "..\/..\/types";/' -e
+      '18s/(p: Product, o: Offer)/(o: Offer)/' -e '49s/onAdd(p, o)/onAdd(o)/'
+      features/product/Produ…)
+  ⎿  Updated frontend\src\features\product\ProductPage.tsx (+3 -3)
+      1  import { useState } from "react";
+      2  import { useParams } from "react-router-dom";
+      3 -import type { Offer, Product } from "../../types";              
+      3 +import type { Offer } from "../../types";                       
+      4  import { api } from "../../lib/api";
+      5  import { useAsync } from "../../lib/useAsync";
+      6  import { formatPrice } from "../../lib/format";
+     ...
+      15    const inCart = (offerId: string) => items.find((i) => i.offer
+          Id === offerId)?.quantity ?? 0;
+      16    // Stock changes as carts reserve it; prefer the newest numbe
+          r the server gave us.
+      17    const stockOf = (o: Offer) => liveStock[o.id] ?? o.stock;
+      18 -  const onAdd = async (p: Product, o: Offer) => {              
+      18 +  const onAdd = async (o: Offer) => {                          
+      19      setPending(o.id);
+      20      await add(o.id); // reserves on the server; the popup shows
+           success or the error
+      21      setPending(null);
+     ...
+      46                          <button
+      47                            className="btn"
+      48                            disabled={stockOf(o) < 1 || pending =
+          == o.id}
+      49 -                          onClick={() => onAdd(p, o)}          
+      49 +                          onClick={() => onAdd(o)}             
+      50                          >
+      51                            {stockOf(o) < 1 ? "Išparduota" : "Į k
+          repšelį"}
+      52                          </button>
+
+● The frontend builds. Order docs already in Firestore use the old shape (keys
+  stored as bare strings) and won't load into the new types, so I'll re-seed
+  first, then run the flow on Firestore:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The cart now loads from the server with names, seller, price, total and expiry
+  set, and the codes are hidden. Since imageUrl is empty, I'm checking the seed
+  data, then I'll dump the raw Firestore documents before and after checkout.
+  · summary
+
+● Bash(grep -c '"imageUrl": ""' seeds/products.json; grep -m2 imageUrl
+      seeds/products.json
+      mkdir -p cmd/_dump && cat > cmd/_dump/main.go <<'EOF'…)
+  ⎿  Created backend\cmd\_dump\main.go (+30 -0)
+       1 +package main                                                   
+       2 +                                                               
+       3 +import (                                                       
+       4 +        "context"                                              
+       5 +        "encoding/json"                                        
+       6 +        "fmt"                                                  
+       7 +        "log"                                                  
+       8 +        "os"                                                   
+       9 +                                                               
+      10 +        "cloud.google.com/go/firestore"                        
+      11 +                                                               
+      12 +        "eneba-marketplace/backend/internal/config"            
+      13 +)                                                              
+      14 +                                                               
+      15 +// Prints one raw orders/{id} document exactly as Firestore sto
+         +res it.                                                        
+      16 +func main() {                                                  
+      17 +        cfg := config.Load()                                   
+      18 +        ctx := context.Background()                            
+      19 +        fs, err := firestore.NewClient(ctx, cfg.FirebaseProj)  
+      20 +        if err != nil {                                        
+      21 +                log.Fatal(err)                                 
+      22 +        }                                                      
+      23 +        defer fs.Close()                                       
+      24 +        snap, err := fs.Collection("orders").Doc(os.Args[1]).Ge
+         +t(ctx)                                                         
+      25 +        if err != nil {                                        
+      26 +                log.Fatal(err)                                 
+      27 +        }                                                      
+      28 +        b, _ := json.MarshalIndent(snap.Data(), "", "  ")      
+      29 +        fmt.Println(string(b))                                 
+      30 +}                                                              
+  ⎿  (timeout 5m)
+
+● At the cart stage the stored document already holds all the fields, and the
+  empty imageUrl on all 16 seed products is seed data rather than a mapping bug.
+  Checkout is next, followed by a before-and-after diff. · summary
+
+● Bash(C=$(cat "$TEMP/lastcart"); G=guest-0000-1111-2222-333333333333;
+      A=http://localhost:8099/api
+      echo "--- checkout"; curl -s -w "\n%{http_code}\n" -X POST $A/orders…)
+  ⎿  Deleted backend\cmd\_dump\main.go (+0 -30)
+       1 -package main                                                   
+       2 -                                                               
+       3 -import (                                                       
+       4 -        "context"                                              
+       5 -        "encoding/json"                                        
+       6 -        "fmt"                                                  
+       7 -        "log"                                                  
+       8 -        "os"                                                   
+       9 -                                                               
+      10 -        "cloud.google.com/go/firestore"                        
+      11 -                                                               
+      12 -        "eneba-marketplace/backend/internal/config"            
+      13 -)                                                              
+      14 -                                                               
+      15 -// Prints one raw orders/{id} document exactly as Firestore sto
+         -res it.                                                        
+      16 -func main() {                                                  
+      17 -        cfg := config.Load()                                   
+      18 -        ctx := context.Background()                            
+      19 -        fs, err := firestore.NewClient(ctx, cfg.FirebaseProj)  
+      20 -        if err != nil {                                        
+      21 -                log.Fatal(err)                                 
+      22 -        }                                                      
+      23 -        defer fs.Close()                                       
+      24 -        snap, err := fs.Collection("orders").Doc(os.Args[1]).Ge
+         -t(ctx)                                                         
+      25 -        if err != nil {                                        
+      26 -                log.Fatal(err)                                 
+      27 -        }                                                      
+      28 -        b, _ := json.MarshalIndent(snap.Data(), "", "  ")      
+      29 -        fmt.Println(string(b))                                 
+      30 -}                                                              
+  ⎿  (timeout 5m)
+
+● The diff confirms checkout changed only status, userId, paidAt, deliveredAt,
+  and expiresAt, with names, prices, total and keys unchanged. I'm re-seeding to
+  clear the test order, then recording the decision. · summary
+
+● Bash(go run ./cmd/seed 2>&1 | tail -1 && cd .. && cat >> DECISIONS.md
+      <<'EOF'…)
+  ⎿  Updated DECISIONS.md (+23 -0)
+      180  Trade-off: orders live in one browser; clearing storage or swi
+           tching device loses the
+      181  history (the orders stay in Firestore). Rejected: one shared f
+           ake user (every visitor
+      182  would see everyone's keys).
+      183 +                                                              
+      184 +## 21. Order data is written once; stages only change status f
+          +ields (refines #19, supersedes #13)                           
+      185 +When a line goes into the cart, the server writes it whole int
+          +o the cart order: product                                     
+      186 +name, image, seller, price (snapshot from that moment), quanti
+          +ty, `expiresAt` and the                                       
+      187 +reserved keys (`{id, code}`); `total` is updated on every cart
+          + change. After that:                                          
+      188 +- pay (cart -> paid) only sets `status`, `userId`, `paidAt` an
+          +d clears `expiresAt`;                                         
+      189 +- deliver (paid -> delivered) only sets `status`, `deliveredAt
+          +` and marks the keys sold.                                    
+      190 +Checkout never looks up products or prices, so it can't "repai
+          +r" or change data                                             
+      191 +(test: `TestCheckoutOnlyChangesState`; checked on Firestore by
+          + diffing the document).                                       
+      192 +- `paidAt`, `deliveredAt`, `expiresAt` are nullable (`*time.Ti
+          +me`): null until that                                         
+      193 +  stage, instead of Go's zero date `0001-01-01`.              
+      194 +- Key codes sit on the order from cart time, but the API shows
+          + them only once the order                                     
+      195 +  is delivered (`Order.Public()`), so a cart can't leak free k
+          +eys. Firestore is                                             
+      196 +  backend-only (#12), so storing them there is safe.          
+      197 +- Releasing units gives back the line's last keys by id, no qu
+          +ery needed.                                                   
+      198 +- The browser renders the cart from the server's order (`GET /
+          +api/carts/{id}`, and every                                    
+      199 +  `PUT` returns the stored cart). localStorage keeps only the 
+          +cart id (supersedes #13's                                     
+      200 +  browser-side snapshot). A paid cart answers 410 and the brow
+          +ser starts a new one.                                         
+      201 +Trade-off: the price is fixed when the line is added, so a lat
+          +er price change does not                                      
+      202 +affect carts already holding it (like a reservation). That rep
+          +laces #7's "re-read prices                                    
+      203 +at checkout"; still safe because only the server writes the pr
+          +ice.                                                          
+      204 +Rejected: filling names/prices at payment (data appears late a
+          +nd checkout does two jobs);                                   
+      205 +keeping a browser copy of the lines (two sources of truth that
+          + drift).                                                      
+  ⎿  (timeout 5m)
+
+● Bash(sed -i '17s/Simulated payment (DECISIONS #8, #19). |/Line data (name,
+      price, keys) is written once at add time; checkout only changes status
+      fields. Simulated p…)
+  ⎿  Updated SPEC.md (+1 -1)
+      14  | Product page + seller offers | Scaffolded | Offer comparison 
+          table with add-to-cart per offer. |
+      15  | Auth | Switched off | Firebase Auth email/password code is ke
+          pt but not used: orders belong to a browser guest id for now (D
+          ECISIONS #20). Dev mode without Firebase (#10). TODO: turn back
+           on; Google sign-in? (optional) |
+      16  | Cart | Done | Client-side cart, but stock is reserved on the 
+          server when an item is added (DECISIONS #15). Popup, header dro
+          pdown, live stock errors. |
+      17 -| Checkout + key delivery | Done | Cart is the first stage of a
+         -n order: cart -> paid -> delivered. Keys are reserved from the 
+         -available pool when added to the cart, sold on delivery. Simula
+         -ted payment (DECISIONS #8, #19). |                             
+      17 +| Checkout + key delivery | Done | Cart is the first stage of a
+         +n order: cart -> paid -> delivered. Keys are reserved from the 
+         +available pool when added to the cart, sold on delivery. Line d
+         +ata (name, price, keys) is written once at add time; checkout o
+         +nly changes status fields. Simulated payment (DECISIONS #8, #19
+         +, #21). |                                                      
+      18  | Order history | Done | Per browser guest id while login is of
+          f (DECISIONS #20); `GET /api/orders`, page lists orders with co
+          pyable key codes. |
+      19  | Eneba styling | TODO | Tokens-driven (tokens.css is still pla
+          ceholder). Extract real values into docs/DESIGN.md first. |
+      20  
+
+● Update(SPEC.md)
+  ⎿  Added 1 line, removed 1 line
+      13  | Search | Scaffolded | Typo/partial tolerant (trigram), header
+           dropdown + results via store page. |
+      14  | Product page + seller offers | Scaffolded | Offer comparison 
+          table with add-to-cart per offer. |
+      15  | Auth | Switched off | Firebase Auth email/password code is ke
+          pt but not used: orders belong to a browser guest id for now (D
+          ECISIONS #20). Dev mode without Firebase (#10). TODO: turn back
+           on; Google sign-in? (optional) |
+      16 -| Cart | Done | Client-side cart, but stock is reserved on the 
+         -server when an item is added (DECISIONS #15). Popup, header dro
+         -pdown, live stock errors. |                                    
+      16 +| Cart | Done | The cart is a server-side order (status `cart`)
+         +; the UI renders that document and the browser keeps only the c
+         +art id. Stock + keys reserved when an item is added (DECISIONS 
+         +#15, #19, #21). Popup, header dropdown, live stock errors. |   
+      17  | Checkout + key delivery | Done | Cart is the first stage of a
+          n order: cart -> paid -> delivered. Keys are reserved from the 
+          available pool when added to the cart, sold on delivery. Line d
+          ata (name, price, keys) is written once at add time; checkout o
+          nly changes status fields. Simulated payment (DECISIONS #8, #19
+          , #21). |
+      18  | Order history | Done | Per browser guest id while login is of
+          f (DECISIONS #20); `GET /api/orders`, page lists orders with co
+          pyable key codes. |
+      19  | Eneba styling | TODO | Tokens-driven (tokens.css is still pla
+          ceholder). Extract real values into docs/DESIGN.md first. |
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All three are fixed and checked on Firestore. I compared the stored order
+  document before and after checkout, and only the status fields changed.
+
+  Why the fields were empty: the cart stage stored only the offer id and
+  quantity, and pay filled in names and prices afterwards, which is exactly the
+  repair work you objected to. Now:
+
+  - Written once, when a line goes into the cart. The server writes the product
+    name, image, seller, price, quantity, expiresAt, and the reserved keys ({id,
+    code}) into the order item. total is updated on every cart change.
+  - Pay (cart → paid) only sets status, userId and paidAt, and clears expiresAt.
+    Deliver (paid → delivered) only sets status and deliveredAt, and marks the
+    keys sold. Checkout no longer looks up products or prices at all.
+  - Key codes: they're on the order from the moment the line is added, but the
+    API only shows them once the order is delivered. Otherwise someone could
+    read free keys from an unpaid cart.
+  - Nullable dates: paidAt, deliveredAt and expiresAt are now null until that
+    stage, instead of 0001-01-01.
+  - Cart UI: it renders the server's cart order. Every add or change returns the
+    stored cart, and the browser keeps only the cart id; the old local copy of
+    the lines is gone.
+
+  Firestore check: I diffed the stored document between the cart stage and
+  delivered. Only status, userId, paidAt, deliveredAt and expiresAt changed;
+  names, prices, total and keys stayed identical. A new test
+  (TestCheckoutOnlyChangesState) checks the same thing in memory.
+
+  Things to know:
+  - imageUrl is still empty, because all 16 products in seeds/products.json have
+    "imageUrl": "". The mapping is correct, the seed data just has no images. I
+    can add image URLs if you want.
+  - Price behaviour changed: the price is fixed when the item goes into the
+    cart, so a later price change doesn't affect carts that already hold it.
+    That's still safe, because only the server writes the price.
+  - I re-seeded Firestore twice. Orders already stored there used the old key
+    format and wouldn't load in the new code. The re-seed also removed my test
+    order, so orders will be empty again until someone adds to a cart.
+
+  Backend tests pass and the frontend builds. I added DECISIONS #21 and updated
+  SPEC. Nothing is committed yet.
+
+> Now I cant add anything to the cart
+
+● I'll look before guessing: what's running, what the API answers, and what's in
+  Firestore.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Nothing is running right now, so I'll start the backend on Firestore and the
+  frontend dev server the way you would, then reproduce the problem through the
+  Vite proxy:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Reproduced: the PUT hangs until curl gives up, and the API logged context
+  canceled. I'll call the API directly with a longer timeout to see whether it's
+  the proxy or the backend:
+  Ran 1 shell command (ctrl+o to expand)
+
+● Each PUT hangs for about 20–60 seconds inside the Firestore transaction and
+  then fails. Earlier runs with p001-o1 took ~2s, so I'll check whether this is
+  about the offer or affects everything:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Only p010-o2 fails outright with a key-pool mismatch, so the shortfall is
+  probably in the keys data; I'm reading that collection directly next.
+  · summary
+
+● Bash(cd /c/Projects/eneba/backend && mkdir -p cmd/_diag && cat >
+      cmd/_diag/main.go <<'EOF'
+      package main…)
+  ⎿  Created backend\cmd\_diag\main.go (+42 -0)
+       1 +package main                                                   
+       2 +                                                               
+       3 +import (                                                       
+       4 +        "context"                                              
+       5 +        "fmt"                                                  
+       6 +        "log"                                                  
+       7 +        "time"                                                 
+       8 +                                                               
+       9 +        "cloud.google.com/go/firestore"                        
+      10 +                                                               
+      11 +        "eneba-marketplace/backend/internal/config"            
+      12 +)                                                              
+      13 +                                                               
+      14 +func main() {                                                  
+      15 +        cfg := config.Load()                                   
+      16 +        ctx, cancel := context.WithTimeout(context.Background()
+         +, 60*time.Second)                                              
+      17 +        defer cancel()                                         
+      18 +        fs, err := firestore.NewClient(ctx, cfg.FirebaseProj)  
+      19 +        if err != nil {                                        
+      20 +                log.Fatal(err)                                 
+      21 +        }                                                      
+      22 +        defer fs.Close()                                       
+      23 +        for _, col := range []string{"keys", "orders", "offers"
+         +, "reservations"} {                                            
+      24 +                agg, err := fs.Collection(col).NewAggregationQu
+         +ery().WithCount("n").Get(ctx)                                  
+      25 +                fmt.Println(col, agg["n"], err)                
+      26 +        }                                                      
+      27 +        for _, offer := range []string{"p001-o1", "p010-o2"} { 
+      28 +                docs, err := fs.Collection("keys").Where("offer
+         +Id", "==", offer).Documents(ctx).GetAll()                      
+      29 +                c := map[string]int{}                          
+      30 +                for _, d := range docs {                       
+      31 +                        c[fmt.Sprint(d.Data()["status"])]++    
+      32 +                }                                              
+      33 +                o, _ := fs.Collection("offers").Doc(offer).Get(
+         +ctx)                                                           
+      34 +                fmt.Println(offer, "keys:", len(docs), c, "stoc
+         +k:", o.Data()["stock"], err)                                   
+      35 +        }                                                      
+      36 +        one, err := fs.Collection("keys").Doc("p010-o2-k0001").
+         +Get(ctx)                                                       
+      37 +        if err == nil {                                        
+      38 +                fmt.Printf("sample key: %v\n", one.Data())     
+      39 +        } else {                                               
+      40 +                fmt.Println("sample key err:", err)            
+     … 2 more lines (ctrl+o to expand)
+  ⎿  (timeout 3m)
+
+● Firestore holds only 3,199 of the 5,559 keys, likely because the daily write
+  quota ran out after repeated seeding, which would also explain the commit
+  timeouts. I'm testing a single write now. · summary
+
+● Bash(cat > cmd/_diag/main.go <<'EOF'
+      package main…)
+  ⎿  Deleted backend\cmd\_diag\main.go (+0 -42)
+       1 -package main                                                   
+       2 -                                                               
+       3 -import (                                                       
+       4 -        "context"                                              
+       5 -        "fmt"                                                  
+       6 -        "log"                                                  
+       7 -        "time"                                                 
+       8 -                                                               
+       9 -        "cloud.google.com/go/firestore"                        
+      10 -                                                               
+      11 -        "eneba-marketplace/backend/internal/config"            
+      12 -)                                                              
+      13 -                                                               
+      14 -func main() {                                                  
+      15 -        cfg := config.Load()                                   
+      16 -        ctx, cancel := context.WithTimeout(context.Background()
+         -, 60*time.Second)                                              
+      17 -        defer cancel()                                         
+      18 -        fs, err := firestore.NewClient(ctx, cfg.FirebaseProj)  
+      19 -        if err != nil {                                        
+      20 -                log.Fatal(err)                                 
+      21 -        }                                                      
+      22 -        defer fs.Close()                                       
+      23 -        for _, col := range []string{"keys", "orders", "offers"
+         -, "reservations"} {                                            
+      24 -                agg, err := fs.Collection(col).NewAggregationQu
+         -ery().WithCount("n").Get(ctx)                                  
+      25 -                fmt.Println(col, agg["n"], err)                
+      26 -        }                                                      
+      27 -        for _, offer := range []string{"p001-o1", "p010-o2"} { 
+      28 -                docs, err := fs.Collection("keys").Where("offer
+         -Id", "==", offer).Documents(ctx).GetAll()                      
+      29 -                c := map[string]int{}                          
+      30 -                for _, d := range docs {                       
+      31 -                        c[fmt.Sprint(d.Data()["status"])]++    
+      32 -                }                                              
+      33 -                o, _ := fs.Collection("offers").Doc(offer).Get(
+         -ctx)                                                           
+      34 -                fmt.Println(offer, "keys:", len(docs), c, "stoc
+         -k:", o.Data()["stock"], err)                                   
+      35 -        }                                                      
+      36 -        one, err := fs.Collection("keys").Doc("p010-o2-k0001").
+         -Get(ctx)                                                       
+      37 -        if err == nil {                                        
+      38 -                fmt.Printf("sample key: %v\n", one.Data())     
+      39 -        } else {                                               
+      40 -                fmt.Println("sample key err:", err)            
+     … 2 more lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+● Reads work but every write times out, because Firestore has used up today's
+  quota and the client keeps retrying. The seeder also hid that failure by never
+  checking BulkWriter results, so I'm fixing it and stopping the servers I
+  started. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Write(backend\cmd\seed\main.go)
+  ⎿  Added 56 lines, removed 16 lines
+       2  // Idempotent: documents are keyed by id, so re-running overwri
+          tes instead of
+       3  // duplicating. It is a full demo reset: carts and orders are d
+          eleted too.
+       4  //
+       5 +// Cost: about 2 x 5600 writes/deletes per run. The free (Spark
+         +) plan allows                                                  
+       6 +// 20k writes and 20k deletes per day, so only seed a few times
+         + a day.                                                        
+       7 +//                                                             
+       8  //      FIREBASE_PROJECT_ID=... GOOGLE_APPLICATION_CREDENTIALS=
+          ./sa.json go run ./cmd/seed
+       9  package main
+      10  
+     ...
+       48    // Step 1: delete. Re-seeding resets offer stock and the key
+            pool, so carts
+       49    // and orders that point at old keys must go too. Old "reser
+           vations" docs
+       50    // are from before carts became orders.
+       48 -  del := fs.BulkWriter(ctx)                                   
+       49 -  deleted := 0                                                
+       51 +  del := newBatch(fs, ctx)                                    
+       52    for _, col := range []string{repository.ColKeys, repository.
+           ColOrders, repository.ColReservations} {
+       53      docs, err := fs.Collection(col).Documents(ctx).GetAll()
+       54      must(err)
+       55      for _, d := range docs {
+       54 -      _, err := del.Delete(d.Ref)                             
+       55 -      must(err)                                               
+       56 +      del.delete(d.Ref)                                       
+       57      }
+       57 -    deleted += len(docs)                                      
+       58    }
+       59 -  del.End() // wait, so no delete can land after a write below
+       59 +  deleted := del.finish("delete") // waits, so no delete can l
+          +and after a write below                                       
+       60  
+       61    // Step 2: write.
+       62 -  bw := fs.BulkWriter(ctx)                                    
+       62 +  bw := newBatch(fs, ctx)                                     
+       63    for _, p := range products {
+       64 -    _, err := bw.Set(fs.Collection(repository.ColProducts).Doc
+          -(p.ID), p)                                                    
+       65 -    must(err)                                                 
+       64 +    bw.set(fs.Collection(repository.ColProducts).Doc(p.ID), p)
+       65    }
+       66    for _, o := range offers {
+       68 -    _, err := bw.Set(fs.Collection(repository.ColOffers).Doc(o
+          -.ID), o)                                                      
+       69 -    must(err)                                                 
+       67 +    bw.set(fs.Collection(repository.ColOffers).Doc(o.ID), o)  
+       68    }
+       69    for _, b := range banners {
+       72 -    _, err := bw.Set(fs.Collection(repository.ColBanners).Doc(
+          -b.ID), b)                                                     
+       73 -    must(err)                                                 
+       70 +    bw.set(fs.Collection(repository.ColBanners).Doc(b.ID), b) 
+       71    }
+       72    for _, k := range keys {
+       76 -    _, err := bw.Set(fs.Collection(repository.ColKeys).Doc(k.I
+          -D), k)                                                        
+       77 -    must(err)                                                 
+       73 +    bw.set(fs.Collection(repository.ColKeys).Doc(k.ID), k)    
+       74    }
+       79 -  bw.End()                                                    
+       75 +  bw.finish("write")                                          
+       76    log.Printf("seeded %d products, %d offers, %d banners, %d ke
+           ys; deleted %d old keys/orders/reservations",
+       77      len(products), len(offers), len(banners), len(keys), delet
+           ed)
+       78  }
+       79  
+       80 +// batch wraps a BulkWriter and keeps every job, because a Bul
+          +kWriter does not                                              
+       81 +// report failed writes by itself: each job's result has to be
+          + checked.                                                     
+       82 +// (Before this, a seed that hit the daily write quota still p
+          +rinted success.)                                              
+       83 +type batch struct {                                           
+       84 +  bw   *firestore.BulkWriter                                  
+       85 +  jobs []*firestore.BulkWriterJob                             
+       86 +}                                                             
+       87 +                                                              
+       88 +func newBatch(fs *firestore.Client, ctx context.Context) *batc
+          +h {                                                           
+       89 +  return &batch{bw: fs.BulkWriter(ctx)}                       
+       90 +}                                                             
+       91 +                                                              
+       92 +func (b *batch) set(ref *firestore.DocumentRef, v any) {      
+       93 +  j, err := b.bw.Set(ref, v)                                  
+       94 +  must(err)                                                   
+       95 +  b.jobs = append(b.jobs, j)                                  
+       96 +}                                                             
+       97 +                                                              
+       98 +func (b *batch) delete(ref *firestore.DocumentRef) {          
+       99 +  j, err := b.bw.Delete(ref)                                  
+      100 +  must(err)                                                   
+      101 +  b.jobs = append(b.jobs, j)                                  
+      102 +}                                                             
+      103 +                                                              
+      104 +// finish flushes, then stops the program if any write failed.
+          + Returns the count.                                           
+      105 +func (b *batch) finish(what string) int {                     
+      106 +  b.bw.End()                                                  
+      107 +  failed := 0                                                 
+      108 +  var first error                                             
+      109 +  for _, j := range b.jobs {                                  
+      110 +    if _, err := j.Results(); err != nil {                    
+      111 +      failed++                                                
+      112 +      if first == nil {                                       
+      113 +        first = err                                           
+      114 +      }                                                       
+      115 +    }                                                         
+      116 +  }                                                           
+      117 +  if failed > 0 {                                             
+      118 +    log.Fatalf("%d of %d %ss failed (first error: %v). Data is
+          + half-seeded: fix the cause "+                                
+      119 +      "(often the free plan's daily write quota) and run the s
+          +eed again.", failed, len(b.jobs), what, first)                
+      120 +  }                                                           
+      121 +  return len(b.jobs)                                          
+      122 +}                                                             
+      123 +                                                              
+      124  func must(err error) {
+      125    if err != nil {
+      126      log.Fatal(err)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● I've fixed the seeder and confirmed the cause. I'll save a note so future
+  sessions don't burn the quota by re-seeding again:
+
+  Ran 1 shell command, wrote 1 memory (ctrl+o to expand)
+
+● Adding to the cart fails because Firestore is refusing all writes for today.
+  The cart code itself is fine, and I caused this by re-seeding too often.
+
+  What I found:
+  - With your setup started (Firestore backend + Vite), every add-to-cart hung
+    for 20–60 seconds and then failed with a 500.
+  - Reads from Firestore still work, but even a single plain write times out.
+  - Firestore holds only 3,199 of 5,559 keys. My last seed got cut off partway,
+    and some offers (e.g. p010-o2) have no keys at all.
+  - The likely cause is your free plan's limit of 20,000 writes per day. I
+    seeded 4 times today at about 5,600 writes each, roughly 22,000. When the
+    limit is hit, the Go client keeps retrying the write until it times out,
+    which is why it looks like a hang. I couldn't see the exact error code
+    because of those retries; Firebase console → Usage will show it.
+
+  What I fixed: the seeder never checked whether its writes succeeded, so it
+  printed "seeded 5559 keys" even though about 2,400 had failed. It now checks
+  every write and stops with a clear error if any fail. I also saved a note for
+  future sessions that a seed costs about 5,600 writes and shouldn't be repeated
+  casually.
+
+  What you can do:
+  1. Today: set STORE=memory in backend/.env. Everything works with no Firebase,
+     including cart, checkout and keys.
+  2. After the limit resets (midnight US Pacific, about 10:00 Lithuanian time),
+     run go run ./cmd/seed once. Firestore is half-seeded right now, so it needs
+     that one re-seed before carts work again. Then set STORE=firestore back.
+  3. Optional: upgrading to the pay-as-you-go Blaze plan removes the daily limit
+     (a few cents at this volume). That's your decision.
+
+  A suggestion: I could lower the stock numbers in the seed data (e.g. 5–30 per
+  offer, about 800 keys instead of 5,600). Seeding would then cost about 1/7 as
+  much, and sold-out offers would be easy to show. Should I make that change?
+
+  The backend builds. Nothing is committed yet.
 
   ## Session 2 - 2026-12-13 cleaning up the skeleton + connecting db
 

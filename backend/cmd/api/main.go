@@ -62,7 +62,7 @@ func main() {
 	cart := service.NewCart(repo)
 	go sweepExpiredReservations(ctx, cart)
 
-	h := &handler.Handler{Catalog: service.NewCatalog(repo), Cart: cart}
+	h := &handler.Handler{Catalog: service.NewCatalog(repo), Cart: cart, Orders: service.NewOrders(repo)}
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           router.New(h, verifier, cfg.CORSOrigins),

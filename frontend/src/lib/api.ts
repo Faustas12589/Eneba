@@ -1,5 +1,6 @@
 import { getIdToken } from "./firebase";
-import type { Banner, CartLine, Product, ProductDetail, ProductPage, ServerLine } from "../types";
+import { guestId } from "./guest";
+import type { Banner, CartUpdate, Order, Product, ProductDetail, ProductPage } from "../types";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
@@ -16,6 +17,7 @@ export class ApiError extends Error {
 
 interface RequestOpts {
   auth?: boolean;
+  guest?: boolean; // send this browser's guest id (orders, while login is off)
   signal?: AbortSignal;
   method?: "GET" | "PUT" | "POST";
   body?: unknown; // sent as JSON
@@ -27,6 +29,7 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
     const token = await getIdToken();
     if (token) headers.Authorization = `Bearer ${token}`;
   }
+  if (opts.guest) headers["X-Guest-Id"] = guestId();
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   const res = await fetch(`${BASE}${path}`, {
     method: opts.method ?? "GET",
@@ -71,14 +74,20 @@ export const api = {
   banners: () => request<{ items: Banner[] }>("/api/home/banners"),
   bestSellers: () => request<{ items: Product[] }>("/api/home/best-sellers"),
   deals: () => request<{ items: Product[] }>("/api/home/deals"),
-  /** Reserve/release stock so the cart holds exactly `quantity` (0 = remove). 409 = not enough stock. */
+  /**
+   * Reserve/release stock so the cart holds exactly `quantity` (0 = remove).
+   * Returns the cart as stored. 409 = not enough stock, 410 = cart already paid.
+   */
   setCartItem: (cartId: string, offerId: string, quantity: number) =>
-    request<CartLine>(`/api/carts/${encodeURIComponent(cartId)}/items/${encodeURIComponent(offerId)}`, {
+    request<CartUpdate>(`/api/carts/${encodeURIComponent(cartId)}/items/${encodeURIComponent(offerId)}`, {
       method: "PUT",
       body: { quantity },
     }),
-  /** What the server still reserves for this cart (expired lines are missing). */
-  cart: (cartId: string) =>
-    request<{ items: ServerLine[] }>(`/api/carts/${encodeURIComponent(cartId)}`),
+  /** The cart order as stored (expired lines are gone). 410 = cart already paid. */
+  cart: (cartId: string) => request<Order>(`/api/carts/${encodeURIComponent(cartId)}`),
   me: () => request<{ uid: string; email: string }>("/api/me", { auth: true }),
+  /** Simulated payment: turns the cart into a delivered order with its keys. Safe to retry. */
+  checkout: (cartId: string) =>
+    request<Order>("/api/orders", { guest: true, method: "POST", body: { cartId } }),
+  orders: (signal?: AbortSignal) => request<{ items: Order[] }>("/api/orders", { guest: true, signal }),
 };

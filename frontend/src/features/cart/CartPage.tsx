@@ -4,7 +4,7 @@ import { useCart } from "./CartContext";
 import { CartLine } from "./CartLine";
 
 export function CartPage() {
-  const { items, count, total } = useCart();
+  const { items, count, total, currency } = useCart();
 
   if (items.length === 0) {
     return (
@@ -26,7 +26,7 @@ export function CartPage() {
         <aside className="cart-summary">
           <div className="cart-total">
             <span>Suma ({formatItemCount(count)})</span>
-            <span className="price">{formatPrice(total, items[0].currency)}</span>
+            <span className="price">{formatPrice(total, currency)}</span>
           </div>
           <p className="muted small">Galutinė kaina patvirtinama atsiskaitant.</p>
           <Link to="/checkout" className="btn block">Atsiskaityti dabar</Link>

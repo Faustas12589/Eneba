@@ -56,7 +56,7 @@ only in memory mode; production (`STORE=firestore`) always verifies real Firebas
 Rejected: returning 503 without Firebase (checkout untestable offline);
 a Firebase Auth emulator (extra tooling to install and explain).
 
-## 11. Digital keys: seeded pool per offer (planned, checkout slice)
+## 11. Digital keys: seeded pool per offer (built differently, see #19)
 `seeds/keys.json` holds fake keys per offer; an offer's stock = its unsold keys.
 Checkout runs one Firestore transaction: read the cart's offers, claim N unsold
 keys (mark sold + orderId), write the order. Two buyers can't get the same key
@@ -141,3 +141,65 @@ Neon), or a search engine (Typesense/Meilisearch) next to Firestore.
 Rejected for now: migrating to Postgres (rewrite of the repository layer and stock
 transactions, a new `pgx` dependency, new hosting, for no visible gain at this size);
 a separate search service (one more thing to deploy and keep in sync).
+
+## 19. The cart is an order; keys are reserved from the pool at cart time (supersedes #11, storage part of #15)
+Two new collections. `keys`: `{offerId, code, status, orderId}`, status
+`available -> reserved -> sold`. `orders`: status `cart -> paid -> delivered`. A cart is
+simply an order in status `cart` (doc id = the browser's cartId), so one document goes
+from basket to receipt, and a key's `orderId` points at it the whole way.
+- Add to cart (#15 rule unchanged): the same transaction moves stock, updates the cart's
+  line and flips that many keys `available -> reserved` (orderId = cart). Removing or
+  expiring (#16) flips them back. So a key can only be taken from the unreserved pool,
+  and `offers.stock` always equals the offer's available keys (seed: exactly `stock`
+  keys per offer, generated in `seeds/keys.go`). The counter stays so the product page
+  doesn't have to count keys. Tests check stock == available keys after every step.
+- Checkout `POST /api/orders {cartId}` (signed in), two transactions:
+  pay (cart -> paid: owner, server prices, total) then deliver (paid -> delivered: the
+  reserved keys become sold, codes copied into the order as a receipt). Delivery can't
+  run out because the keys were reserved earlier. Retrying finishes a paid order or
+  returns the delivered one; another user's cart answers 404.
+- A paid cart is closed: changing it returns 410, and the browser starts a new cartId.
+- Rules (`pay`, `deliver`, `reserve`) are pure functions in `service`; repositories run them atomically.
+Rejected: claiming keys only at checkout (#11's plan: reservation would be a counter
+without real keys behind it); keeping a separate `reservations` collection next to orders
+(two places describe the same cart); one transaction for pay + deliver (the `paid`
+stage would never be visible, and a failed delivery would undo the payment).
+Trade-offs: everyone adding the same offer queries the same first available keys, so
+Firestore retries under heavy contention (fine at demo traffic). Seeded codes are
+deterministic, i.e. fake. Re-seeding wipes carts and orders.
+
+## 20. Login switched off for now: orders belong to a browser guest id
+Checkout and order history no longer need sign-in. The browser makes a random id once
+(`lib/guest.ts`, localStorage) and sends it as `X-Guest-Id`; `middleware.RequireGuest`
+turns it into the user `guest:<id>`, so handlers, services and the `orders.userId` field
+are unchanged. Same trust model as cart ids (#15): long, random, unguessable.
+Why: real Firebase sign-in blocked testing on Firestore, and the dev token (#10) only
+works in memory mode. Undo: use `RequireAuth(verifier)` for the orders group in
+`router.go`, wrap `/checkout` and `/orders` in `<RequireAuth>`, restore the header login
+button. The Firebase auth code is kept.
+Trade-off: orders live in one browser; clearing storage or switching device loses the
+history (the orders stay in Firestore). Rejected: one shared fake user (every visitor
+would see everyone's keys).
+
+## 21. Order data is written once; stages only change status fields (refines #19, supersedes #13)
+When a line goes into the cart, the server writes it whole into the cart order: product
+name, image, seller, price (snapshot from that moment), quantity, `expiresAt` and the
+reserved keys (`{id, code}`); `total` is updated on every cart change. After that:
+- pay (cart -> paid) only sets `status`, `userId`, `paidAt` and clears `expiresAt`;
+- deliver (paid -> delivered) only sets `status`, `deliveredAt` and marks the keys sold.
+Checkout never looks up products or prices, so it can't "repair" or change data
+(test: `TestCheckoutOnlyChangesState`; checked on Firestore by diffing the document).
+- `paidAt`, `deliveredAt`, `expiresAt` are nullable (`*time.Time`): null until that
+  stage, instead of Go's zero date `0001-01-01`.
+- Key codes sit on the order from cart time, but the API shows them only once the order
+  is delivered (`Order.Public()`), so a cart can't leak free keys. Firestore is
+  backend-only (#12), so storing them there is safe.
+- Releasing units gives back the line's last keys by id, no query needed.
+- The browser renders the cart from the server's order (`GET /api/carts/{id}`, and every
+  `PUT` returns the stored cart). localStorage keeps only the cart id (supersedes #13's
+  browser-side snapshot). A paid cart answers 410 and the browser starts a new one.
+Trade-off: the price is fixed when the line is added, so a later price change does not
+affect carts already holding it (like a reservation). That replaces #7's "re-read prices
+at checkout"; still safe because only the server writes the price.
+Rejected: filling names/prices at payment (data appears late and checkout does two jobs);
+keeping a browser copy of the lines (two sources of truth that drift).

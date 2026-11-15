@@ -53,13 +53,43 @@ export interface ProductDetail {
   offers: Offer[];
 }
 
-/** Server's answer to a cart change (and the body of a 409, minus offerId). */
-export interface CartLine {
+/** cart -> paid -> delivered. The cart is the first stage of an order. */
+export type OrderStatus = "cart" | "paid" | "delivered";
+
+/** Mirrors domain.OrderItem: written whole when the line goes into the cart. */
+export interface OrderItem {
   offerId: string;
-  quantity: number; // units this cart now reserves
-  stock: number; // units still available to everyone else
-  expiresAt?: string; // ISO time the reservation is released (absent when removed)
+  productId: string;
+  productName: string;
+  imageUrl: string;
+  sellerName: string;
+  price: number; // cents per unit, as when the line was added
+  quantity: number;
+  expiresAt: string | null; // reservation end while in the cart; null once paid
+  keys: { code: string }[] | null; // the server only shows codes once delivered
 }
 
-/** GET /api/carts/{id}: what the server still reserves for one offer. */
-export type ServerLine = Omit<CartLine, "stock">; // offerId, quantity, expiresAt
+/** Mirrors domain.Order. A cart is an order with status "cart". */
+export interface Order {
+  id: string;
+  status: OrderStatus;
+  items: OrderItem[];
+  total: number; // cents
+  currency: string;
+  createdAt: string;
+  paidAt: string | null;
+  deliveredAt: string | null;
+}
+
+/** PUT /api/carts/{id}/items/{offerId}: the cart as stored + units left of that offer. */
+export interface CartUpdate {
+  cart: Order;
+  offerId: string;
+  stock: number;
+}
+
+/** Body of a 409 on a cart change: units left, and what this cart still holds. */
+export interface OutOfStock {
+  stock: number;
+  quantity: number;
+}

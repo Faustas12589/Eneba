@@ -1,6 +1,5 @@
 import { BrowserRouter, Outlet, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "../features/auth/AuthContext";
-import { RequireAuth } from "../features/auth/RequireAuth";
 import { LoginPage } from "../features/auth/LoginPage";
 import { HomePage } from "../features/home/HomePage";
 import { StorePage } from "../features/store/StorePage";
@@ -36,8 +35,9 @@ export function App() {
             <Route path="/product/:id" element={<ProductPage />} />
             <Route path="/cart" element={<CartPage />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
-            <Route path="/orders" element={<RequireAuth><OrdersPage /></RequireAuth>} />
+            {/* Login is off for now (DECISIONS #20); wrap in <RequireAuth> to bring it back. */}
+            <Route path="/checkout" element={<CheckoutPage />} />
+            <Route path="/orders" element={<OrdersPage />} />
             <Route path="*" element={<div className="page container"><h1>Puslapis nerastas</h1></div>} />
           </Route>
         </Routes>

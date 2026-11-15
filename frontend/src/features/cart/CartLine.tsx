@@ -2,15 +2,16 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { formatPrice, formatTime } from "../../lib/format";
 import { useCart } from "./CartContext";
-import type { CartItem } from "./cart";
+import type { OrderItem } from "../../types";
 
 /**
  * One cart row; used by both the cart page and the header dropdown (CSS sizes it).
  * Every change goes to the server first (it reserves/releases stock), so the
  * buttons are disabled while a request is in flight.
  */
-export function CartLine({ item }: { item: CartItem }) {
-  const { setQty } = useCart();
+export function CartLine({ item }: { item: OrderItem }) {
+  const { setQty, liveStock, currency } = useCart();
+  const stock = liveStock[item.offerId]; // known once this browser changed the line
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +27,7 @@ export function CartLine({ item }: { item: CartItem }) {
       <div className="cart-info">
         <Link to={`/product/${item.productId}`} className="card-title">{item.productName}</Link>
         <span className="muted small">Pardavėjas: {item.sellerName}</span>
-        <span className="muted small">Dar liko: {item.stock} vnt.</span>
+        {stock !== undefined && <span className="muted small">Dar liko: {stock} vnt.</span>}
         {item.expiresAt && <span className="muted small">Rezervuota iki {formatTime(item.expiresAt)}</span>}
         <button type="button" className="link-btn" disabled={busy} onClick={() => change(0)}>Pašalinti</button>
       </div>
@@ -38,7 +39,7 @@ export function CartLine({ item }: { item: CartItem }) {
         </div>
         {error && <p className="error small" role="alert">{error}</p>}
       </div>
-      <span className="price">{formatPrice(item.price * item.quantity, item.currency)}</span>
+      <span className="price">{formatPrice(item.price * item.quantity, currency)}</span>
     </li>
   );
 }

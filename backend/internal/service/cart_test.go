@@ -61,12 +61,12 @@ func TestSetQuantityMovesStock(t *testing.T) {
 	ctx := context.Background()
 	start := stockOf(t, m, testOffer)
 
-	line, err := s.SetQuantity(ctx, testCart, testOffer, 3)
+	res, err := s.SetQuantity(ctx, testCart, testOffer, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if line.Quantity != 3 || line.Stock != start-3 || stockOf(t, m, testOffer) != start-3 {
-		t.Fatalf("after reserving 3: line=%+v stock=%d", line, stockOf(t, m, testOffer))
+	if it := res.Cart.Item(testOffer); it == nil || it.Quantity != 3 || res.Stock != start-3 || stockOf(t, m, testOffer) != start-3 {
+		t.Fatalf("after reserving 3: res=%+v stock=%d", res, stockOf(t, m, testOffer))
 	}
 
 	// Same request again (e.g. a retry) changes nothing.
@@ -143,6 +143,7 @@ func TestSetQuantityNoOversell(t *testing.T) {
 	if won != stock || stockOf(t, m, testOffer) != 0 {
 		t.Fatalf("won=%d (want %d), stock left=%d", won, stock, stockOf(t, m, testOffer))
 	}
+	checkKeys(t, m, testOffer, stock, 0) // every winner holds exactly one key
 }
 
 func TestReleaseExpired(t *testing.T) {
@@ -157,8 +158,8 @@ func TestReleaseExpired(t *testing.T) {
 	if n, err := s.ReleaseExpired(ctx, time.Now()); err != nil || n != 0 {
 		t.Fatalf("released %d too early (err %v)", n, err)
 	}
-	if lines, _ := s.Lines(ctx, testCart); len(lines) != 1 || lines[0].Quantity != 4 {
-		t.Fatalf("cart should still hold 4: %+v", lines)
+	if c, _ := s.Get(ctx, testCart); len(c.Items) != 1 || c.Items[0].Quantity != 4 {
+		t.Fatalf("cart should still hold 4: %+v", c)
 	}
 
 	// Pretend 31 minutes passed: stock comes back and the cart is empty.
@@ -169,7 +170,8 @@ func TestReleaseExpired(t *testing.T) {
 	if stockOf(t, m, testOffer) != start {
 		t.Fatalf("stock not restored: %d, want %d", stockOf(t, m, testOffer), start)
 	}
-	if lines, _ := s.Lines(ctx, testCart); len(lines) != 0 {
-		t.Fatalf("expired line still in cart: %+v", lines)
+	if c, _ := s.Get(ctx, testCart); len(c.Items) != 0 {
+		t.Fatalf("expired line still in cart: %+v", c)
 	}
+	checkKeys(t, m, testOffer, 0, 0) // reserved keys are available again
 }

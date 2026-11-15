@@ -32,7 +32,14 @@ func New(h *handler.Handler, verifier middleware.TokenVerifier, corsOrigins []st
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireAuth(verifier))
 			r.Get("/me", h.Me)
-			// TODO: checkout, orders
+		})
+
+		// Orders belong to a browser guest id while login is switched off
+		// (DECISIONS #20). To require login again: RequireAuth(verifier) here.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireGuest())
+			r.Post("/orders", h.Checkout)
+			r.Get("/orders", h.ListOrders)
 		})
 	})
 	return r
