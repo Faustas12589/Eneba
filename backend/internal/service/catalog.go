@@ -131,15 +131,16 @@ func (c *Catalog) List(ctx context.Context, f Filter) (Page, error) {
 	sortProducts(out, f.Sort, rank, f.Q != "")
 
 	total := len(out)
-	start := (f.Page - 1) * f.PageSize
-	if start > total {
-		start = total
-	}
-	end := start + f.PageSize
-	if end > total {
-		end = total
-	}
+	start, end := pageBounds(f.Page, f.PageSize, total)
 	return Page{Items: out[start:end], Total: total, Page: f.Page, PageSize: f.PageSize, Facets: facets(all)}, nil
+}
+
+// pageBounds returns the slice range [start, end) of a 1-based page. A page
+// past the end gives an empty range instead of an out-of-bounds slice.
+func pageBounds(page, pageSize, total int) (start, end int) {
+	start = min((page-1)*pageSize, total)
+	end = min(start+pageSize, total)
+	return start, end
 }
 
 func (c *Catalog) byIDLocked(id string) domain.Product {

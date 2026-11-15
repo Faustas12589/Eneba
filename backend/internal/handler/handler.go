@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"eneba-marketplace/backend/internal/domain"
 	"eneba-marketplace/backend/internal/middleware"
 	"eneba-marketplace/backend/internal/repository"
 	"eneba-marketplace/backend/internal/service"
@@ -198,17 +197,16 @@ func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ListOrders: GET /api/orders -> {"items": [order...]} for the request's user, newest first.
+// ListOrders: GET /api/orders?page=&pageSize= -> {"items", "total", "page", "pageSize"}
+// for the request's user, newest first.
 func (h *Handler) ListOrders(w http.ResponseWriter, r *http.Request) {
-	orders, err := h.Orders.List(r.Context(), middleware.UserFrom(r.Context()).UID)
+	q := r.URL.Query()
+	pg, err := h.Orders.List(r.Context(), middleware.UserFrom(r.Context()).UID, atoi(q.Get("page")), atoi(q.Get("pageSize")))
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	if orders == nil {
-		orders = []domain.Order{} // JSON [] instead of null
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": orders})
+	writeJSON(w, http.StatusOK, pg)
 }
 
 // --- helpers ----------------------------------------------------------

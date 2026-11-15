@@ -52,18 +52,42 @@ func (s *Orders) Checkout(ctx context.Context, userID, cartID string) (*domain.O
 	return &pub, nil
 }
 
-// List returns a user's orders, newest first, as the API shows them.
+// OrderPage is one page of a user's order history.
+type OrderPage struct {
+	Items    []domain.Order `json:"items"`
+	Total    int            `json:"total"`
+	Page     int            `json:"page"`
+	PageSize int            `json:"pageSize"`
+}
+
+// List returns one page of a user's orders, newest first, as the API shows them.
 // Carts are not listed: they have no user until they are paid.
-func (s *Orders) List(ctx context.Context, userID string) ([]domain.Order, error) {
+// All of the user's orders are read, then sorted and cut here: a shopper has
+// tens of orders, and it needs no Firestore composite index (DECISIONS #22).
+func (s *Orders) List(ctx context.Context, userID string, page, pageSize int) (OrderPage, error) {
 	orders, err := s.repo.ListUserOrders(ctx, userID)
 	if err != nil {
-		return nil, err
+		return OrderPage{}, err
 	}
-	sort.Slice(orders, func(i, j int) bool { return paidTime(orders[i]).After(paidTime(orders[j])) })
-	for i := range orders {
-		orders[i] = orders[i].Public()
+	if page < 1 {
+		page = 1
 	}
-	return orders, nil
+	if pageSize < 1 || pageSize > 50 {
+		pageSize = 10
+	}
+	sort.Slice(orders, func(i, j int) bool {
+		ti, tj := paidTime(orders[i]), paidTime(orders[j])
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		return orders[i].ID < orders[j].ID // same time: fixed order, so pages don't overlap
+	})
+	start, end := pageBounds(page, pageSize, len(orders))
+	items := make([]domain.Order, 0, end-start) // JSON [] instead of null
+	for _, o := range orders[start:end] {
+		items = append(items, o.Public())
+	}
+	return OrderPage{Items: items, Total: len(orders), Page: page, PageSize: pageSize}, nil
 }
 
 func paidTime(o domain.Order) time.Time {

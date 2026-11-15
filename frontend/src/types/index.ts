@@ -81,6 +81,14 @@ export interface Order {
   deliveredAt: string | null;
 }
 
+/** GET /api/orders: one page of order history, newest first. */
+export interface OrderPage {
+  items: Order[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 /** PUT /api/carts/{id}/items/{offerId}: the cart as stored + units left of that offer. */
 export interface CartUpdate {
   cart: Order;

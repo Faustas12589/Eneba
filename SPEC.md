@@ -15,7 +15,7 @@ status; the "why" column is what I will say when asked.
 | Auth | Switched off | Firebase Auth email/password code is kept but not used: orders belong to a browser guest id for now (DECISIONS #20). Dev mode without Firebase (#10). TODO: turn back on; Google sign-in? (optional) |
 | Cart | Done | The cart is a server-side order (status `cart`); the UI renders that document and the browser keeps only the cart id. Stock + keys reserved when an item is added (DECISIONS #15, #19, #21). Popup, header dropdown, live stock errors. |
 | Checkout + key delivery | Done | Cart is the first stage of an order: cart -> paid -> delivered. Keys are reserved from the available pool when added to the cart, sold on delivery. Line data (name, price, keys) is written once at add time; checkout only changes status fields. Simulated payment (DECISIONS #8, #19, #21). |
-| Order history | Done | Per browser guest id while login is off (DECISIONS #20); `GET /api/orders`, page lists orders with copyable key codes. |
+| Order history | Done | Per browser guest id while login is off (DECISIONS #20); `GET /api/orders?page=`, paged 10 per page (#22), lists orders with copyable key codes. |
 | Eneba styling | TODO | Tokens-driven (tokens.css is still placeholder). Extract real values into docs/DESIGN.md first. |
 
 ## Explicitly out of scope (and why)

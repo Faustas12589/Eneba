@@ -203,3 +203,14 @@ affect carts already holding it (like a reservation). That replaces #7's "re-rea
 at checkout"; still safe because only the server writes the price.
 Rejected: filling names/prices at payment (data appears late and checkout does two jobs);
 keeping a browser copy of the lines (two sources of truth that drift).
+
+## 22. Order history is paged in the service, like the store
+`GET /api/orders?page=&pageSize=` returns `{items, total, page, pageSize}` (default 10, max 50),
+the same shape as `/api/products`. The service reads all of the user's orders, sorts them
+newest first (ties broken by id so pages never overlap) and cuts the page with
+`pageBounds`, which the catalog now shares. The frontend has one `Pager` component for both
+pages; the page number lives in the URL (`/orders?page=2`), so back/forward works.
+Why in Go: a shopper has tens of orders, and a Firestore `where userId ==` + `orderBy paidAt`
+query needs a composite index to deploy and explain.
+Rejected: Firestore `limit` + cursor paging (index + cursor tokens in the API; only worth it
+for users with thousands of orders); `offset` in Firestore (still bills the skipped reads).

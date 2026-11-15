@@ -1,26 +1,39 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useAsync } from "../../lib/useAsync";
 import { Status } from "../../components/Status";
+import { Pager } from "../../components/Pager";
 import { OrderCard } from "./OrderCard";
 
-/** The signed-in user's past orders (newest first) with their key codes. */
+/** This browser's past orders (newest first, paged) with their key codes. Page number lives in the URL. */
 export function OrdersPage() {
-  const state = useAsync((signal) => api.orders(signal), []);
+  const [sp, setSp] = useSearchParams();
+  const page = Number(sp.get("page")) || 1;
+  const state = useAsync((signal) => api.orders(page, signal), [page]);
+
+  function goTo(n: number) {
+    setSp(n > 1 ? { page: String(n) } : {});
+    window.scrollTo(0, 0);
+  }
+
   return (
     <div className="page container narrow">
       <h1>Mano užsakymai</h1>
       <Status state={state}>
-        {({ items }) =>
-          items.length === 0 ? (
+        {(pg) =>
+          pg.total === 0 ? (
             <>
               <p className="muted">Užsakymų dar nėra.</p>
               <Link to="/store" className="btn">Į parduotuvę</Link>
             </>
           ) : (
-            <div className="orders">
-              {items.map((o) => <OrderCard key={o.id} order={o} />)}
-            </div>
+            <>
+              <div className="orders">
+                {pg.items.map((o) => <OrderCard key={o.id} order={o} />)}
+              </div>
+              {pg.items.length === 0 && <p className="muted">Šiame puslapyje užsakymų nėra.</p>}
+              <Pager page={pg.page} pageSize={pg.pageSize} total={pg.total} onPage={goTo} />
+            </>
           )
         }
       </Status>

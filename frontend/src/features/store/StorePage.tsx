@@ -3,6 +3,7 @@ import { api, type ProductQuery } from "../../lib/api";
 import { useAsync } from "../../lib/useAsync";
 import { Status } from "../../components/Status";
 import { ProductCard } from "../../components/ProductCard";
+import { Pager } from "../../components/Pager";
 import { formatItemCount } from "../../lib/format";
 
 const SORTS = [
@@ -93,13 +94,7 @@ export function StorePage() {
               {pg.items.length === 0 ? <p>Pagal šiuos filtrus prekių nerasta.</p> : (
                 <div className="grid">{pg.items.map((p) => <ProductCard key={p.id} p={p} />)}</div>
               )}
-              {pg.total > pg.pageSize && (
-                <div className="pager">
-                  <button className="btn secondary" disabled={pg.page <= 1} onClick={() => set("page", String(pg.page - 1))}>Ankstesnis</button>
-                  <span className="muted">Puslapis {pg.page} / {Math.ceil(pg.total / pg.pageSize)}</span>
-                  <button className="btn secondary" disabled={pg.page * pg.pageSize >= pg.total} onClick={() => set("page", String(pg.page + 1))}>Kitas</button>
-                </div>
-              )}
+              <Pager page={pg.page} pageSize={pg.pageSize} total={pg.total} onPage={(n) => set("page", String(n))} />
             </>
           )}
         </Status>

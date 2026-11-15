@@ -1,6 +1,6 @@
 import { getIdToken } from "./firebase";
 import { guestId } from "./guest";
-import type { Banner, CartUpdate, Order, Product, ProductDetail, ProductPage } from "../types";
+import type { Banner, CartUpdate, Order, OrderPage, Product, ProductDetail, ProductPage } from "../types";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
@@ -89,5 +89,7 @@ export const api = {
   /** Simulated payment: turns the cart into a delivered order with its keys. Safe to retry. */
   checkout: (cartId: string) =>
     request<Order>("/api/orders", { guest: true, method: "POST", body: { cartId } }),
-  orders: (signal?: AbortSignal) => request<{ items: Order[] }>("/api/orders", { guest: true, signal }),
+  /** One page of this browser's orders, newest first. */
+  orders: (page: number, signal?: AbortSignal) =>
+    request<OrderPage>(`/api/orders?page=${page}`, { guest: true, signal }),
 };

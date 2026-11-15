@@ -120,11 +120,52 @@ func TestCheckoutOnlyChangesState(t *testing.T) {
 	if _, err := cart.Get(ctx, testCart); !errors.Is(err, repository.ErrCartClosed) {
 		t.Fatalf("reading a paid cart as a cart: got %v", err)
 	}
-	if list, _ := orders.List(ctx, "user-1"); len(list) != 1 || list[0].ID != testCart {
-		t.Fatalf("order history: %+v", list)
+	if pg, _ := orders.List(ctx, "user-1", 1, 10); pg.Total != 1 || pg.Items[0].ID != testCart {
+		t.Fatalf("order history: %+v", pg)
 	}
-	if list, _ := orders.List(ctx, "user-2"); len(list) != 0 {
-		t.Fatalf("other user sees orders: %+v", list)
+	if pg, _ := orders.List(ctx, "user-2", 1, 10); pg.Total != 0 || len(pg.Items) != 0 {
+		t.Fatalf("other user sees orders: %+v", pg)
+	}
+}
+
+// Three orders, two per page: page 1 has the two newest, page 2 the oldest,
+// a page past the end is empty, and bad paging input falls back to defaults.
+func TestOrderHistoryPages(t *testing.T) {
+	cart, m := newCartSvc(t)
+	orders := NewOrders(m)
+	ctx := context.Background()
+	carts := []string{"cart-1111111111111111", "cart-2222222222222222", "cart-3333333333333333"}
+	for _, id := range carts {
+		if _, err := cart.SetQuantity(ctx, id, testOffer, 1); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := orders.Checkout(ctx, "user-1", id); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(2 * time.Millisecond) // distinct paidAt, so "newest first" is testable
+	}
+
+	ids := func(pg OrderPage) []string {
+		out := []string{}
+		for _, o := range pg.Items {
+			out = append(out, o.ID)
+		}
+		return out
+	}
+	p1, _ := orders.List(ctx, "user-1", 1, 2)
+	p2, _ := orders.List(ctx, "user-1", 2, 2)
+	p3, _ := orders.List(ctx, "user-1", 3, 2)
+	if !reflect.DeepEqual(ids(p1), []string{carts[2], carts[1]}) || p1.Total != 3 {
+		t.Fatalf("page 1: %v total %d", ids(p1), p1.Total)
+	}
+	if !reflect.DeepEqual(ids(p2), []string{carts[0]}) {
+		t.Fatalf("page 2: %v", ids(p2))
+	}
+	if len(p3.Items) != 0 || p3.Items == nil {
+		t.Fatalf("page past the end should be an empty list: %#v", p3.Items)
+	}
+	if def, _ := orders.List(ctx, "user-1", -1, 1000); def.Page != 1 || def.PageSize != 10 || len(def.Items) != 3 {
+		t.Fatalf("defaults: page %d size %d items %d", def.Page, def.PageSize, len(def.Items))
 	}
 }
 
