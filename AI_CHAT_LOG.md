@@ -9658,10 +9658,4014 @@ code 0)
 
   The backend builds. Nothing is committed yet.
 
-  ## Session 2 - 2026-12-13 cleaning up the skeleton + connecting db
+  ## Session 5 - 2026-11-16 matching official sites UI and UX to the copy
 
-  ## Session 2 - 2026-12-13 cleaning up the skeleton + connecting db
+  
+> /clear
 
-  ## Session 2 - 2026-12-13 cleaning up the skeleton + connecting db
+> <ide_opened_file>The user opened the file c:\Users\faust\Desktop\OneDrive -
+  Kaunas University of
+  Technology\temp-------------------------------\Eneba\backend\.env in the IDE.
+  This may or may not be related to the current task.</ide_opened_file>
+
+> can you clear the db and reseed?
+
+  Searched for 1 pattern, ran 2 shell commands (ctrl+o to expand)
+
+● The seed script only clears keys, orders and reservations, so products,
+  offers, banners and profiles survive a "clear." I'm widening the delete step
+  to cover every collection. · summary
+
+● Bash(sed -i 's|for _, col := range \[\]string{repository.ColKeys,
+      repository.ColOrders, repository.ColReservations} {|for _, col := range
+      []string{\n\t\trepository.C…)
+  ⎿  Updated backend\cmd\seed\main.go (+132 -128)
+        1 -// Seeds Firestore from the embedded JSON files plus a generat
+          -ed key pool.                                                  
+        2 -// Idempotent: documents are keyed by id, so re-running overwr
+          -ites instead of                                               
+        3 -// duplicating. It is a full demo reset: carts and orders are 
+          -deleted too.                                                  
+        4 -//                                                            
+        5 -// Cost: about 2 x 5600 writes/deletes per run. The free (Spar
+          -k) plan allows                                                
+        6 -// 20k writes and 20k deletes per day, so only seed a few time
+          -s a day.                                                      
+        7 -//                                                            
+        8 -//      FIREBASE_PROJECT_ID=... GOOGLE_APPLICATION_CREDENTIALS
+          -=./sa.json go run ./cmd/seed                                  
+        9 -package main                                                  
+       10 -                                                              
+       11 -import (                                                      
+       12 -        "context"                                             
+       13 -        "log"                                                 
+       14 -                                                              
+       15 -        "cloud.google.com/go/firestore"                       
+       16 -        "google.golang.org/api/option"                        
+       17 -                                                              
+       18 -        "eneba-marketplace/backend/internal/config"           
+       19 -        "eneba-marketplace/backend/internal/domain"           
+       20 -        "eneba-marketplace/backend/internal/repository"       
+       21 -        "eneba-marketplace/backend/seeds"                     
+       22 -)                                                             
+       23 -                                                              
+       24 -func main() {                                                 
+       25 -        cfg := config.Load()                                  
+       26 -        if cfg.FirebaseProj == "" {                           
+       27 -                log.Fatal("FIREBASE_PROJECT_ID is required")  
+       28 -        }                                                     
+       29 -        ctx := context.Background()                           
+       30 -        var opts []option.ClientOption                        
+       31 -        if cfg.FirebaseCredsJSON != "" {                      
+       32 -                opts = append(opts, option.WithCredentialsJSON
+          -([]byte(cfg.FirebaseCredsJSON)))                              
+       33 -        }                                                     
+       34 -        fs, err := firestore.NewClient(ctx, cfg.FirebaseProj, 
+          -opts...)                                                      
+       35 -        if err != nil {                                       
+       36 -                log.Fatal(err)                                
+       37 -        }                                                     
+       38 -        defer fs.Close()                                      
+       39 -                                                              
+       40 -        var products []domain.Product                         
+     … 220 more lines (ctrl+o to expand)
+
+● Bash(grep -n "old keys/orders/reservations" cmd/seed/main.go; sed -i 's|old
+      keys/orders/reservations|old docs|' cmd/seed/main.go; go build ./cmd/seed
+      && git diff --s…)
+  ⎿  Updated backend\cmd\seed\main.go (+1 -1)
+      77                  bw.set(fs.Collection(repository.ColKeys).Doc(k.
+          ID), k)
+      78          }
+      79          bw.finish("write")
+      80 -        log.Printf("seeded %d products, %d offers, %d banners, 
+         -%d keys; deleted %d old keys/orders/reservations",             
+      80 +        log.Printf("seeded %d products, %d offers, %d banners, 
+         +%d keys; deleted %d old docs",                                 
+      81                  len(products), len(offers), len(banners), len(k
+          eys), deleted)
+      82  }
+      83  
+  ⎿  … 1 more file changed (part of the diff is unavailable)
+
+● I cleared Firestore project eneba-58152 and seeded it again. It now holds 28
+  products, 72 offers, 3 banners and 348 keys, and 3,266 old documents were
+  deleted.
+
+  I had to change the seed script first. cmd/seed/main.go
+  (backend/cmd/seed/main.go) only deleted keys, orders and leftover
+  reservations. It overwrote products, offers and banners but never deleted
+  them, so a product dropped from the seed stayed in the database. It also never
+  touched profiles (recently viewed). Now it deletes every collection before
+  writing, so the database matches the seed exactly. I also changed its log line
+  to say "deleted N old docs", since it now deletes more than keys and orders.
+
+  Because of that, all carts, orders and recently-viewed/recommendation
+  histories are gone. If the site is open in a browser, its saved cart id now
+  points to a cart that no longer exists. It should clear itself on the next
+  cart refresh; if it doesn't, clearing localStorage will.
+
+  The seed script builds, but I haven't committed the change or added a
+  DECISIONS.md entry. Want me to do both?
+
+> <ide_opened_file>The user opened the file c:\Users\faust\Desktop\OneDrive -
+  Kaunas University of
+  Technology\temp-------------------------------\Eneba\backend\cmd\seed\main.go
+  in the IDE. This may or may not be related to the current
+  task.</ide_opened_file>
+
+> no, first lets connect this this app to render for online hosting
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Most of the Render setup is already scaffolded. Before deploying, I'll check
+  the pieces most likely to break in production.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Config is set: CORS allows X-Guest-Id, the API and frontend env vars are
+  wired, and main matches GitHub. Next I'll check both builds and Render's Node
+  version. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Tests and the production build pass; the exit 1 was only Docker being absent,
+  which Render doesn't need. I'm pinning Node 22 for the static site and
+  gitignoring the untracked backend/seed.exe artifact before Render pulls the
+  repo. · summary
+
+● Bash(sed -i 's|    envVars:\n      - key: VITE_API_URL||' render.yaml &&
+      python - <<'EOF'
+      p='render.yaml'…)
+  ⎿  Updated .gitignore (+27 -26)
+       1 -# secrets: NEVER commit                                        
+       2 -*.env                                                          
+       3 -.env.*                                                         
+       4 -!.env.example                                                  
+       5 -*service-account*.json                                         
+       6 -*firebase-adminsdk*.json                                       
+       7 -sa.json                                                        
+       8 -                                                               
+       9 -# node                                                         
+      10 -node_modules/                                                  
+      11 -frontend/dist/                                                 
+      12 -                                                               
+      13 -# go                                                           
+      14 -backend/bin/                                                   
+      15 -*.test                                                         
+      16 -*.out                                                          
+      17 -                                                               
+      18 -# os / editor                                                  
+      19 -.DS_Store                                                      
+      20 -.idea/                                                         
+      21 -.vscode/*                                                      
+      22 -!.vscode/extensions.json                                       
+      23 -                                                               
+      24 -                                                               
+      25 -#other                                                         
+      26 -                                                               
+       1 +# secrets: NEVER commit                                        
+       2 +*.env                                                          
+       3 +.env.*                                                         
+       4 +!.env.example                                                  
+       5 +*service-account*.json                                         
+       6 +*firebase-adminsdk*.json                                       
+       7 +sa.json                                                        
+       8 +                                                               
+       9 +# node                                                         
+      10 +node_modules/                                                  
+      11 +frontend/dist/                                                 
+      12 +                                                               
+      13 +# go                                                           
+      14 +backend/bin/                                                   
+     … 14 more lines (ctrl+o to expand)
+  ⎿  Updated render.yaml (+43 -41)
+       1 -# Render Blueprint: New > Blueprint > select this repo.        
+       2 -# Fill the `sync: false` values in the Render dashboard (they a
+         -re not stored in git).                                         
+       3 -services:                                                      
+       4 -  - type: web                                                  
+       5 -    name: eneba-api                                            
+       6 -    runtime: docker                                            
+       7 -    rootDir: backend                                           
+       8 -    dockerfilePath: ./Dockerfile                               
+       9 -    plan: free                                                 
+      10 -    healthCheckPath: /healthz                                  
+      11 -    envVars:                                                   
+      12 -      - key: STORE                                             
+      13 -        value: firestore                                       
+      14 -      - key: FIREBASE_PROJECT_ID                               
+      15 -        sync: false                                            
+      16 -      - key: FIREBASE_CREDENTIALS_JSON   # paste the whole serv
+         -ice-account JSON                                               
+      17 -        sync: false                                            
+      18 -      - key: CORS_ORIGINS                # the frontend URL, e.
+         -g. https://eneba-web.onrender.com                              
+      19 -        sync: false                                            
+      20 -                                                               
+      21 -  - type: web                                                  
+      22 -    name: eneba-web                                            
+      23 -    runtime: static                                            
+      24 -    rootDir: frontend                                          
+      25 -    buildCommand: npm ci && npm run build                      
+      26 -    staticPublishPath: dist                                    
+      27 -    routes:                                                    
+      28 -      - type: rewrite                    # SPA fallback for cli
+         -ent-side routes                                                
+      29 -        source: /*                                             
+      30 -        destination: /index.html                               
+      31 -    envVars:                                                   
+      32 -      - key: VITE_API_URL                # the API URL, e.g. ht
+         -tps://eneba-api.onrender.com                                   
+      33 -        sync: false                                            
+      34 -      - key: VITE_FIREBASE_API_KEY                             
+      35 -        sync: false                                            
+      36 -      - key: VITE_FIREBASE_AUTH_DOMAIN                         
+      37 -        sync: false                                            
+      38 -      - key: VITE_FIREBASE_PROJECT_ID                          
+      39 -        sync: false                                            
+      40 -      - key: VITE_FIREBASE_APP_ID                              
+     … 44 more lines (ctrl+o to expand)
+
+● Render deploys from GitHub, so these two files need to be pushed. I'm
+  committing only these two; the seed change stays uncommitted as you asked.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The repo is ready for Render: both builds pass and the Render config fix is
+  pushed to main (d5c6205). Creating the services has to be done in Render's
+  website while you're logged in, so these steps are yours.
+
+  1. Create the Blueprint
+  Go to dashboard.render.com, then New → Blueprint, connect GitHub and pick
+  Faustas12589/Eneba. Render reads render.yaml and proposes two free services,
+  eneba-api (Docker) and eneba-web (static site). It will then ask for the
+  values marked sync: false.
+
+  2. Fill in the values
+
+  ┌───────────┬───────────────────────────┬──────────────────────────────────┐
+  │  Service  │            Key            │              Value               │
+  ├───────────┼───────────────────────────┼──────────────────────────────────┤
+  │ eneba-api │ FIREBASE_PROJECT_ID       │ eneba-58152                      │
+  ├───────────┼───────────────────────────┼──────────────────────────────────┤
+  │           │                           │ the whole contents of the        │
+  │ eneba-api │ FIREBASE_CREDENTIALS_JSON │ service-account JSON file your   │
+  │           │                           │ backend/.env points to           │
+  │           │                           │ (GOOGLE_APPLICATION_CREDENTIALS) │
+  ├───────────┼───────────────────────────┼──────────────────────────────────┤
+  │ eneba-api │ CORS_ORIGINS              │ https://eneba-web.onrender.com   │
+  ├───────────┼───────────────────────────┼──────────────────────────────────┤
+  │ eneba-web │ VITE_API_URL              │ https://eneba-api.onrender.com   │
+  │           │                           │ (no trailing slash)              │
+  ├───────────┼───────────────────────────┼──────────────────────────────────┤
+  │ eneba-web │ VITE_FIREBASE_*           │ leave empty; login is off        │
+  │           │                           │ (DECISIONS #20)                  │
+  └───────────┴───────────────────────────┴──────────────────────────────────┘
+
+  3. Check the URLs after the first deploy
+  If the name eneba-api or eneba-web was already taken, Render adds a suffix
+  such as eneba-api-x7k2.onrender.com. In that case:
+  - Fix CORS_ORIGINS on the API to the real web address. It saves and restarts
+    on its own.
+  - Fix VITE_API_URL on the web service to the real API address, then run Manual
+    Deploy. This value is baked in at build time, so changing it alone does
+    nothing.
+
+  4. Test it
+  - Open https://<api>/healthz; it should answer OK.
+  - Then try the site: homepage, add to cart, checkout, order history.
+  - On the free tier the API goes to sleep when idle. The first request after a
+    quiet period can take about 50 seconds, so a slow first load isn't a bug.
+
+  The Firestore database you reseeded earlier is the one the live site will use,
+  so it starts clean.
+
+  Send me the real URLs once it's up (or any build-log error) and I'll check it
+  end to end, then write the DECISIONS.md entry. The seed-script change is still
+  uncommitted, as you asked.
+
+> I always forget what determines the pages url in this set up?
+
+● The name: of each service in render.yaml sets its address:
+
+  - type: web
+    name: eneba-api    # → https://eneba-api.onrender.com
+  - type: web
+    name: eneba-web    # → https://eneba-web.onrender.com
+
+  The address is always https://<name>.onrender.com. Some details:
+
+  - Names are shared across all of Render. If someone else already has
+    eneba-web, Render adds a random suffix, e.g. eneba-web-x7k2.onrender.com.
+    That's why you have to check the real URLs after the first deploy.
+  - The address is fixed when the service is created. Renaming the service later
+    (in the dashboard or in the yaml) changes only the display name, not the
+    URL. To get a different address you have to create a new service, or add a
+    custom domain under the service's Settings → Custom Domains.
+  - Paths after the domain (/store, /orders, /product/...) come from the React
+    Router routes in the frontend. The rewrite rule in render.yaml (/* →
+    /index.html) makes those paths work when you reload a page or open a link to
+    one directly.
+
+  The two services find each other only through the environment variables you
+  set: VITE_API_URL (web → API) and CORS_ORIGINS (API allows web). If either
+  address changes, update both.
+
+> somethings not right I deployed it but it fails to get to the db, can you
+  check?
+  Nepavyko įkelti: Failed to fetch
+  https://eneba-web.onrender.com/store
+  https://eneba-api-10wc.onrender.com
+
+● "Failed to fetch" usually means the browser never reached the API, or blocked
+  the response (CORS), rather than a database problem. I'll check the API
+  directly and see which URL the frontend is calling.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● I found the problem. The API and database are fine: /healthz returns 200,
+  /api/products returns products from Firestore, and CORS lets
+  eneba-web.onrender.com through.
+
+  The frontend is calling the wrong address. Its built code calls
+  https://eneba-api.onrender.com, but your API got a suffix and lives at
+  https://eneba-api-10wc.onrender.com. That other domain doesn't answer, so the
+  browser reports "Failed to fetch".
+
+  Fix (in the Render dashboard):
+  1. Open eneba-web → Environment and set VITE_API_URL to
+     https://eneba-api-10wc.onrender.com (no trailing slash).
+  2. Save, then run Manual Deploy → Deploy latest commit. Vite writes this value
+     into the code at build time, so the site has to be rebuilt; restarting
+     doesn't pick it up.
+
+  You don't need to change anything on the API: CORS_ORIGINS is already correct,
+  because the web service kept its plain eneba-web name.
+
+  When the redeploy finishes, tell me and I'll check that the new build calls
+  the right address.
+
+> lets add the real logins and connect the users information to the page
+
+● First I'll look at the existing auth code (it was switched off in DECISIONS
+  #20) so I know what's already there to turn back on.
+
+  Ran 4 shell commands (ctrl+o to expand)
+
+● The old Firebase email/password code is all still there, and your Firebase web
+  config is already in frontend/.env.local. Before I start, a few choices here
+  are yours to make:
+
+● User answered Claude's questions:
+  ⎿  · Which sign-in methods should the site offer? → Email + Google
+     (Recommended)
+     · What can a visitor do without logging in? → user can do the same as the
+     loged in users, all the functions work. Only when after thy confirm the
+     checkout and go to the payment the pop up of sign-in required should be
+     displayed. thats the logic
+     · When a guest logs in, what happens to what they did as a guest (recently
+     viewed, recommendations, past guest orders)? → Merge into the account
+     (Recommended)
+     · What user information should the page show? → almost like the account
+     menu + account page, just a tiny detail - dont show the initials only the
+     pfp
+
+● Guests get full access, with login asked only at checkout via email/password
+  or Google, and the guest's views and orders merge into the account on sign-in.
+  I'm reading the backend pieces this touches next. · summary
+
+  Searched for 1 pattern, ran 2 shell commands (ctrl+o to expand)
+● The backend plan is clear. Next, the frontend pages this touches.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● I have everything I need. Starting with the backend: middleware, then the
+  repository, service, handler and router.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Now the middleware: one Identify helper that uses the login token when one is
+  sent and falls back to the guest id otherwise.
+
+● Bash(python - <<'EOF'
+      import re…)
+  ⎿  Updated backend\internal\middleware\guest.go (+13 -8)
+       7  )
+       8  
+       9  // GuestHeader carries a random id the browser makes once and k
+          eeps in
+      10 -// localStorage. It stands in for a signed-in user while login 
+         -is switched off.                                               
+      10 +// localStorage. It identifies a visitor who has not signed in 
+         +(DECISIONS #20, #28).                                          
+      11  const GuestHeader = "X-Guest-Id"
+      12  
+      13  // Same shape rule as cart ids: long and random, so it can't be
+           guessed.
+      14  var guestIDPattern = regexp.MustCompile(`^[A-Za-z0-9-]{16,64}$`
+          )
+      15  
+      16 -// RequireGuest is the temporary replacement for RequireAuth (D
+         -ECISIONS #20).                                                 
+      17 -// The request's user is "guest:<id>", so handlers keep using U
+         -serFrom and                                                    
+      18 -// orders are still per buyer. Anyone holding the id sees that 
+         -buyer's orders,                                                
+      19 -// like anyone holding a cart id can change that cart.         
+      20 -// To bring login back, use RequireAuth(verifier) in the router
+         - again.                                                        
+      16 +// ValidGuestID reports whether id looks like a browser guest i
+         +d.                                                             
+      17 +func ValidGuestID(id string) bool { return guestIDPattern.Match
+         +String(id) }                                                   
+      18 +                                                               
+      19 +// GuestUserID is the user id a guest's profile and orders are 
+         +stored under.                                                  
+      20 +func GuestUserID(id string) string { return "guest:" + id }    
+      21 +                                                               
+      22 +// RequireGuest makes the request's user "guest:<id>", so handl
+         +ers use UserFrom                                               
+      23 +// the same way for guests and signed-in users. Anyone holding 
+         +the id sees that                                               
+      24 +// visitor's data, like anyone holding a cart id can change tha
+         +t cart.                                                        
+      25 +// Routes use it through Identify, which prefers a login token.
+      26  func RequireGuest() func(http.Handler) http.Handler {
+      27          return func(next http.Handler) http.Handler {
+      28                  return http.HandlerFunc(func(w http.ResponseWri
+          ter, r *http.Request) {
+      29                          id := r.Header.Get(GuestHeader)
+      25 -                        if !guestIDPattern.MatchString(id) {   
+      30 +                        if !ValidGuestID(id) {                 
+      31                                  http.Error(w, `{"error":"missin
+          g or invalid X-Guest-Id header"}`, http.StatusUnauthorized)
+      32                                  return
+      33                          }
+      29 -                        u := &User{UID: "guest:" + id}         
+      34 +                        u := &User{UID: GuestUserID(id)}       
+      35                          next.ServeHTTP(w, r.WithContext(context
+          .WithValue(r.Context(), ctxKey{}, u)))
+      36                  })
+      37          }
+  ⎿  Updated backend\internal\middleware\guest_test.go (+2 -2)
+      17                  header string
+      18                  want   int
+      19          }{
+      20 -                {"", http.StatusUnauthorized},          // no h
+         -eader                                                          
+      21 -                {"short", http.StatusUnauthorized},     // too 
+         -short to be random                                             
+      20 +                {"", http.StatusUnauthorized},      // no heade
+         +r                                                              
+      21 +                {"short", http.StatusUnauthorized}, // too shor
+         +t to be random                                                 
+      22                  {"bad id with spaces!!", http.StatusUnauthorize
+          d},
+      23                  {id, http.StatusOK},
+      24          }
+  ⎿  Updated backend\internal\middleware\middleware.go (+28 -3)
+      1 -// Package middleware holds HTTP middleware: CORS and Firebase a
+        -uth.                                                            
+      1 +// Package middleware holds HTTP middleware: CORS, Firebase auth
+        + and guest ids.                                                 
+      2  package middleware
+      3  
+      4  import (
+     ...
+      40                                  http.Error(w, `{"error":"auth n
+          ot configured"}`, http.StatusServiceUnavailable)
+      41                                  return
+      42                          }
+      43 -                        tok := strings.TrimPrefix(r.Header.Get(
+         -"Authorization"), "Bearer ")                                   
+      44 -                        if tok == "" || tok == r.Header.Get("Au
+         -thorization") {                                                
+      43 +                        tok := bearer(r)                       
+      44 +                        if tok == "" {                         
+      45                                  http.Error(w, `{"error":"missin
+          g bearer token"}`, http.StatusUnauthorized)
+      46                                  return
+      47                          }
+     ...
+      55          }
+      56  }
+      57  
+      58 +// Identify is for routes guests may use too (order history, pr
+         +ofile blocks).                                                 
+      59 +// A request with a bearer token is the signed-in user (a bad t
+         +oken is 401, never                                             
+      60 +// a silent fall back to guest); without one it is the browser'
+         +s guest id.                                                    
+      61 +func Identify(v TokenVerifier) func(http.Handler) http.Handler 
+         +{                                                              
+      62 +        return func(next http.Handler) http.Handler {          
+      63 +                asUser, asGuest := RequireAuth(v)(next), Requir
+         +eGuest()(next)                                                 
+      64 +                return http.HandlerFunc(func(w http.ResponseWri
+         +ter, r *http.Request) {                                        
+      65 +                        if bearer(r) != "" {                   
+      66 +                                asUser.ServeHTTP(w, r)         
+      67 +                                return                         
+      68 +                        }                                      
+      69 +                        asGuest.ServeHTTP(w, r)                
+      70 +                })                                             
+      71 +        }                                                      
+      72 +}                                                              
+      73 +                                                               
+      74 +// bearer returns the token from "Authorization: Bearer <token>
+         +", or "" if there is none.                                     
+      75 +func bearer(r *http.Request) string {                          
+      76 +        tok, ok := strings.CutPrefix(r.Header.Get("Authorizatio
+         +n"), "Bearer ")                                                
+      77 +        if !ok {                                               
+      78 +                return ""                                      
+      79 +        }                                                      
+     … 6 more lines (ctrl+o to expand)
+  ⎿  Updated backend\internal\middleware\middleware_test.go (+34 -0)
+      36                  t.Errorf("handler saw uid %q, want dev-user", g
+          otUID)
+      37          }
+      38  }
+      39 +                                                               
+      40 +func TestIdentify(t *testing.T) {                              
+      41 +        var gotUID string                                      
+      42 +        h := Identify(DevVerifier{})(http.HandlerFunc(func(w ht
+         +tp.ResponseWriter, r *http.Request) {                          
+      43 +                gotUID = UserFrom(r.Context()).UID             
+      44 +        }))                                                    
+      45 +        const guest = "0f8c2a1e-5b7d-4c3a-9e2f-1a2b3c4d5e6f"   
+      46 +                                                               
+      47 +        cases := []struct {                                    
+      48 +                name, auth, guest string                       
+      49 +                wantCode          int                          
+      50 +                wantUID           string                       
+      51 +        }{                                                     
+      52 +                {"token wins over guest id", "Bearer " + DevTok
+         +en, guest, http.StatusOK, "dev-user"},                         
+      53 +                {"guest only", "", guest, http.StatusOK, "guest
+         +:" + guest},                                                   
+      54 +                {"bad token is not downgraded to guest", "Beare
+         +r wrong", guest, http.StatusUnauthorized, ""},                 
+      55 +                {"nothing", "", "", http.StatusUnauthorized, ""
+         +},                                                             
+      56 +        }                                                      
+      57 +        for _, c := range cases {                              
+      58 +                gotUID = ""                                    
+      59 +                req := httptest.NewRequest(http.MethodGet, "/ap
+         +i/orders", nil)                                                
+      60 +                if c.auth != "" {                              
+      61 +                        req.Header.Set("Authorization", c.auth)
+      62 +                }                                              
+      63 +                if c.guest != "" {                             
+      64 +                        req.Header.Set(GuestHeader, c.guest)   
+      65 +                }                                              
+      66 +                rec := httptest.NewRecorder()                  
+      67 +                h.ServeHTTP(rec, req)                          
+      68 +                if rec.Code != c.wantCode || gotUID != c.wantUI
+         +D {                                                            
+      69 +                        t.Errorf("%s: got %d %q, want %d %q", c
+         +.name, rec.Code, gotUID, c.wantCode, c.wantUID)                
+      70 +                }                                              
+      71 +        }                                                      
+      72 +}                                                              
+
+● Next, the repository method that moves a guest's orders onto the account
+  (Firestore transaction, plus the in-memory version).
+
+● Bash(python - <<'EOF'
+      p='internal/repository/repository.go'…)
+  ⎿  Updated backend\internal\repository\firestore.go (+21 -0)
+      230          return listAll[domain.Order](ctx, f.c.Collection(ColOr
+           ders).Where("userId", "==", userID))
+      231  }
+      232  
+      233 +// MoveUserOrders re-reads the user's orders inside the transa
+          +ction, so an order                                            
+      234 +// paid while the move runs is moved too (Firestore retries if
+          + one changes).                                                
+      235 +func (f *Firestore) MoveUserOrders(ctx context.Context, from, 
+          +to string) (int, error) {                                     
+      236 +        q := f.c.Collection(ColOrders).Where("userId", "==", f
+          +rom)                                                          
+      237 +        n := 0                                                
+      238 +        err := f.c.RunTransaction(ctx, func(ctx context.Contex
+          +t, tx *firestore.Transaction) error {                         
+      239 +                docs, err := tx.Documents(q).GetAll()         
+      240 +                if err != nil {                               
+      241 +                        return err                            
+      242 +                }                                             
+      243 +                n = len(docs)                                 
+      244 +                for _, d := range docs {                      
+      245 +                        if err := tx.Update(d.Ref, []firestore
+          +.Update{{Path: "userId", Value: to}}); err != nil {           
+      246 +                                return err                    
+      247 +                        }                                     
+      248 +                }                                             
+      249 +                return nil                                    
+      250 +        })                                                    
+      251 +        return n, err                                         
+      252 +}                                                             
+      253 +                                                              
+      254  // decode turns a document read into a value; a missing docume
+           nt is ErrNotFound.
+      255  func decode[T any](snap *firestore.DocumentSnapshot, err error
+           ) (*T, error) {
+      256          if status.Code(err) == codes.NotFound {
+  ⎿  Updated backend\internal\repository\memory.go (+14 -0)
+      212          return out, nil
+      213  }
+      214  
+      215 +func (m *Memory) MoveUserOrders(_ context.Context, from, to st
+          +ring) (int, error) {                                          
+      216 +        m.mu.Lock()                                           
+      217 +        defer m.mu.Unlock()                                   
+      218 +        n := 0                                                
+      219 +        for id, o := range m.orders {                         
+      220 +                if o.UserID == from {                         
+      221 +                        o.UserID = to                         
+      222 +                        m.orders[id] = o                      
+      223 +                        n++                                   
+      224 +                }                                             
+      225 +        }                                                     
+      226 +        return n, nil                                         
+      227 +}                                                             
+      228 +                                                              
+      229  // KeyCounts returns how many of an offer's keys are in each s
+           tatus. Used by
+      230  // tests to check that offer stock always equals the available
+            keys.
+      231  func (m *Memory) KeyCounts(offerID string) map[string]int {
+  ⎿  Updated backend\internal\repository\repository.go (+3 -0)
+      60          PayOrder(ctx context.Context, id string, apply PayFunc)
+           (*domain.Order, error)
+      61          DeliverOrder(ctx context.Context, id string, apply Deli
+          verFunc) (*domain.Order, error)
+      62          ListUserOrders(ctx context.Context, userID string) ([]d
+          omain.Order, error)
+      63 +        // MoveUserOrders gives every order of user `from` to u
+         +ser `to` in one atomic                                         
+      64 +        // step and returns how many moved. Used when a guest s
+         +igns in.                                                       
+      65 +        MoveUserOrders(ctx context.Context, from, to string) (i
+         +nt, error)                                                     
+      66  }
+      67  
+      68  // ProfileFunc is a service rule that changes a profile (e.g. a
+          dds a view).
+
+● Now the service rules: merging the guest's views (as a pure, tested function)
+  and the account summary.
+
+● Bash(python - <<'EOF'
+      p='internal/service/profiles.go'…)
+  ⎿  Updated backend\internal\service\orders.go (+20 -0)
+       90          return OrderPage{Items: items, Total: len(orders), Pag
+           e: page, PageSize: pageSize}, nil
+       91  }
+       92  
+       93 +// Summary is what the account page shows about a user's purch
+          +ases.                                                         
+       94 +type Summary struct {                                         
+       95 +        OrderCount int `json:"orderCount"`                    
+       96 +        TotalSpent int `json:"totalSpent"` // cents           
+       97 +}                                                             
+       98 +                                                              
+       99 +// Summary counts the user's orders and adds up what they paid
+          +. Carts are not                                               
+      100 +// counted: they have no user until they are paid.            
+      101 +func (s *Orders) Summary(ctx context.Context, userID string) (
+          +Summary, error) {                                             
+      102 +        orders, err := s.repo.ListUserOrders(ctx, userID)     
+      103 +        if err != nil {                                       
+      104 +                return Summary{}, err                         
+      105 +        }                                                     
+      106 +        sum := Summary{OrderCount: len(orders)}               
+      107 +        for _, o := range orders {                            
+      108 +                sum.TotalSpent += o.Total                     
+      109 +        }                                                     
+      110 +        return sum, nil                                       
+      111 +}                                                             
+      112 +                                                              
+      113  func paidTime(o domain.Order) time.Time {
+      114          if o.PaidAt == nil {
+      115                  return time.Time{}
+  ⎿  Updated backend\internal\service\profiles.go (+41 -0)
+       90          return recommend(all, history, n), nil
+       91  }
+       92  
+       93 +// MergeGuest runs when a guest signs in: the guest's recently
+          + viewed products                                              
+       94 +// go to the front of the account's list, and the guest's orde
+          +rs become the                                                 
+       95 +// account's (DECISIONS #28). Safe to repeat: views are dedupl
+          +icated and an                                                 
+       96 +// order that already moved is no longer the guest's. Returns 
+          +how many orders moved.                                        
+       97 +func (s *Profiles) MergeGuest(ctx context.Context, userID, gue
+          +stUserID string) (int, error) {                               
+       98 +        guestViews, err := s.viewed(ctx, guestUserID)         
+       99 +        if err != nil {                                       
+      100 +                return 0, err                                 
+      101 +        }                                                     
+      102 +        if len(guestViews) > 0 {                              
+      103 +                now := time.Now()                             
+      104 +                if _, err := s.repo.UpdateProfile(ctx, userID,
+          + func(p *domain.Profile) error {                              
+      105 +                        p.RecentlyViewed = mergeViews(guestVie
+          +ws, p.RecentlyViewed, maxViewed)                              
+      106 +                        p.UpdatedAt = now                     
+      107 +                        return nil                            
+      108 +                }); err != nil {                              
+      109 +                        return 0, err                         
+      110 +                }                                             
+      111 +                // Empty the guest's list only after the accou
+          +nt has it: a crash in between                                 
+      112 +                // leaves a duplicate, which the next merge re
+          +moves, never a lost view.                                     
+      113 +                if _, err := s.repo.UpdateProfile(ctx, guestUs
+          +erID, func(p *domain.Profile) error {                         
+      114 +                        p.RecentlyViewed, p.UpdatedAt = nil, n
+          +ow                                                            
+      115 +                        return nil                            
+      116 +                }); err != nil {                              
+      117 +                        return 0, err                         
+      118 +                }                                             
+      119 +        }                                                     
+      120 +        return s.orders.MoveUserOrders(ctx, guestUserID, userI
+          +D)                                                            
+      121 +}                                                             
+      122 +                                                              
+      123  // viewed is the user's recently viewed ids; a user without a 
+           profile has none.
+      124  func (s *Profiles) viewed(ctx context.Context, userID string) 
+           ([]string, error) {
+      125          p, err := s.repo.GetProfile(ctx, userID)
+     ...
+      143          return out
+      144  }
+      145  
+      146 +// mergeViews puts the guest's views (newest first) in front o
+          +f the account's                                               
+     … 13 more lines (ctrl+o to expand)
+
+● The gofmt listing is only CRLF line endings from the git checkout, which
+  predates my edits, so I'm ignoring it. Next I'm writing a merge test in the
+  style of the existing profile tests. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Bash(cat >> internal/service/profiles_test.go <<'EOF'…)
+  ⎿  Updated backend\internal\service\profiles_test.go (+58 -0)
+      127                  t.Errorf("an RPG buyer should get an RPG first
+           , got %s (%s)", got[0].Name, got[0].Genre)
+      128          }
+      129  }
+      130 +                                                              
+      131 +func TestMergeViews(t *testing.T) {                           
+      132 +        cases := []struct {                                   
+      133 +                guest, account, want []string                 
+      134 +        }{                                                    
+      135 +                {nil, []string{"a", "b"}, []string{"a", "b"}},
+          +                       // nothing to merge                    
+      136 +                {[]string{"x", "y"}, nil, []string{"x", "y"}},
+          +                       // new account takes the guest's order 
+      137 +                {[]string{"x", "a"}, []string{"a", "b"}, []str
+          +ing{"x", "a", "b"}},   // guest views first, no duplicate     
+      138 +                {[]string{"x", "y"}, []string{"a", "b"}, []str
+          +ing{"x", "y", "a"}},   // max 3: the account's oldest drops of
+          +f                                                             
+      139 +        }                                                     
+      140 +        for _, c := range cases {                             
+      141 +                if got := mergeViews(c.guest, c.account, 3); !
+          +reflect.DeepEqual(got, c.want) {                              
+      142 +                        t.Errorf("mergeViews(%v, %v) = %v, wan
+          +t %v", c.guest, c.account, got, c.want)                       
+      143 +                }                                             
+      144 +        }                                                     
+      145 +}                                                             
+      146 +                                                              
+      147 +// Signing in moves the guest's views and orders to the accoun
+          +t; the guest keeps nothing.                                   
+      148 +func TestMergeGuest(t *testing.T) {                           
+      149 +        s, cart, orders := newProfilesSvc(t)                  
+      150 +        ctx := context.Background()                           
+      151 +        const guest, user = "guest:browser-1", "uid-1"        
+      152 +                                                              
+      153 +        _ = s.RecordView(ctx, user, "p002")  // viewed while s
+          +igned in, earlier                                             
+      154 +        _ = s.RecordView(ctx, guest, "p003") // then as a gues
+          +t                                                             
+      155 +        if _, err := cart.SetQuantity(ctx, testCart, testOffer
+          +, 1); err != nil {                                            
+      156 +                t.Fatal(err)                                  
+      157 +        }                                                     
+      158 +        if _, err := orders.Checkout(ctx, guest, testCart); er
+          +r != nil { // an older guest order                            
+      159 +                t.Fatal(err)                                  
+      160 +        }                                                     
+      161 +                                                              
+      162 +        moved, err := s.MergeGuest(ctx, user, guest)          
+      163 +        if err != nil || moved != 1 {                         
+      164 +                t.Fatalf("merge: moved %d, err %v", moved, err
+          +)                                                             
+      165 +        }                                                     
+      166 +        got, _ := s.RecentlyViewed(ctx, user, 8)              
+     … 21 more lines (ctrl+o to expand)
+
+● Tests pass. Next, the handlers and routes.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Bash(python - <<'EOF'
+      p='internal/handler/handler.go'…)
+  ⎿  Updated backend\internal\handler\handler.go (+30 -4)
+      236  
+      237  // --- Auth-protected ----------------------------------------
+           -----------
+      238  
+      239 -// Me: GET /api/me (requires Firebase ID token)               
+      239 +// Me: GET /api/me (signed in) -> the account page's purchase 
+          +numbers.                                                      
+      240 +// Name, photo and sign-up date come from Firebase Auth in the
+          + browser.                                                     
+      241  func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
+      242          u := middleware.UserFrom(r.Context())
+      242 -        writeJSON(w, http.StatusOK, map[string]string{"uid": u
+          -.UID, "email": u.Email})                                      
+      243 +        sum, err := h.Orders.Summary(r.Context(), u.UID)      
+      244 +        if err != nil {                                       
+      245 +                writeErr(w, err)                              
+      246 +                return                                        
+      247 +        }                                                     
+      248 +        writeJSON(w, http.StatusOK, map[string]any{           
+      249 +                "uid": u.UID, "email": u.Email, "orderCount": 
+          +sum.OrderCount, "totalSpent": sum.TotalSpent,                 
+      250 +        })                                                    
+      251 +}                                                             
+      252 +                                                              
+      253 +// MergeGuest: POST /api/me/merge-guest  body {"guestId": "...
+          +"} (signed in).                                               
+      254 +// Called right after sign-in: the browser's guest views and o
+          +rders move to the account.                                    
+      255 +func (h *Handler) MergeGuest(w http.ResponseWriter, r *http.Re
+          +quest) {                                                      
+      256 +        var body struct {                                     
+      257 +                GuestID string `json:"guestId"`               
+      258 +        }                                                     
+      259 +        if err := json.NewDecoder(r.Body).Decode(&body); err !
+          += nil || !middleware.ValidGuestID(body.GuestID) {             
+      260 +                writeJSON(w, http.StatusBadRequest, map[string
+          +]string{"error": `body must be {"guestId": "..."}`})          
+      261 +                return                                        
+      262 +        }                                                     
+      263 +        u := middleware.UserFrom(r.Context())                 
+      264 +        moved, err := h.Profiles.MergeGuest(r.Context(), u.UID
+          +, middleware.GuestUserID(body.GuestID))                       
+      265 +        if err != nil {                                       
+      266 +                writeErr(w, err)                              
+      267 +                return                                        
+      268 +        }                                                     
+      269 +        writeJSON(w, http.StatusOK, map[string]int{"movedOrder
+          +s": moved})                                                   
+      270  }
+      271  
+      272  // Checkout: POST /api/orders  body {"cartId": "..."} -> 201 w
+           ith the delivered order.
+      246 -// Simulated payment: the cart's reserved keys are sold to the
+          - request's user                                               
+     … 5 more lines (ctrl+o to expand)
+  ⎿  Updated backend\internal\router\router.go (+10 -10)
+      31                  r.Get("/carts/{cartId}", h.GetCart)
+      32                  r.Put("/carts/{cartId}/items/{offerId}", h.SetC
+          artItem)
+      33  
+      34 -                // signed-in only                              
+      34 +                // guests and signed-in users: a login token if
+         + sent, else the X-Guest-Id                                     
+      35                  r.Group(func(r chi.Router) {
+      36 -                        r.Use(middleware.RequireAuth(verifier))
+      37 -                        r.Get("/me", h.Me)                     
+      38 -                })                                             
+      39 -                                                               
+      40 -                // Orders and profiles belong to a browser gues
+         -t id while login is switched                                   
+      41 -                // off (DECISIONS #20, #25). To require login a
+         -gain: RequireAuth(verifier) here.                              
+      42 -                r.Group(func(r chi.Router) {                   
+      43 -                        r.Use(middleware.RequireGuest())       
+      44 -                        r.Post("/orders", h.Checkout)          
+      36 +                        r.Use(middleware.Identify(verifier))   
+      37                          r.Get("/orders", h.ListOrders)
+      38                          r.Post("/profile/views", h.RecordView)
+      39                          r.Get("/home/recently-viewed", h.Recent
+          lyViewed)
+      40                          r.Get("/home/recommended", h.Recommende
+          d)
+      41                  })
+      42 +                                                               
+      43 +                // signed-in only: paying, the account page, an
+         +d merging guest data on sign-in                                
+      44 +                r.Group(func(r chi.Router) {                   
+      45 +                        r.Use(middleware.RequireAuth(verifier))
+      46 +                        r.Post("/orders", h.Checkout)          
+      47 +                        r.Get("/me", h.Me)                     
+      48 +                        r.Post("/me/merge-guest", h.MergeGuest)
+      49 +                })                                             
+      50          })
+      51          return r
+      52  }
+
+● The backend is done and all tests pass. Now the frontend, starting with the
+  API client: requests that guests may also make now send the login token when
+  there is one and the guest id otherwise.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Bash(python - <<'EOF'
+      p='lib/api.ts'…)
+  ⎿  Updated frontend\src\lib\api.ts (+19 -14)
+      1  import { getIdToken } from "./firebase";
+      2  import { guestId } from "./guest";
+      3 -import type { Banner, CartUpdate, CategoryCount, Order, OrderPag
+        -e, Product, ProductDetail, ProductPage } from "../types";       
+      3 +import type { Account, Banner, CartUpdate, CategoryCount, Order,
+        + OrderPage, Product, ProductDetail, ProductPage } from "../types
+        +";                                                              
+      4  
+      5  const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/,
+          "");
+      6  
+     ...
+      16  }
+      17  
+      18  interface RequestOpts {
+      19 -  auth?: boolean;                                              
+      20 -  guest?: boolean; // send this browser's guest id (orders, whi
+         -le login is off)                                               
+      19 +  auth?: boolean; // send the login token (routes only signed-i
+         +n users may use)                                               
+      20 +  /** Routes guests may use too: the login token if signed in, 
+         +else this browser's guest id. */                               
+      21 +  user?: boolean;                                              
+      22    signal?: AbortSignal;
+      23    method?: "GET" | "PUT" | "POST";
+      24    body?: unknown; // sent as JSON
+     ...
+      26  
+      27  async function request<T>(path: string, opts: RequestOpts = {})
+          : Promise<T> {
+      28    const headers: Record<string, string> = {};
+      28 -  if (opts.auth) {                                             
+      29 +  if (opts.auth || opts.user) {                                
+      30      const token = await getIdToken();
+      31      if (token) headers.Authorization = `Bearer ${token}`;
+      32 +    else if (opts.user) headers["X-Guest-Id"] = guestId();     
+      33    }
+      32 -  if (opts.guest) headers["X-Guest-Id"] = guestId();           
+      34    if (opts.body !== undefined) headers["Content-Type"] = "appli
+          cation/json";
+      35    const res = await fetch(`${BASE}${path}`, {
+      36      method: opts.method ?? "GET",
+     ...
+      81    topUps: () => request<{ items: Product[] }>("/api/home/top-up
+          s"),
+      82    preOrders: () => request<{ items: Product[] }>("/api/home/pre
+          -orders"),
+      83    categoryCounts: () => request<{ items: CategoryCount[] }>("/a
+          pi/home/categories"),
+      83 -  /** Personal blocks: built from this browser's profile (guest
+         - id while login is off). */                                    
+      84 -  recentlyViewed: () => request<{ items: Product[] }>("/api/hom
+         -e/recently-viewed", { guest: true }),                          
+      85 -  recommended: () => request<{ items: Product[] }>("/api/home/r
+         -ecommended", { guest: true }),                                 
+      84 +  /** Personal blocks: built from the signed-in user's profile,
+         + or this browser's guest profile. */                           
+      85 +  recentlyViewed: () => request<{ items: Product[] }>("/api/hom
+         +e/recently-viewed", { user: true }),                           
+      86 +  recommended: () => request<{ items: Product[] }>("/api/home/r
+         +ecommended", { user: true }),                                  
+     … 27 more lines (ctrl+o to expand)
+  ⎿  Updated frontend\src\types\index.ts (+8 -0)
+      111    stock: number;
+      112    quantity: number;
+      113  }
+      114 +                                                              
+      115 +/** GET /api/me: purchase numbers for the account page (name, 
+          +photo etc. come from Firebase Auth). */                       
+      116 +export interface Account {                                    
+      117 +  uid: string;                                                
+      118 +  email: string;                                              
+      119 +  orderCount: number;                                         
+      120 +  totalSpent: number; // cents                                
+      121 +}                                                             
+
+● Next is the auth context, where the guest data has to move to the account
+  before the switch to the signed-in user, or the homepage blocks reload once
+  with empty account data. · summary
+
+● Write(frontend\src\features\auth\AuthContext.tsx)
+  ⎿  Added 85 lines, removed 13 lines
+       1 -import { createContext, useContext, useEffect, useState } from 
+         -"react";                                                       
+       1 +import { createContext, useContext, useEffect, useRef, useState
+         + } from "react";                                               
+       2  import {
+       3    createUserWithEmailAndPassword,
+       4 +  GoogleAuthProvider,                                          
+       5    onAuthStateChanged,
+       6    signInWithEmailAndPassword,
+       7 +  signInWithPopup,                                             
+       8    signOut as fbSignOut,
+       9 +  updateProfile,                                               
+      10 +  type User as FirebaseUser,                                   
+      11  } from "firebase/auth";
+      12  import { auth, firebaseConfigured, setDevSignedIn } from "../..
+          /lib/firebase";
+      13 +import { api } from "../../lib/api";                           
+      14  
+      10 -/** The only user fields the app needs; works for Firebase and 
+         -dev mode alike. */                                             
+      15 +/** The user fields the app shows; works for Firebase and dev m
+         +ode alike. */                                                  
+      16  export interface AppUser {
+      17    uid: string;
+      18    email: string | null;
+      19 +  name: string | null;                                         
+      20 +  photoURL: string | null; // Google profile picture; null for 
+         +email accounts                                                 
+      21 +  provider: string; // "password", "google.com" or "dev"       
+      22 +  createdAt: string | null; // when the account was made (Fireb
+         +ase metadata)                                                  
+      23  }
+      24  
+      25  interface AuthValue {
+     ...
+      28    /** false = dev mode: no Firebase, any email/password signs i
+          n as the dev user. */
+      29    configured: boolean;
+      30    signIn: (email: string, password: string) => Promise<void>;
+      22 -  register: (email: string, password: string) => Promise<void>;
+      31 +  register: (email: string, password: string, name: string) => 
+         +Promise<void>;                                                 
+      32 +  signInWithGoogle: () => Promise<void>;                       
+      33 +  updateName: (name: string) => Promise<void>;                 
+      34    signOut: () => Promise<void>;
+      35  }
+      36  
+      37  const Ctx = createContext<AuthValue | null>(null);
+      38  const DEV_KEY = "devUser";
+      39  
+      40 +function toAppUser(u: FirebaseUser): AppUser {                 
+      41 +  return {                                                     
+      42 +    uid: u.uid,                                                
+      43 +    email: u.email,                                            
+      44 +    name: u.displayName,                                       
+      45 +    photoURL: u.photoURL,                                      
+      46 +    provider: u.providerData[0]?.providerId ?? "password",     
+      47 +    createdAt: u.metadata.creationTime ?? null,                
+      48 +  };                                                           
+      49 +}                                                              
+      50 +                                                               
+      51  function loadDevUser(): AppUser | null {
+      52    try {
+      53      const raw = sessionStorage.getItem(DEV_KEY);
+     ...
+       69    }
+       70  }
+       71  
+       72 +/**                                                           
+       73 + * Guests can do everything except pay (DECISIONS #28). When t
+          +hey sign in, their                                            
+       74 + * guest views and orders move to the account first (`api.merg
+          +eGuest`), and only                                            
+       75 + * then does `user` change, so pages that reload on a new user
+          + see the merged data.                                         
+       76 + */                                                           
+       77  export function AuthProvider({ children }: { children: React.R
+           eactNode }) {
+       78    const [user, setUser] = useState<AppUser | null>(() => (auth
+            ? null : loadDevUser()));
+       79    const [ready, setReady] = useState(!auth);
+       80 +  // The sign-in in progress (Firebase sign-in + merge). The a
+          +uth listener waits for it.                                    
+       81 +  const pending = useRef<Promise<void> | null>(null);         
+       82  
+       83    useEffect(() => {
+       84      if (!auth) return;
+       56 -    return onAuthStateChanged(auth, (u) => {                  
+       57 -      setUser(u ? { uid: u.uid, email: u.email } : null);     
+       85 +    return onAuthStateChanged(auth, async (u) => {            
+       86 +      await pending.current?.catch(() => {});                 
+       87 +      setUser(u ? toAppUser(u) : null);                       
+       88        setReady(true);
+       89      });
+       90    }, []);
+       91  
+       62 -  // Dev mode only (no Firebase). Updates the token flag and s
+          -tate together.                                                
+       63 -  const setDevUser = (u: AppUser | null) => {                 
+       64 -    saveDevUser(u);                                           
+       92 +  /** Runs a Firebase sign-in, then merges the guest data. Err
+          +ors reach the form. */                                        
+       93 +  async function signInThenMerge(signIn: () => Promise<unknown
+          +>) {                                                          
+       94 +    const p = (async () => {                                  
+       95 +      await signIn();                                         
+       96 +      // A failed merge must not block the sign-in; it is safe
+          + to retry next time.                                          
+       97 +      await api.mergeGuest().catch(() => {});                 
+       98 +    })();                                                     
+       99 +    pending.current = p;                                      
+      100 +    try {                                                     
+      101 +      await p;                                                
+      102 +    } finally {                                               
+      103 +      if (pending.current === p) pending.current = null;      
+      104 +    }                                                         
+      105 +  }                                                           
+      106 +                                                              
+      107 +  // Dev mode only (no Firebase): one fake user, kept for this
+          + tab.                                                         
+      108 +  async function devSignIn(email: string, name: string | null 
+          += null) {                                                     
+      109 +    const u: AppUser = { uid: "dev-user", email, name, photoUR
+          +L: null, provider: "dev", createdAt: new Date().toUTCString() 
+          +};                                                            
+      110 +    saveDevUser(u); // the dev token is sent from here on, so 
+          +the merge is signed in                                        
+      111 +    await api.mergeGuest().catch(() => {});                   
+      112      setUser(u);
+       66 -  };                                                          
+       67 -  const devSignIn = async (email: string) => setDevUser({ uid:
+          - "dev-user", email });                                        
+      113 +  }                                                           
+      114  
+      115    const value: AuthValue = {
+      116      user,
+      117      ready,
+      118      configured: firebaseConfigured,
+       73 -    signIn: async (e, p) => (auth ? void (await signInWithEmai
+          -lAndPassword(auth, e, p)) : devSignIn(e)),                    
+       74 -    register: async (e, p) => (auth ? void (await createUserWi
+          -thEmailAndPassword(auth, e, p)) : devSignIn(e)),              
+       75 -    signOut: async () => (auth ? fbSignOut(auth) : setDevUser(
+          -null)),                                                       
+      119 +    signIn: (email, password) =>                              
+      120 +      auth ? signInThenMerge(() => signInWithEmailAndPassword(
+          +auth!, email, password)) : devSignIn(email),                  
+      121 +    register: (email, password, name) =>                      
+      122 +      auth                                                    
+      123 +        ? signInThenMerge(async () => {                       
+      124 +            const cred = await createUserWithEmailAndPassword(
+          +auth!, email, password);                                      
+      125 +            if (name) await updateProfile(cred.user, { display
+          +Name: name });                                                
+      126 +          })                                                  
+      127 +        : devSignIn(email, name || null),                     
+      128 +    signInWithGoogle: () =>                                   
+      129 +      auth ? signInThenMerge(() => signInWithPopup(auth!, new 
+          +GoogleAuthProvider())) : devSignIn("dev@google"),             
+      130 +    updateName: async (name) => {                             
+      131 +      if (!user) return;                                      
+      132 +      if (auth?.currentUser) {                                
+      133 +        await updateProfile(auth.currentUser, { displayName: n
+          +ame });                                                       
+      134 +        setUser(toAppUser(auth.currentUser)); // a new object,
+          + so React re-renders                                          
+      135 +      } else {                                                
+      136 +        const u = { ...user, name };                          
+      137 +        saveDevUser(u);                                       
+      138 +        setUser(u);                                           
+      139 +      }                                                       
+      140 +    },                                                        
+      141 +    signOut: async () => {                                    
+      142 +      if (auth) await fbSignOut(auth);                        
+      143 +      else {                                                  
+      144 +        saveDevUser(null);                                    
+      145 +        setUser(null);                                        
+      146 +      }                                                       
+      147 +    },                                                        
+      148    };
+      149    return <Ctx.Provider value={value}>{children}</Ctx.Provider>
+           ;
+      150  }
+
+● Bash(python - <<'EOF'
+      p='lib/guest.ts'…)
+  ⎿  Updated frontend\src\lib\guest.ts (+3 -2)
+      1 -// Login is switched off for now (DECISIONS #20). Orders belong 
+        -to this browser                                                 
+      2 -// instead: a random id made once and kept in localStorage, sent
+        - as X-Guest-Id.                                                 
+      1 +// A visitor who has not signed in is this browser: a random id 
+        +made once and                                                   
+      2 +// kept in localStorage, sent as X-Guest-Id (DECISIONS #20). On 
+        +sign-in the                                                     
+      3 +// guest's views and orders move to the account (DECISIONS #28).
+      4  const KEY = "guestId";
+      5  let fallback: string | null = null; // used when storage is bloc
+         ked: lasts one page load
+      6  
+
+● Now the shared sign-in form. The /login page and the checkout popup both use
+  it.
+
+● Write(frontend\src\features\auth\SignInForm.tsx)
+  ⎿  Wrote 92 lines to frontend\src\features\auth\SignInForm.tsx
+       1 import { useState } from "react";
+       2 import { useAuth } from "./AuthContext";
+       3
+       4 /** Firebase error codes -> text the shopper can act on. null =
+         say nothing (they closed the popup). */
+       5 function authError(e: unknown): string | null {
+       6   const code = (e as { code?: string } | null)?.code ?? "";
+       7   switch (code) {
+       8     case "auth/popup-closed-by-user":
+       9     case "auth/cancelled-popup-request":
+     … +83 lines (ctrl+o to expand)
+
+● Write(frontend\src\features\auth\LoginPage.tsx)
+  ⎿  Added 5 lines, removed 35 lines
+       1 -import { useState } from "react";                              
+       1  import { useLocation, useNavigate } from "react-router-dom";
+       3 -import { useAuth } from "./AuthContext";                       
+       2 +import { SignInForm } from "./SignInForm";                     
+       3  
+       4 +/** /login: the same form as the checkout popup, then back to w
+         +here the user came from. */                                    
+       5  export function LoginPage() {
+       6 -  const { signIn, register, configured } = useAuth();          
+       7 -  const [mode, setMode] = useState<"login" | "register">("login
+         -");                                                            
+       8 -  const [email, setEmail] = useState("");                      
+       9 -  const [password, setPassword] = useState("");                
+      10 -  const [error, setError] = useState<string | null>(null);     
+      11 -  const [busy, setBusy] = useState(false);                     
+       6    const navigate = useNavigate();
+       7    const from = (useLocation().state as { from?: string } | null
+          )?.from ?? "/";
+      14 -                                                               
+      15 -  async function submit(e: React.FormEvent) {                  
+      16 -    e.preventDefault();                                        
+      17 -    setBusy(true);                                             
+      18 -    setError(null);                                            
+      19 -    try {                                                      
+      20 -      await (mode === "login" ? signIn : register)(email, passw
+         -ord);                                                          
+      21 -      navigate(from, { replace: true });                       
+      22 -    } catch (err) {                                            
+      23 -      setError(err instanceof Error ? err.message : "Kažkas nep
+         -avyko");                                                       
+      24 -    } finally {                                                
+      25 -      setBusy(false);                                          
+      26 -    }                                                          
+      27 -  }                                                            
+      28 -                                                               
+       8    return (
+      30 -    <div className="page container">                           
+      31 -      <h1>{mode === "login" ? "Prisijungti" : "Sukurti paskyrą"
+         -}</h1>                                                         
+      32 -      {!configured && <p className="muted">Kūrimo režimas: Fire
+         -base nesukonfigūruotas, todėl bet koks el. paštas ir slaptažodi
+         -s prijungia vietinį testinį naudotoją.</p>}                    
+      33 -      <form className="form" onSubmit={submit}>                
+      34 -        <input type="email" placeholder="El. paštas" value={ema
+         -il} onChange={(e) => setEmail(e.target.value)} required />     
+      35 -        <input type="password" placeholder="Slaptažodis (min. 6
+         - simboliai)" minLength={6} value={password} onChange={(e) => se
+         -tPassword(e.target.value)} required />                         
+      36 -        {error && <p className="error">{error}</p>}            
+      37 -        <button className="btn" disabled={busy}>{mode === "logi
+         -n" ? "Prisijungti" : "Registruotis"}</button>                  
+      38 -        <button type="button" className="btn secondary" onClick
+         -={() => setMode(mode === "login" ? "register" : "login")}>     
+      39 -          {mode === "login" ? "Neturite paskyros? Registruokitė
+         -s" : "Jau turite paskyrą? Prisijunkite"}                       
+      40 -        </button>                                              
+      41 -      </form>                                                  
+       9 +    <div className="page container narrow-sm">                 
+      10 +      <h1>Prisijungti</h1>                                     
+      11 +      <SignInForm onDone={() => navigate(from, { replace: true 
+         +})} />                                                         
+      12      </div>
+      13    );
+      14  }
+
+● Write(frontend\src\features\auth\SignInModal.tsx)
+  ⎿  Wrote 24 lines to frontend\src\features\auth\SignInModal.tsx
+       1 import { useEffect } from "react";
+       2 import { SignInForm } from "./SignInForm";
+       3
+       4 /** "Prisijungimas būtinas" popup: shown when a guest presses pa
+         y at checkout. */
+       5 export function SignInModal({ onClose, onSignedIn }: { onClose:
+         () => void; onSignedIn: () => void }) {
+       6   useEffect(() => {
+       7     const onKey = (e: KeyboardEvent) => {
+       8       if (e.key === "Escape") onClose();
+     … +16 lines (ctrl+o to expand)
+
+● Now the checkout: pressing pay as a guest opens the popup, and payment
+  continues automatically once they're signed in.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Python on Windows defaulted to the cp1252 encoding. I'll make sure my earlier
+  edits didn't garble any Lithuanian characters, then redo this edit in UTF-8
+  mode.
+  Ran 2 shell commands (ctrl+o to expand)
+
+● My earlier edits applied cleanly. Your commit b52dbee includes a 27 MB
+  backend/seed.exe, which I'll flag at the end; I'm redoing the checkout edit in
+  UTF-8 now. · summary
+
+● Bash(cd frontend/src && PYTHONUTF8=1 python - <<'EOF'
+      p='features/checkout/CheckoutPage.tsx'…)
+  ⎿  Updated frontend\src\features\checkout\CheckoutPage.tsx (+17 -1)
+       3  import { ApiError } from "../../lib/api";
+       4  import { formatItemCount, formatPrice } from "../../lib/format"
+          ;
+       5  import { useCart } from "../cart/CartContext";
+       6 +import { useAuth } from "../auth/AuthContext";                 
+       7 +import { SignInModal } from "../auth/SignInModal";             
+       8  import { OrderCard } from "../orders/OrderCard";
+       9  import type { Order } from "../../types";
+      10  
+      11  /** Why checkout failed, in words the shopper can act on. */
+      12  function checkoutError(e: unknown): string {
+      13    if (e instanceof ApiError && e.status === 400) return "Krepše
+          lis tuščias arba rezervacija baigėsi. Grįžkite į krepšelį.";
+      14 +  if (e instanceof ApiError && e.status === 401) return "Prisij
+         +ungimas baigėsi. Prisijunkite ir bandykite dar kartą.";        
+      15    if (e instanceof ApiError && e.status === 409) return "Krepše
+          lis pasikeitė apmokant. Bandykite dar kartą.";
+      16    return "Nepavyko apmokėti. Bandykite dar kartą: dvigubai nenu
+          skaičiuosime.";
+      17  }
+     ...
+      19  /**
+      20   * Simulated payment (DECISIONS #8). The server turns the cart 
+          into an order,
+      21   * cart -> paid -> delivered, and returns the keys that were re
+          served for it.
+      22 + * Paying is the one step that needs an account: a guest gets t
+         +he sign-in                                                     
+      23 + * popup, and payment continues once they are in (DECISIONS #28
+         +).                                                             
+      24   */
+      25  export function CheckoutPage() {
+      26    const { items, count, total, currency, checkout } = useCart()
+          ;
+      27    const [busy, setBusy] = useState(false);
+      28    const [error, setError] = useState<string | null>(null);
+      29    const [order, setOrder] = useState<Order | null>(null);
+      30 +  const { user } = useAuth();                                  
+      31 +  const [askSignIn, setAskSignIn] = useState(false);           
+      32  
+      33    const pay = async () => {
+      34      setBusy(true);
+     ...
+       86            Mokėjimas imituojamas: pinigai nenuskaičiuojami. Apm
+           okėjus rezervuoti raktai iškart tampa jūsų.
+       87          </p>
+       88          {error && <p className="error" role="alert">{error}</p
+           >}
+       82 -        <button type="button" className="btn block" disabled={
+          -busy} onClick={pay}>                                          
+       89 +        <button type="button" className="btn block" disabled={
+          +busy} onClick={user ? pay : () => setAskSignIn(true)}>        
+       90            {busy ? "Apmokama…" : `Apmokėti ${formatPrice(total,
+            currency)}`}
+       91          </button>
+       92          <Link to="/cart" className="link-btn">Grįžti į krepšel
+           į</Link>
+       93        </section>
+     … 12 more lines (ctrl+o to expand)
+
+● Now the header account menu. CartMenu already has the "close on outside click
+  / Escape / navigation" logic, so I'll move that into a small hook both menus
+  use instead of copying it.
+
+● Write(frontend\src\lib\useDropdown.ts)
+  ⎿  Wrote 32 lines to frontend\src\lib\useDropdown.ts
+       1 import { useEffect, useRef, useState } from "react";
+       2 import { useLocation } from "react-router-dom";
+       3
+       4 /**
+       5  * Open/closed state for a header dropdown (cart, account). It c
+         loses on a click
+       6  * outside `ref`, on Escape, and when the page changes.
+       7  */
+       8 export function useDropdown() {
+       9   const [open, setOpen] = useState(false);
+     … +23 lines (ctrl+o to expand)
+
+● Bash(PYTHONUTF8=1 python - <<'EOF'
+      p='features/cart/CartMenu.tsx'…)
+  ⎿  Updated frontend\src\features\cart\CartMenu.tsx (+4 -21)
+      1 -import { useEffect, useRef, useState } from "react";            
+      2 -import { Link, useLocation } from "react-router-dom";           
+      1 +import { Link } from "react-router-dom";                        
+      2 +import { useDropdown } from "../../lib/useDropdown";            
+      3  import { formatPrice } from "../../lib/format";
+      4  import { useCart } from "./CartContext";
+      5  import { CartLine } from "./CartLine";
+     ...
+       8  /** Header cart button + dropdown with the cart's lines, sum an
+          d two actions. */
+       9  export function CartMenu() {
+      10    const { items, count, total, currency } = useCart();
+      11 -  const [open, setOpen] = useState(false);                     
+      12 -  const ref = useRef<HTMLDivElement>(null);                    
+      13 -  const { pathname } = useLocation();                          
+      14 -  const close = () => setOpen(false);                          
+      11 +  const { open, setOpen, ref, close } = useDropdown();         
+      12  
+      16 -  // Close when navigating (e.g. clicking a product name inside
+         - the dropdown).                                                
+      17 -  useEffect(() => setOpen(false), [pathname]);                 
+      18 -                                                               
+      19 -  // Close on a click outside or Escape.                       
+      20 -  useEffect(() => {                                            
+      21 -    if (!open) return;                                         
+      22 -    const onDown = (e: MouseEvent) => {                        
+      23 -      if (!ref.current?.contains(e.target as Node)) setOpen(fal
+         -se);                                                           
+      24 -    };                                                         
+      25 -    const onKey = (e: KeyboardEvent) => {                      
+      26 -      if (e.key === "Escape") setOpen(false);                  
+      27 -    };                                                         
+      28 -    document.addEventListener("mousedown", onDown);            
+      29 -    document.addEventListener("keydown", onKey);               
+      30 -    return () => {                                             
+      13 +  return () => {                                               
+      14        document.removeEventListener("mousedown", onDown);
+      15        document.removeEventListener("keydown", onKey);
+      16      };
+
+● The cut ended at the wrong return ( (the effect's cleanup also starts with
+  one). I'll fix that:
+
+● Bash(PYTHONUTF8=1 python - <<'EOF'
+      p='features/cart/CartMenu.tsx'…)
+  ⎿  Updated frontend\src\features\cart\CartMenu.tsx (+0 -6)
+      10    const { items, count, total, currency } = useCart();
+      11    const { open, setOpen, ref, close } = useDropdown();
+      12  
+      13 -  return () => {                                               
+      14 -      document.removeEventListener("mousedown", onDown);       
+      15 -      document.removeEventListener("keydown", onKey);          
+      16 -    };                                                         
+      17 -  }, [open]);                                                  
+      18 -                                                               
+      13    return (
+      14      <div className="cart-menu" ref={ref}>
+      15        <button type="button" className="nav-btn cart-btn" aria-e
+          xpanded={open} aria-label={`Krepšelis (${count})`} title="Krepš
+          elis" onClick={() => setOpen((o) => !o)}>
+
+● Now the avatar (profile photo, or the user icon when there isn't one) and the
+  account menu:
+
+● Write(frontend\src\features\auth\Avatar.tsx)
+  ⎿  Wrote 22 lines to frontend\src\features\auth\Avatar.tsx
+       1 import { useState } from "react";
+       2 import { UserIcon } from "../../components/Icons";
+       3 import type { AppUser } from "./AuthContext";
+       4
+       5 /**
+       6  * The profile picture (from Google), or the plain user icon whe
+         n there is none
+       7  * or it fails to load. No initials, on purpose.
+       8  */
+       9 export function Avatar({ user, size = 40 }: { user: AppUser | nu
+     … +14 lines (ctrl+o to expand)
+
+● Write(frontend\src\features\auth\AccountMenu.tsx)
+  ⎿  Wrote 51 lines to frontend\src\features\auth\AccountMenu.tsx
+       1 import { Link, useLocation } from "react-router-dom";
+       2 import { useDropdown } from "../../lib/useDropdown";
+       3 import { useAuth } from "./AuthContext";
+       4 import { Avatar } from "./Avatar";
+       5
+       6 /** Header avatar + dropdown: who is signed in and their links,
+         or a sign-in link for guests. */
+       7 export function AccountMenu() {
+       8   const { user, signOut } = useAuth();
+       9   const { open, setOpen, ref, close } = useDropdown();
+     … +42 lines (ctrl+o to expand)
+
+● Now the /account page:
+
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+  ⎿  1 action not run · auto mode's check had no usable answer
+
+● Update(frontend\src\lib\format.ts)
+  ⎿  Added 5 lines
+      18    return new Date(iso).toLocaleTimeString("lt-LT", { hour: "2-d
+          igit", minute: "2-digit" });
+      19  }
+      20  
+      21 +/** "2026 m. lapkričio 16 d." from any date string the browser 
+         +can parse. */                                                  
+      22 +export function formatDate(s: string): string {                
+      23 +  return new Date(s).toLocaleDateString("lt-LT", { year: "numer
+         +ic", month: "long", day: "numeric" });                         
+      24 +}                                                              
+      25 +                                                               
+      26  /** Lithuanian plural: 1 prekė, 2 prekės, 10 prekių, 21 prekė, 
+          22 prekės. */
+      27  export function formatItemCount(n: number): string {
+      28    const last = n % 10;
+
+● Write(frontend\src\features\auth\AccountPage.tsx)
+  ⎿  Wrote 95 lines to frontend\src\features\auth\AccountPage.tsx
+       1 import { useState } from "react";
+       2 import { Link } from "react-router-dom";
+       3 import { api } from "../../lib/api";
+       4 import { useAsync } from "../../lib/useAsync";
+       5 import { formatDate, formatPrice } from "../../lib/format";
+       6 import { Status } from "../../components/Status";
+       7 import { useAuth } from "./AuthContext";
+       8 import { Avatar } from "./Avatar";
+       9
+      10 const PROVIDERS: Record<string, string> = {
+     … +85 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+● A <p> inside a <dl> isn't valid HTML, so the order numbers get a <dl> of their
+  own:
+
+● Update(frontend\src\features\auth\AccountPage.tsx)
+  ⎿  Added 10 lines, removed 10 lines
+      77                <dd>{formatDate(user.createdAt)}</dd>
+      78              </>
+      79            )}
+      80 -          <Status state={stats}>                               
+      81 -            {(me) => (                                         
+      82 -              <>                                               
+      83 -                <dt>Užsakymai</dt>                             
+      84 -                <dd>{me.orderCount}</dd>                       
+      85 -                <dt>Iš viso išleista</dt>                      
+      86 -                <dd className="price">{formatPrice(me.totalSpen
+         -t)}</dd>                                                       
+      87 -              </>                                              
+      88 -            )}                                                 
+      89 -          </Status>                                            
+      80          </dl>
+      81 +        <Status state={stats}>                                 
+      82 +          {(me) => (                                           
+      83 +            <dl className="account-facts">                     
+      84 +              <dt>Užsakymai</dt>                               
+      85 +              <dd>{me.orderCount}</dd>                         
+      86 +              <dt>Iš viso išleista</dt>                        
+      87 +              <dd className="price">{formatPrice(me.totalSpent)
+         +}</dd>                                                         
+      88 +            </dl>                                              
+      89 +          )}                                                   
+      90 +        </Status>                                              
+      91          <Link to="/orders" className="btn secondary">Mano užsak
+          ymai</Link>
+      92        </section>
+      93      </div>
+
+  Read 1 file (ctrl+o to expand)
+
+● Next I'll wire the route, the header, and make the personal blocks and order
+  history reload when the user changes:
+
+● Update(frontend\src\app\App.tsx)
+  ⎿  Added 2 lines, removed 1 line
+      35              <Route path="/product/:id" element={<ProductPage />
+          } />
+      36              <Route path="/cart" element={<CartPage />} />
+      37              <Route path="/login" element={<LoginPage />} />
+      38 -            {/* Login is off for now (DECISIONS #20); wrap in <
+         -RequireAuth> to bring it back. */}                             
+      38 +            {/* Guests may use checkout and orders too; paying 
+         +asks them to sign in (DECISIONS #28). */}                      
+      39              <Route path="/checkout" element={<CheckoutPage />} 
+          />
+      40              <Route path="/orders" element={<OrdersPage />} />
+      41 +            <Route path="/account" element={<RequireAuth><Accou
+         +ntPage /></RequireAuth>} />                                    
+      42              <Route path="*" element={<div className="page conta
+          iner"><h1>Puslapis nerastas</h1></div>} />
+      43            </Route>
+      44          </Routes>
+
+● Update(frontend\src\app\App.tsx)
+  ⎿  Added 2 lines
+      1  import { BrowserRouter, Outlet, Route, Routes } from "react-rout
+         er-dom";
+      2  import { AuthProvider } from "../features/auth/AuthContext";
+      3  import { LoginPage } from "../features/auth/LoginPage";
+      4 +import { AccountPage } from "../features/auth/AccountPage";     
+      5 +import { RequireAuth } from "../features/auth/RequireAuth";     
+      6  import { HomePage } from "../features/home/HomePage";
+      7  import { StorePage } from "../features/store/StorePage";
+      8  import { ProductPage } from "../features/product/ProductPage";
+
+● Update(frontend\src\components\Header.tsx)
+  ⎿  Added 1 line, removed 5 lines
+      14          <SearchBox />
+      15          <nav className="nav">
+      16            <CartMenu />
+      17 -          <Link to="/orders" className="avatar" title="Mano užs
+         -akymai" aria-label="Mano užsakymai">                           
+      18 -            <UserIcon size={22} />                             
+      19 -          </Link>                                              
+      20 -          {/* Login is off for now (DECISIONS #20). Only shown 
+         -if someone signed in earlier. */}                              
+      21 -          {user && <button className="btn secondary" onClick={s
+         -ignOut}>Atsijungti</button>}                                   
+      17 +          <AccountMenu />                                      
+      18          </nav>
+      19        </div>
+      20        {/* Category row like Eneba's second header line; each li
+          nk is a store filter. */}
+
+● Update(frontend\src\components\Header.tsx)
+  ⎿  Added 2 lines, removed 3 lines
+       1  import { Link } from "react-router-dom";
+       2  import { SearchBox } from "../features/search/SearchBox";
+       3 -import { useAuth } from "../features/auth/AuthContext";        
+       3 +import { AccountMenu } from "../features/auth/AccountMenu";    
+       4  import { CartMenu } from "../features/cart/CartMenu";
+       5  import { CATEGORIES } from "../lib/categories";
+       6 -import { MenuIcon, UserIcon } from "./Icons";                  
+       6 +import { MenuIcon } from "./Icons";                            
+       7  
+       8  export function Header() {
+       9 -  const { user, signOut } = useAuth();                         
+       9    return (
+      10      <header className="header">
+      11        <div className="container header-main">
+
+● Update(frontend\src\features\orders\OrdersPage.tsx)
+  ⎿  Added 6 lines, removed 2 lines
+       5  import { Pager } from "../../components/Pager";
+       6  import { OrderCard } from "./OrderCard";
+       7  
+       8 -/** This browser's past orders (newest first, paged) with their
+         - key codes. Page number lives in the URL. */                   
+       8 +/**                                                            
+       9 + * The user's past orders (or this browser's, for a guest), new
+         +est first, paged,                                              
+      10 + * with their key codes. Page number lives in the URL. Reloads 
+         +on sign-in/out.                                                
+      11 + */                                                            
+      12  export function OrdersPage() {
+      13    const [sp, setSp] = useSearchParams();
+      14    const page = Number(sp.get("page")) || 1;
+      12 -  const state = useAsync((signal) => api.orders(page, signal), 
+         -[page]);                                                       
+      15 +  const uid = useAuth().user?.uid;                             
+      16 +  const state = useAsync((signal) => api.orders(page, signal), 
+         +[page, uid]);                                                  
+      17  
+      18    function goTo(n: number) {
+      19      setSp(n > 1 ? { page: String(n) } : {});
+
+● Update(frontend\src\features\orders\OrdersPage.tsx)  ⎿  Added 1 line
+       4  import { Status } from "../../components/Status";
+       5  import { Pager } from "../../components/Pager";
+       6  import { OrderCard } from "./OrderCard";
+       7 +import { useAuth } from "../auth/AuthContext";                 
+       8  
+       9  /**
+      10   * The user's past orders (or this browser's, for a guest), new
+          est first, paged,
+
+  Read 1 file (ctrl+o to expand)
+
+● (Those diagnostics came from between the two Header edits; the second edit
+  fixed them.) Now the two personal homepage blocks:
+
+● Update(frontend\src\features\home\blocks.tsx)
+  ⎿  Added 3 lines, removed 2 lines
+      34  }
+      35  
+      36  /** A product block from one endpoint: loading/error inside its
+           own band. */
+      37 -function RailBlock({ title, load, more }: { title: string; load
+         -: () => Promise<{ items: Product[] }>; more?: string }) {      
+      38 -  const state = useAsync(load, []);                            
+      37 +function RailBlock({ title, load, more, personal }: { title: st
+         +ring; load: () => Promise<{ items: Product[] }>; more?: string;
+         + personal?: boolean }) {                                       
+      38 +  const uid = useAuth().user?.uid;                             
+      39 +  const state = useAsync(load, personal ? [uid] : []); // perso
+         +nal blocks reload on sign-in/out                               
+      40    return (
+      41      <Band>
+      42        <Status state={state}>{({ items }) => <ProductRail title=
+          {title} items={items} more={more} />}</Status>
+
+● Update(frontend\src\features\home\blocks.tsx)
+  ⎿  Added 2 lines, removed 1 line
+      65  
+      66  /** "Neseniai peržiūrėta": no band at all until the browser has
+           viewed something, like on Eneba. */
+      67  export function RecentlyViewedBlock() {
+      68 -  const state = useAsync(() => api.recentlyViewed(), []);      
+      68 +  const uid = useAuth().user?.uid;                             
+      69 +  const state = useAsync(() => api.recentlyViewed(), [uid]);   
+      70    if (!state.data?.items.length) return null;
+      71    return (
+      72      <Band>
+
+● Update(frontend\src\features\home\blocks.tsx)
+  ⎿  Added 1 line, removed 1 line
+      75    );
+      76  }
+      77  
+      78 -export const RecommendedBlock = () => <RailBlock title="Rekomen
+         -duojama tau" load={api.recommended} />;                        
+      78 +export const RecommendedBlock = () => <RailBlock title="Rekomen
+         +duojama tau" load={api.recommended} personal />;               
+      79  export const BestSellersBlock = () => <RailBlock title="Perkami
+          ausi" load={api.bestSellers} more="/store" />;
+      80  export const GiftCardsBlock = () => (
+      81    <RailBlock title="Populiariausios el. dovanų kortelės" load={
+          api.giftCards} more="/store?category=gift-cards" />
+
+● Update(frontend\src\features\home\blocks.tsx)
+  ⎿  Added 1 line
+       7  import { ProductCard } from "../../components/ProductCard";
+       8  import { CategoryIcon } from "../../components/Icons";
+       9  import type { Product } from "../../types";
+      10 +import { useAuth } from "../auth/AuthContext";                 
+      11  
+      12  // Each block fetches from its OWN endpoint and handles its own
+           loading/error,
+      13  // so one failing service never blanks the whole homepage (DECI
+          SIONS #6).
+
+● Last, the styles. Everything uses existing tokens, no new colors:
+
+● Update(frontend\src\styles\global.css)
+  ⎿  Added 4 lines, removed 3 lines
+      60  .cart-btn { position: relative; display: flex; }
+      61  .cart-btn .cart-count { position: absolute; top: -8px; right: -
+          10px; margin: 0; }
+      62  .avatar {
+      63 -  display: flex; align-items: center; justify-content: center; 
+         -width: 40px; height: 40px;                                     
+      64 -  border-radius: 50%; background: var(--color-card); border: 2p
+         -x solid var(--color-text-muted);                               
+      63 +  display: flex; align-items: center; justify-content: center; 
+         +width: 40px; height: 40px; flex-shrink: 0;                     
+      64 +  border-radius: 50%; background: var(--color-card); border: 2p
+         +x solid var(--color-text-muted); overflow: hidden;             
+      65  }
+      66 -.avatar:hover { border-color: var(--color-accent); }           
+      66 +.avatar img { width: 100%; height: 100%; object-fit: cover; }  
+      67 +.avatar-btn:hover .avatar, .avatar-btn[aria-expanded="true"] .a
+         +vatar { border-color: var(--color-accent); }                   
+      68  .category-bar { background: var(--color-band); }
+      69  .category-nav {
+      70    display: flex; gap: var(--space-8); align-items: center; heig
+          ht: 52px;
+
+● Update(frontend\src\styles\global.css)
+  ⎿  Added 36 lines
+      252  .cart-dropdown .price { font-size: var(--text-base); }
+      253  .cart-dropdown-footer { display: flex; flex-direction: column;
+            gap: var(--space-2); border-top: 1px solid var(--color-border
+           ); padding-top: var(--space-3); }
+      254  
+      255 +/* header account dropdown (same box as the cart's) */        
+      256 +.account-menu { position: relative; }                         
+      257 +.avatar-btn { display: flex; }                                
+      258 +.account-dropdown {                                           
+      259 +  position: absolute; right: 0; top: calc(100% + var(--space-3
+          +)); z-index: 20; width: 260px;                                
+      260 +  display: flex; flex-direction: column; gap: var(--space-1); 
+          +padding: var(--space-3);                                      
+      261 +  background: var(--color-surface); border-radius: var(--radiu
+          +s-lg); box-shadow: var(--shadow);                             
+      262 +  font-size: var(--text-sm); font-weight: 600;                
+      263 +}                                                             
+      264 +.account-dropdown > a:not(.btn), .account-signout {           
+      265 +  padding: var(--space-2); border-radius: var(--radius); text-
+          +align: left;                                                  
+      266 +}                                                             
+      267 +.account-dropdown > a:not(.btn):hover, .account-signout:hover 
+          +{ background: var(--color-surface-2); color: var(--color-accen
+          +t); }                                                         
+      268 +.account-signout { border: 0; background: none; color: inherit
+          +; font: inherit; cursor: pointer; }                           
+      269 +.account-who {                                                
+      270 +  display: flex; align-items: center; gap: var(--space-3);    
+      271 +  padding-bottom: var(--space-3); margin-bottom: var(--space-1
+          +); border-bottom: 1px solid var(--color-border);              
+      272 +}                                                             
+      273 +.account-who-text { display: flex; flex-direction: column; min
+          +-width: 0; overflow-wrap: anywhere; }                         
+      274 +                                                              
+      275 +/* sign-in form (login page + checkout popup) */              
+      276 +.signin { display: flex; flex-direction: column; gap: var(--sp
+          +ace-3); }                                                     
+      277 +.signin .form { max-width: none; }                            
+      278 +.signin-or { text-align: center; margin: 0; }                 
+      279 +.narrow-sm { max-width: 420px; }                              
+      280 +                                                              
+      281 +/* account page */                                            
+      282 +.account { display: flex; flex-direction: column; gap: var(--s
+          +pace-4); align-items: flex-start; }                           
+      283 +.account-head { display: flex; align-items: center; gap: var(-
+          +-space-4); flex-wrap: wrap; }                                 
+      284 +.account-head-text { display: flex; flex-direction: column; ga
+          +p: var(--space-1); min-width: 0; }                            
+      285 +.account-head-text h2 { margin: 0; }                          
+      286 +.account-name-form { display: flex; gap: var(--space-2); flex-
+          +wrap: wrap; }                                                 
+      287 +.account-facts { display: grid; grid-template-columns: auto 1f
+          +r; gap: var(--space-2) var(--space-6); margin: 0; }           
+      288 +.account-facts dt { color: var(--color-text-muted); }         
+      289 +.account-facts dd { margin: 0; font-weight: 700; }            
+      290 +                                                              
+      291  /* add-to-cart popup */
+      292  .modal-backdrop {
+      293    position: fixed; inset: 0; z-index: 100; display: flex; alig
+           n-items: center; justify-content: center;
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● All tokens exist. Now the frontend type-check and build, and the backend tests
+  again:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Build and tests are green; next I'll run the full guest-to-payment flow over
+  HTTP against a local in-memory API, leaving your Firestore untouched.
+  · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The guest payment refusal, sign-in transfer, signed-in order (1 order, 36.60
+  €) and bad-token rejection all check out. Next I'll write the DECISIONS.md
+  entry and update the SPEC. · summary
+
+● Bash(cd .. && PYTHONUTF8=1 python - <<'EOF'
+      p='DECISIONS.md'…)
+  ⎿  Updated DECISIONS.md (+22 -0)
+      293  Skipped on purpose: wishlist heart and language/currency picke
+           r (no such features, a dead icon
+      294  would only be decoration); Eneba's logo and banner art (their 
+           brand assets).
+      295  Rejected: an icon library such as lucide-react (new dependency
+            for 9 icons).
+      296 +                                                              
+      297 +## 28. Real login is back: guests do everything except pay (su
+          +persedes #20)                                                 
+      298 +Firebase Auth with email/password and Google (`signInWithPopup
+          +`, part of the `firebase` package                             
+      299 +already installed). Guests keep their browser id (#20) and can
+          + browse, fill a cart, see recently                            
+      300 +viewed, recommendations and their guest orders. Only paying ne
+          +eds an account: pressing                                      
+      301 +"Apmokėti" as a guest opens a "Prisijungimas būtinas" popup, a
+          +nd payment continues right after.                             
+      302 +- Routes: `middleware.Identify` uses the login token if one is
+          + sent, else `X-Guest-Id`                                      
+      303 +  (orders list, profile views, personal blocks). A bad token i
+          +s a 401, never silently a guest.                              
+      304 +  `RequireAuth` guards checkout, `GET /api/me` and `POST /api/
+          +me/merge-guest`.                                              
+      305 +- Merge on sign-in: the guest's recently viewed go in front of
+          + the account's (pure `mergeViews`,                            
+      306 +  deduped, max 20) and the guest's orders get the account's us
+          +er id (`MoveUserOrders`, one                                  
+      307 +  transaction). Safe to repeat. The browser runs it before swi
+          +tching `user`, so blocks that reload                          
+      308 +  on sign-in already see the merged data.                     
+      309 +- User info: the header avatar is the Google photo, or the pla
+          +in user icon (no initials). Its menu                          
+      310 +  shows name + email and links to `/account` (name editable, e
+          +mail, sign-in method, member since,                           
+      311 +  order count, total spent). Name/photo/dates come from Fireba
+          +se Auth in the browser; only order                            
+      312 +  numbers come from the API, since orders live there.         
+      313 +Rejected: login required for the cart (more friction, and Eneb
+          +a lets guests shop);                                          
+      314 +starting accounts empty (a guest who signs in mid-shop would l
+          +ose their history);                                           
+      315 +initials avatars (the user asked for the picture only); Fireba
+          +se UI library (new dependency).                               
+      316 +Trade-off: whoever holds a guest id can merge that guest's dat
+          +a into their account, the same                                
+      317 +trust model as reading those orders with the id (#20). Merging
+          + is not undone on sign-out.                                   
+  ⎿  Updated SPEC.md (+2 -2)
+      12  | Homepage blocks | Done | 8 blocks, each its own endpoint, alt
+          ernating bands: banners, recently viewed, recommended (#25), be
+          st sellers, gift cards, top-ups, pre-orders, category counts (#
+          26). |
+      13  | Search | Scaffolded | Typo/partial tolerant (trigram), header
+           dropdown + results via store page. |
+      14  | Product page + seller offers | Scaffolded | Offer comparison 
+          table with add-to-cart per offer. |
+      15 -| Auth | Switched off | Firebase Auth email/password code is ke
+         -pt but not used: orders belong to a browser guest id for now (D
+         -ECISIONS #20). Dev mode without Firebase (#10). TODO: turn back
+         - on; Google sign-in? (optional) |                              
+      15 +| Auth | Done | Firebase email/password + Google. Guests can do
+         + everything but pay; paying opens a sign-in popup, and guest vi
+         +ews/orders merge into the account on sign-in (DECISIONS #28). A
+         +vatar menu + `/account` page. |                                
+      16  | Cart | Done | The cart is a server-side order (status `cart`)
+          ; the UI renders that document and the browser keeps only the c
+          art id. Stock + keys reserved when an item is added (DECISIONS 
+          #15, #19, #21). Popup, header dropdown, live stock errors. |
+      17  | Checkout + key delivery | Done | Cart is the first stage of a
+          n order: cart -> paid -> delivered. Keys are reserved from the 
+          available pool when added to the cart, sold on delivery. Line d
+          ata (name, price, keys) is written once at add time; checkout o
+          nly changes status fields. Simulated payment (DECISIONS #8, #19
+          , #21). |
+      18 -| Order history | Done | Per browser guest id while login is of
+         -f (DECISIONS #20); `GET /api/orders?page=`, paged 10 per page (
+         -#22), lists orders with copyable key codes. |                  
+      18 +| Order history | Done | Per account, or per browser guest id f
+         +or guests (DECISIONS #20, #28); `GET /api/orders?page=`, paged 
+         +10 per page (#22), lists orders with copyable key codes. |     
+      19  | Eneba styling | Done | Values from eneba.com CSS in docs/DESI
+          GN.md -> tokens.css; header, cards, store, product, cart restyl
+          ed (DECISIONS #24). Mobile filter drawer still TODO. |
+      20  
+      21  ## Explicitly out of scope (and why)
+
+● Real login is in, working in the code and tested locally, but it won't work on
+  the live site until you change some settings in Firebase and Render (below).
+
+  How it behaves
+  - Guests can do everything except pay: browse, fill the cart, see recently
+    viewed and recommendations, and view their guest order history.
+  - Paying: pressing "Apmokėti" as a guest opens a "Prisijungimas būtinas" popup
+    with email/password, registration (with a name field) and "Tęsti su
+    Google". Once they're in, payment continues by itself and the cart is kept.
+  - Merge on sign-in: the guest's recently viewed products and old guest orders
+    move onto the account. The homepage blocks and order history then reload for
+    the signed-in user.
+  - Header: the avatar shows the Google profile picture, or the plain user icon
+    when there isn't one (no initials). Clicking it opens a menu with name,
+    email, "Mano paskyra", "Mano užsakymai" and "Atsijungti". For guests it
+    shows "Prisijungti".
+  - /account: the photo, an editable name, email, sign-in method, member since,
+    number of orders and total spent.
+
+  Checks: backend tests (including new ones for the merge and for which user a
+  request counts as) and the frontend build pass. I also ran the full guest →
+  sign-in → merge → pay flow over HTTP against a local in-memory API. The
+  Firestore version of moving orders hasn't run on the real database yet,
+  because that needs a real Firebase login token. Signing in on the live site
+  with an old guest order will exercise it.
+
+  Firebase console (project eneba-58152, Authentication):
+  1. Sign-in method: enable Email/Password and Google.
+  2. Settings → Authorized domains: add eneba-web.onrender.com. Without this,
+     Google sign-in fails on the live site.
+
+  Render, eneba-web → Environment:
+  - Set VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN,
+    VITE_FIREBASE_PROJECT_ID and VITE_FIREBASE_APP_ID, copied from
+    frontend/.env.local. These are public identifiers, not secrets.
+  - While you're there, check that VITE_API_URL is
+    https://eneba-api-10wc.onrender.com.
+  - Then Manual Deploy. If these are left empty, the live site falls back to the
+    fake dev login, which the API rejects.
+
+  The API needs nothing new. It already has FIREBASE_PROJECT_ID, which is all it
+  needs to check login tokens.
+
+  I added DECISIONS #28 and updated the Auth and Order history rows in SPEC.md.
+  Nothing is committed. Once you've tried it locally (npm run dev with the API
+  on STORE=firestore), tell me and I'll commit and push.
+
+  Your own commit b52dbee added the 27 MB backend/seed.exe to git history. It's
+  ignored from now on, but it's still in that commit. If you haven't pushed it
+  yet, it's easy to take out; want me to?
+
+> <ide_opened_file>The user opened the file c:\Users\faust\Desktop\OneDrive -
+  Kaunas University of Technology\temp-------------------------------\Eneba\fro
+  ntend\src\components\Icons.tsx in the IDE. This may or may not be related to
+  the current task.</ide_opened_file>
+
+> 1. change the text of Kategorijos Žaidimai and so on (below the search bar)
+  to #dad6e4
+  2. check the /docs/screens/header logged in and logged of and log in page;
+  try to match these as good as possible
+  3. Move categories into the side bar like in the image of
+  docs/screens/categories instead of checkboxes
+  4. list of icons needs a little tweak: remove the undertext that mentions
+  quantity, move the category name under them closer to the icon and reduce the
+  text size. move them a little closer to each other (you can add repetitives
+  or random ones to fill out the the page, and add <> on the sides of the bar
+  to move around the icons
+  5. on each of the category in the main page move "rodyti daugiau" to the
+  bottom of the card and box it into a button
+  6. check the info pop up on the category in the docs. Lets add them too, text
+  doesnt need to match exactly - can be some random text to match the context
+  and explain what category does and mention its diff if there are any between
+  logged and logged off user.
+     if these 6 steps are too much you can reduce the tasks to chunks
+
+● Let me look at the reference screenshots first.
+
+  Searched for 1 pattern, read 5 files (ctrl+o to expand)
+
+● I've looked at all five screenshots. Before coding, I'll read the homepage
+  blocks, the header/band CSS and the store filters so the changes fit what's
+  there.
+
+  Searched for 3 patterns, read 3 files (ctrl+o to expand)
+
+● Item 3 is ambiguous, so I'm reading it as a slide-out category drawer and
+  leaving the store's own filter checkboxes alone. All six items fit in one
+  pass, and I'm starting with the shared tokens, icons, and nav text color.
+  · summary
+
+● Update(frontend\src\styles\tokens.css)
+  ⎿  Added 11 lines
+      22    --color-badge: #d32252;       /* red count badge on the cart 
+          icon */
+      23    --color-success: #23c299;
+      24    --color-overlay: rgba(31, 10, 77, 0.75);
+      25 +  --color-text-nav: #dad6e4;    /* category row links under the
+         + search bar */                                                 
+      26 +  --color-tooltip: #221b31;     /* dark info pop-up next to sec
+         +tion titles */                                                 
+      27 +  --color-login-bg: #200d4f;    /* login page background */    
+      28 +  --color-input-dark: #3c1595;  /* inputs on the login panel */
+      29 +  /* "Continue with Google" button: Google's own white button a
+         +nd four-color G */                                             
+      30 +  --color-google-bg: #ffffff;                                  
+      31 +  --color-google-text: #1f1f1f;                                
+      32 +  --color-google-blue: #4285f4;                                
+      33 +  --color-google-green: #34a853;                               
+      34 +  --color-google-yellow: #fbbc05;                              
+      35 +  --color-google-red: #ea4335;                                 
+      36    --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      37  
+      38    /* typography */
+
+● Update(frontend\src\components\Icons.tsx)
+  ⎿  Added 18 lines
+      21  );
+      22  export const MenuIcon = (p: P) => <Svg {...p}><path d="M3 6h18M
+          3 12h18M3 18h18" /></Svg>;
+      23  export const SearchIcon = (p: P) => <Svg {...p}><circle cx="11"
+           cy="11" r="7" /><path d="M20 20l-4-4" /></Svg>;
+      24 +export const ChevronLeft = (p: P) => <Svg {...p}><path d="M15 5
+         +l-7 7 7 7" /></Svg>;                                           
+      25 +export const ChevronRight = (p: P) => <Svg {...p}><path d="M9 5
+         +l7 7-7 7" /></Svg>;                                            
+      26 +export const CloseIcon = (p: P) => <Svg {...p}><path d="M5 5l14
+         + 14M19 5L5 19" /></Svg>;                                       
+      27 +export const InfoIcon = (p: P) => (                            
+      28 +  <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 11v6
+         +" /><circle cx="12" cy="7.5" r="0.6" /></Svg>                  
+      29 +);                                                             
+      30  
+      31 +/** Google's four-color "G" for the sign-in button (their brand
+         +ing asks for it). Colors are tokens. */                        
+      32 +export function GoogleIcon({ size = 20 }: P) {                 
+      33 +  return (                                                     
+      34 +    <svg width={size} height={size} viewBox="0 0 18 18" aria-hi
+         +dden="true">                                                   
+      35 +      <path style={{ fill: "var(--color-google-blue)" }} d="M17
+         +.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8
+         + 2.72v2.26h2.91c1.7-1.57 2.69-3.87 2.69-6.62z" />              
+      36 +      <path style={{ fill: "var(--color-google-green)" }} d="M9
+         + 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.81.54-1.84.86-3.05.86
+         +-2.34 0-4.33-1.58-5.04-3.71H.96v2.33A9 9 0 0 0 9 18z" />       
+      37 +      <path style={{ fill: "var(--color-google-yellow)" }} d="M
+         +3.96 10.71A5.4 5.4 0 0 1 3.68 9c0-.59.1-1.17.28-1.71V4.96H.96A9
+         + 9 0 0 0 0 9c0 1.45.35 2.83.96 4.04l3-2.33z" />                
+      38 +      <path style={{ fill: "var(--color-google-red)" }} d="M9 3
+         +.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.96l3 2.3
+         +3C4.67 5.16 6.66 3.58 9 3.58z" />                              
+      39 +    </svg>                                                     
+      40 +  );                                                           
+      41 +}                                                              
+      42 +                                                               
+      43  /** One icon per category id (domain.Categories). */
+      44  export function CategoryIcon({ id, size = 36 }: P & { id: strin
+          g }) {
+      45    switch (id) {
+
+● Update(frontend\src\styles\global.css)
+  ⎿  Added 3 lines, removed 2 lines
+      70    display: flex; gap: var(--space-8); align-items: center; heig
+          ht: 52px;
+      71    font-size: var(--text-base); font-weight: 600; overflow-x: au
+          to; white-space: nowrap; scrollbar-width: none;
+      72  }
+      73 -.category-nav a:hover { color: var(--color-accent); }          
+      74 -.category-all { display: flex; align-items: center; gap: var(--
+         -space-2); }                                                    
+      73 +.category-nav a, .category-all { color: var(--color-text-nav); 
+         +}                                                              
+      74 +.category-nav a:hover, .category-all:hover { color: var(--color
+         +-accent); }                                                    
+      75 +.category-all { display: flex; align-items: center; gap: var(--
+         +space-2); background: none; border: 0; padding: 0; font: inheri
+         +t; cursor: pointer; }                                          
+      76  /* phones: logo + links on top, search gets its own full-width 
+          row */
+      77  @media (max-width: 700px) {
+      78    .header-main { flex-wrap: wrap; height: auto; padding-top: va
+          r(--space-3); padding-bottom: var(--space-3); gap: var(--space-
+          3); }
+
+● The category button will slide the menu in from the left, with categories from
+  the fixed list and platforms pulled from the store API's facets, so nothing
+  new is hardcoded. · summary
+
+● Write(frontend\src\components\CategoryDrawer.tsx)  ⎿  Wrote 66 lines to frontend\src\components\CategoryDrawer.tsx
+       1 import { useEffect } from "react";
+       2 import { Link, useLocation } from "react-router-dom";
+       3 import { api } from "../lib/api";
+       4 import { useAsync } from "../lib/useAsync";
+       5 import { CATEGORIES } from "../lib/categories";
+       6 import { ChevronRight, CloseIcon } from "./Icons";
+       7
+       8 /**
+       9  * Eneba's side menu behind "☰ Kategorijos": slides in from the
+          left with every
+     … +57 lines (ctrl+o to expand)
+
+● That close-on-navigate code is needlessly clever. Clicking any link can simply
+  close the drawer, so I'm rewriting it plainly:
+
+● Write(frontend\src\components\CategoryDrawer.tsx)
+  ⎿  Added 4 lines, removed 20 lines
+      1  import { useEffect } from "react";
+      2 -import { Link, useLocation } from "react-router-dom";           
+      2 +import { Link } from "react-router-dom";                        
+      3  import { api } from "../lib/api";
+      4  import { useAsync } from "../lib/useAsync";
+      5  import { CATEGORIES } from "../lib/categories";
+     ...
+      12   */
+      13  export function CategoryDrawer({ onClose }: { onClose: () => vo
+          id }) {
+      14    const platforms = useAsync((signal) => api.products({}, signa
+          l), []);
+      15 -  const { pathname, search } = useLocation();                  
+      15  
+      17 -  // Close on Escape and when a link was followed (the URL chan
+         -ged).                                                          
+      16    useEffect(() => {
+      17      const onKey = (e: KeyboardEvent) => {
+      18        if (e.key === "Escape") onClose();
+     ...
+      20      window.addEventListener("keydown", onKey);
+      21      return () => window.removeEventListener("keydown", onKey);
+      22    }, [onClose]);
+      25 -  const url = pathname + search;                               
+      26 -  useEffect(() => {                                            
+      27 -    return () => undefined;                                    
+      28 -  }, []);                                                      
+      29 -  useCloseOnNavigate(url, onClose);                            
+      23  
+      24    return (
+      25      <div className="drawer-backdrop" onClick={onClose}>
+      26        <aside className="drawer" aria-label="Kategorijos" onClic
+          k={(e) => e.stopPropagation()}>
+      27          <div className="drawer-head">
+      35 -          <Link to="/" className="logo">eneba<span>style</span>
+         -</Link>                                                        
+      28 +          <Link to="/" className="logo" onClick={onClose}>eneba
+         +<span>style</span></Link>                                      
+      29            <button type="button" className="drawer-close" aria-l
+          abel="Uždaryti" onClick={onClose}>
+      30              <CloseIcon size={26} />
+      31            </button>
+      32          </div>
+      40 -        <nav className="drawer-list">                          
+      33 +        {/* every link closes the drawer: following it is the w
+         +hole point */}                                                 
+      34 +        <nav className="drawer-list" onClick={(e) => (e.target 
+         +as HTMLElement).closest("a") && onClose()}>                    
+      35            <Link to="/store">Visi pasiūlymai</Link>
+      36            {CATEGORIES.map((c) => (
+      37              <Link key={c.id} to={`/store?category=${c.id}`}>
+     ...
+      48      </div>
+      49    );
+      50  }
+      57 -                                                               
+      58 -/** Calls onClose when `url` changes after the first render. */
+      59 -function useCloseOnNavigate(url: string, onClose: () => void) {
+      60 -  useEffect(() => {                                            
+      61 -    const first = url;                                         
+      62 -    return () => {                                             
+      63 -      if (first !== window.location.pathname + window.location.
+         -search) onClose();                                             
+      64 -    };                                                         
+      65 -  }, [url, onClose]);                                          
+      66 -}                                                              
+
+  Read 1 file (ctrl+o to expand)
+
+● Write(frontend\src\components\Header.tsx)
+  ⎿  Added 8 lines, removed 2 lines
+       1 +import { useState } from "react";                              
+       2  import { Link } from "react-router-dom";
+       3  import { SearchBox } from "../features/search/SearchBox";
+       4  import { AccountMenu } from "../features/auth/AccountMenu";
+       5  import { CartMenu } from "../features/cart/CartMenu";
+       6  import { CATEGORIES } from "../lib/categories";
+       7 +import { CategoryDrawer } from "./CategoryDrawer";             
+       8  import { MenuIcon } from "./Icons";
+       9  
+      10  export function Header() {
+      11 +  const [drawer, setDrawer] = useState(false);                 
+      12    return (
+      13      <header className="header">
+      14        <div className="container header-main">
+     ...
+      19            <AccountMenu />
+      20          </nav>
+      21        </div>
+      19 -      {/* Category row like Eneba's second header line; each li
+         -nk is a store filter. */}                                      
+      22 +      {/* Category row like Eneba's second header line; "Katego
+         +rijos" opens the side menu. */}                                
+      23        <div className="category-bar">
+      24          <nav className="container category-nav" aria-label="Kat
+          egorijos">
+      22 -          <Link to="/store" className="category-all"><MenuIcon 
+         -size={22} /> Kategorijos</Link>                                
+      25 +          <button type="button" className="category-all" aria-e
+         +xpanded={drawer} onClick={() => setDrawer(true)}>              
+      26 +            <MenuIcon size={22} /> Kategorijos                 
+      27 +          </button>                                            
+      28            {CATEGORIES.map((c) => (
+      29              <Link key={c.id} to={`/store?category=${c.id}`}>{c.
+          label}</Link>
+      30            ))}
+      31          </nav>
+      32        </div>
+      33 +      {drawer && <CategoryDrawer onClose={() => setDrawer(false
+         +)} />}                                                         
+      34      </header>
+      35    );
+      36  }
+
+● Update(frontend\src\styles\global.css)
+  ⎿  Added 21 lines
+      253  .cart-dropdown .price { font-size: var(--text-base); }
+      254  .cart-dropdown-footer { display: flex; flex-direction: column;
+            gap: var(--space-2); border-top: 1px solid var(--color-border
+           ); padding-top: var(--space-3); }
+      255  
+      256 +/* "☰ Kategorijos" side menu */                              
+      257 +.drawer-backdrop { position: fixed; inset: 0; z-index: 100; ba
+          +ckground: var(--color-overlay); }                             
+      258 +.drawer {                                                     
+      259 +  position: absolute; top: 0; bottom: 0; left: 0; width: min(5
+          +00px, 90vw); overflow-y: auto;                                
+      260 +  background: var(--color-bg); animation: drawer-in 0.2s ease-
+          +out;                                                          
+      261 +}                                                             
+      262 +@keyframes drawer-in { from { transform: translateX(-100%); } 
+          +to { transform: none; } }                                     
+      263 +.drawer-head {                                                
+      264 +  display: flex; align-items: center; justify-content: space-b
+          +etween;                                                       
+      265 +  padding: var(--space-4) var(--space-6); border-bottom: 1px s
+          +olid var(--color-band);                                       
+      266 +}                                                             
+      267 +.drawer-head .logo { font-size: 28px; }                       
+      268 +.drawer-close { display: flex; background: none; border: 0; pa
+          +dding: 0; color: var(--color-text); cursor: pointer; }        
+      269 +.drawer-close:hover { color: var(--color-accent); }           
+      270 +.drawer-list { display: flex; flex-direction: column; padding:
+          + var(--space-3) 0; }                                          
+      271 +.drawer-list a {                                              
+      272 +  display: flex; align-items: center; justify-content: space-b
+          +etween;                                                       
+      273 +  padding: var(--space-3) var(--space-6); font-size: 18px;    
+      274 +}                                                             
+      275 +.drawer-list a:hover { background: var(--color-band); color: v
+          +ar(--color-accent); }                                         
+      276 +                                                              
+      277  /* header account dropdown (same box as the cart's) */
+      278  .account-menu { position: relative; }
+      279  .avatar-btn { display: flex; }
+
+● Item 2: header and login page. When signed out, the header shows the user icon
+  with "Prisijungti | Registruotis" like Eneba. When signed in, it shows the
+  avatar with its menu.
+
+● Update(frontend\src\features\auth\AccountMenu.tsx)
+  ⎿  Added 12 lines
+       9    const { open, setOpen, ref, close } = useDropdown();
+      10    const { pathname } = useLocation();
+      11  
+      12 +  // Signed out: Eneba's "👤 Prisijungti | Registruotis" text l
+         +inks, no dropdown.                                             
+      13 +  if (!user) {                                                 
+      14 +    return (                                                   
+      15 +      <div className="auth-links">                             
+      16 +        <UserIcon size={26} />                                 
+      17 +        <Link to="/login" state={{ from: pathname }}>Prisijungt
+         +i</Link>                                                       
+      18 +        <span className="auth-sep" aria-hidden="true">|</span> 
+      19 +        <Link to="/login?mode=register" state={{ from: pathname
+         + }}>Registruotis</Link>                                        
+      20 +      </div>                                                   
+      21 +    );                                                         
+      22 +  }                                                            
+      23 +                                                               
+      24    return (
+      25      <div className="account-menu" ref={ref}>
+      26        <button
+
+● Update(frontend\src\features\auth\AccountMenu.tsx)
+  ⎿  Added 1 line, removed 1 line
+      28          className="nav-btn avatar-btn"
+      29          aria-expanded={open}
+      30          aria-label="Paskyra"
+      31 -        title={user ? user.name || user.email || "Paskyra" : "P
+         -risijungti"}                                                   
+      31 +        title={user.name || user.email || "Paskyra"}           
+      32          onClick={() => setOpen((o) => !o)}
+      33        >
+      34          <Avatar user={user} />
+
+● Update(frontend\src\features\auth\AccountMenu.tsx)
+  ⎿  Added 1 line, removed 2 lines
+      35        </button>
+      36        {open && (
+      37          <div className="account-dropdown">
+      38 -          {user ? (                                            
+      39 -            <>                                                 
+      38 +          <>                                                   
+      39                <div className="account-who">
+      40                  <Avatar user={user} size={48} />
+      41                  <div className="account-who-text">
+
+● Update(frontend\src\features\auth\AccountMenu.tsx)
+  ⎿  Added 1 line, removed 7 lines
+      48                <button type="button" className="account-signout"
+           onClick={() => { close(); signOut(); }}>
+      49                  Atsijungti
+      50                </button>
+      51 -            </>                                                
+      52 -          ) : (                                                
+      53 -            <>                                                 
+      54 -              <Link to="/login" state={{ from: pathname }} clas
+         -sName="btn block" onClick={close}>Prisijungti</Link>           
+      55 -              <Link to="/orders" onClick={close}>Mano užsakymai
+         -</Link>                                                        
+      56 -            </>                                                
+      57 -          )}                                                   
+      51 +          </>                                                  
+      52          </div>
+      53        )}
+      54      </div>
+
+● Update(frontend\src\features\auth\AccountMenu.tsx)
+  ⎿  Added 2 lines, removed 1 line
+       2  import { useDropdown } from "../../lib/useDropdown";
+       3  import { useAuth } from "./AuthContext";
+       4  import { Avatar } from "./Avatar";
+       5 +import { UserIcon } from "../../components/Icons";             
+       6  
+       6 -/** Header avatar + dropdown: who is signed in and their links,
+         - or a sign-in link for guests. */                              
+       7 +/** Header account area: sign-in/register links for guests; ava
+         +tar + dropdown when signed in. */                              
+       8  export function AccountMenu() {
+       9    const { user, signOut } = useAuth();
+      10    const { open, setOpen, ref, close } = useDropdown();
+
+● Now the sign-in form gets Eneba's panel layout: title, a "Naujas vartotojas?
+  Susikurk paskyrą" toggle, the white Google button with the G logo, an "arba"
+  divider, dark inputs and the yellow button.
+
+● Update(frontend\src\features\auth\SignInForm.tsx)
+  ⎿  Added 8 lines, removed 3 lines
+      30    }
+      31  }
+      32  
+      33 -/** Email/password (sign in or register) + Google. Used by /log
+         -in and the checkout popup. */                                  
+      34 -export function SignInForm({ onDone }: { onDone: () => void }) 
+         -{                                                              
+      33 +type Mode = "login" | "register";                              
+      34 +                                                               
+      35 +/**                                                            
+      36 + * Email/password (sign in or register) + Google, laid out like
+         + Eneba's login panel.                                          
+      37 + * Used by /login and the checkout popup; `title` = false when 
+         +the popup has its own heading.                                 
+      38 + */                                                            
+      39 +export function SignInForm({ onDone, initialMode = "login", tit
+         +le = true }: { onDone: () => void; initialMode?: Mode; title?: 
+         +boolean }) {                                                   
+      40    const { signIn, register, signInWithGoogle, configured } = us
+          eAuth();
+      36 -  const [mode, setMode] = useState<"login" | "register">("login
+         -");                                                            
+      41 +  const [mode, setMode] = useState<Mode>(initialMode);         
+      42    const [name, setName] = useState("");
+      43    const [email, setEmail] = useState("");
+      44    const [password, setPassword] = useState("");
+
+● Update(frontend\src\features\auth\SignInForm.tsx)
+  ⎿  Added 16 lines, removed 3 lines
+      63      run(() => (mode === "login" ? signIn(email, password) : reg
+          ister(email, password, name.trim())));
+      64    };
+      65  
+      66 +  const switchMode = () => {                                   
+      67 +    setMode(mode === "login" ? "register" : "login");          
+      68 +    setError(null);                                            
+      69 +  };                                                           
+      70 +                                                               
+      71    return (
+      72      <div className="signin">
+      73 +      <div>                                                    
+      74 +        {title && <h1 className="signin-title">{mode === "login
+         +" ? "Prisijungti" : "Susikurk paskyrą"}</h1>}                  
+      75 +        <p className="signin-switch">                          
+      76 +          {mode === "login" ? "Naujas vartotojas? " : "Jau turi
+         + paskyrą? "}                                                   
+      77 +          <button type="button" onClick={switchMode}>{mode === 
+         +"login" ? "Susikurk paskyrą" : "Prisijunk"}</button>           
+      78 +        </p>                                                   
+      79 +      </div>                                                   
+      80        {!configured && <p className="muted small">Kūrimo režimas
+          : Firebase nesukonfigūruotas, todėl bet koks el. paštas ir slap
+          tažodis prijungia vietinį testinį naudotoją.</p>}
+      69 -      <button type="button" className="btn secondary block" dis
+         -abled={busy} onClick={() => run(signInWithGoogle)}>            
+      70 -        Tęsti su Google                                        
+      81 +      <button type="button" className="btn-google" disabled={bu
+         +sy} onClick={() => run(signInWithGoogle)}>                     
+      82 +        <GoogleIcon size={22} />                               
+      83 +        <span>Tęsti naudojant Google</span>                    
+      84        </button>
+      72 -      <p className="signin-or muted small">arba</p>            
+      85 +      <p className="signin-or">arba</p>                        
+      86        <form className="form" onSubmit={submit}>
+      87          {mode === "register" && (
+      88            <input placeholder="Vardas" autoComplete="name" value
+          ={name} onChange={(e) => setName(e.target.value)} />
+
+● Update(frontend\src\features\auth\SignInForm.tsx)
+  ⎿  Added 1 line, removed 4 lines
+       98            required
+       99          />
+      100          {error && <p className="error" role="alert">{error}</p
+           >}
+      101 -        <button className="btn block" disabled={busy}>        
+      101 +        <button className="btn block signin-submit" disabled={
+          +busy}>                                                        
+      102            {busy ? "Palaukite…" : mode === "login" ? "Prisijung
+           ti" : "Registruotis"}
+      103          </button>
+      104        </form>
+      105 -      <button type="button" className="link-btn" onClick={() =
+          -> { setMode(mode === "login" ? "register" : "login"); setError
+          -(null); }}>                                                   
+      106 -        {mode === "login" ? "Neturite paskyros? Registruokitės
+          -" : "Jau turite paskyrą? Prisijunkite"}                       
+      107 -      </button>                                               
+      105      </div>
+      106    );
+      107  }
+
+● Update(frontend\src\features\auth\SignInForm.tsx)
+  ⎿  Added 1 line
+      1  import { useState } from "react";
+      2  import { useAuth } from "./AuthContext";
+      3 +import { GoogleIcon } from "../../components/Icons";            
+      4  
+      5  /** Firebase error codes -> text the shopper can act on. null = 
+         say nothing (they closed the popup). */
+      6  function authError(e: unknown): string | null {
+
+● Write(frontend\src\features\auth\LoginPage.tsx)
+  ⎿  Added 24 lines, removed 5 lines
+       1 -import { useLocation, useNavigate } from "react-router-dom";   
+       1 +import { Link, useLocation, useNavigate, useSearchParams } from
+         + "react-router-dom";                                           
+       2  import { SignInForm } from "./SignInForm";
+       3  
+       4 -/** /login: the same form as the checkout popup, then back to w
+         -here the user came from. */                                    
+       4 +/**                                                            
+       5 + * /login (and /login?mode=register): a page of its own like En
+         +eba's, without the                                             
+       6 + * shop header: logo, a big greeting on the left, the sign-in p
+         +anel on the right.                                             
+       7 + * After signing in, the user goes back to where they came from
+         +.                                                              
+       8 + */                                                            
+       9  export function LoginPage() {
+      10    const navigate = useNavigate();
+      11    const from = (useLocation().state as { from?: string } | null
+          )?.from ?? "/";
+      12 +  const [sp] = useSearchParams();                              
+      13 +  const mode = sp.get("mode") === "register" ? "register" : "lo
+         +gin";                                                          
+      14 +                                                               
+      15    return (
+       9 -    <div className="page container narrow-sm">                 
+      10 -      <h1>Prisijungti</h1>                                     
+      11 -      <SignInForm onDone={() => navigate(from, { replace: true 
+         -})} />                                                         
+      16 +    <div className="login-page">                               
+      17 +      <header className="login-top">                           
+      18 +        <Link to="/" className="logo">eneba<span>style</span></
+         +Link>                                                          
+      19 +      </header>                                                
+      20 +      <main className="login-main">                            
+      21 +        <p className="login-hello">Sveiki!<br />Malonu jus maty
+         +ti!</p>                                                        
+      22 +        {/* key: switching Prisijungti/Registruotis in the head
+         +er resets the form */}                                         
+      23 +        <section className="login-panel">                      
+      24 +          <SignInForm key={mode} initialMode={mode} onDone={() 
+         +=> navigate(from, { replace: true })} />                       
+      25 +        </section>                                             
+      26 +      </main>                                                  
+      27 +      <footer className="login-foot">                          
+      28 +        <Link to="/">Į parduotuvę</Link>                       
+      29 +        <span>Autorinės teisės © {new Date().getFullYear()} ene
+         +bastyle. Mokomasis projektas.</span>                           
+      30 +      </footer>                                                
+      31      </div>
+      32    );
+      33  }
+
+● Update(frontend\src\features\auth\SignInModal.tsx)
+  ⎿  Added 1 line, removed 1 line
+      17          <button type="button" className="modal-close" aria-labe
+          l="Uždaryti" onClick={onClose}>×</button>
+      18          <h2 id="signin-title">Prisijungimas būtinas</h2>
+      19          <p className="muted small">Norėdami apmokėti, prisijunk
+          ite arba susikurkite paskyrą. Jūsų krepšelis išliks.</p>
+      20 -        <SignInForm onDone={onSignedIn} />                     
+      20 +        <SignInForm onDone={onSignedIn} title={false} />       
+      21        </div>
+      22      </div>
+      23    );
+
+● Moving /login out of the shop layout, so it gets its own page without the
+  header and footer:
+
+● Update(frontend\src\app\App.tsx)
+  ⎿  Removed 1 line
+      36              <Route path="/store" element={<StorePage />} />
+      37              <Route path="/product/:id" element={<ProductPage />
+          } />
+      38              <Route path="/cart" element={<CartPage />} />
+      39 -            <Route path="/login" element={<LoginPage />} />    
+      39              {/* Guests may use checkout and orders too; paying 
+          asks them to sign in (DECISIONS #28). */}
+      40              <Route path="/checkout" element={<CheckoutPage />} 
+          />
+      41              <Route path="/orders" element={<OrdersPage />} />
+
+● Update(frontend\src\app\App.tsx)
+  ⎿  Added 2 lines
+      31        <AuthProvider>
+      32          <CartProvider>
+      33          <Routes>
+      34 +          {/* Like Eneba, the login page has no shop header/foo
+         +ter. */}                                                       
+      35 +          <Route path="/login" element={<LoginPage />} />      
+      36            <Route element={<Layout />}>
+      37              <Route path="/" element={<HomePage />} />
+      38              <Route path="/store" element={<StorePage />} />
+
+● Update(frontend\src\styles\global.css)
+  ⎿  Added 51 lines, removed 5 lines
+      294  }
+      295  .account-who-text { display: flex; flex-direction: column; min
+           -width: 0; overflow-wrap: anywhere; }
+      296  
+      297 -/* sign-in form (login page + checkout popup) */              
+      298 -.signin { display: flex; flex-direction: column; gap: var(--sp
+          -ace-3); }                                                     
+      299 -.signin .form { max-width: none; }                            
+      300 -.signin-or { text-align: center; margin: 0; }                 
+      301 -.narrow-sm { max-width: 420px; }                              
+      297 +/* header, signed out: "👤 Prisijungti | Registruotis" */     
+      298 +.auth-links { display: flex; align-items: center; gap: var(--s
+          +pace-2); font-size: var(--text-base); white-space: nowrap; }  
+      299 +.auth-sep { color: var(--color-text-nav); }                   
+      300  
+      301 +/* sign-in form (login page + checkout popup), laid out like E
+          +neba's panel */                                               
+      302 +.signin { display: flex; flex-direction: column; gap: var(--sp
+          +ace-4); }                                                     
+      303 +.signin .form { max-width: none; gap: var(--space-4); }       
+      304 +.signin-title { font-size: 26px; letter-spacing: 1px; margin: 
+          +0 0 var(--space-1); }                                         
+      305 +.signin-switch { margin: 0; font-size: var(--text-sm); font-we
+          +ight: 700; color: var(--color-text-muted); }                  
+      306 +.signin-switch button {                                       
+      307 +  background: none; border: 0; padding: 0; font: inherit; colo
+          +r: var(--color-accent); cursor: pointer; text-decoration: unde
+          +rline;                                                        
+      308 +}                                                             
+      309 +.btn-google {                                                 
+      310 +  position: relative; display: flex; align-items: center; just
+          +ify-content: center; height: 50px; width: 100%;               
+      311 +  background: var(--color-google-bg); color: var(--color-googl
+          +e-text); border: 0; border-radius: var(--radius);             
+      312 +  font: inherit; font-size: var(--text-base); font-weight: 700
+          +; cursor: pointer;                                            
+      313 +}                                                             
+      314 +.btn-google svg { position: absolute; left: var(--space-6); } 
+      315 +.btn-google:hover { opacity: 0.92; }                          
+      316 +.btn-google:disabled { opacity: 0.5; cursor: not-allowed; }   
+      317 +/* "arba" between two thin lines */                           
+      318 +.signin-or {                                                  
+      319 +  display: flex; align-items: center; gap: var(--space-3); mar
+          +gin: 0;                                                       
+      320 +  color: var(--color-text-muted); font-size: var(--text-sm);  
+      321 +}                                                             
+      322 +.signin-or::before, .signin-or::after { content: ""; flex: 1; 
+          +border-top: 1px solid var(--color-border); }                  
+      323 +.signin input { height: 70px; padding: 0 var(--space-6); backg
+          +round: var(--color-input-dark); border: 0; font-size: var(--te
+          +xt-base); }                                                   
+      324 +.signin input:focus { outline: 2px solid var(--color-accent); 
+          +}                                                             
+      325 +.signin-submit { height: 46px; font-size: var(--text-base); } 
+      326 +                                                              
+      327 +/* /login page: dark background, greeting left, panel right */
+      328 +.login-page { min-height: 100vh; display: flex; flex-direction
+          +: column; background: var(--color-login-bg); }                
+      329 +.login-top { padding: var(--space-6) var(--space-8); }        
+      330 +.login-main {                                                 
+      331 +  flex: 1; display: flex; align-items: center; justify-content
+          +: space-between; gap: var(--space-8);                         
+      332 +  width: 100%; max-width: 1640px; margin: 0 auto; padding: 0 v
+          +ar(--space-8);                                                
+      333 +}                                                             
+      334 +.login-hello { margin: 0 0 0 5%; font-size: clamp(48px, 7vw, 1
+          +10px); font-weight: 700; line-height: 1.05; }                 
+      335 +.login-panel { width: 475px; flex-shrink: 0; padding: 48px 50p
+          +x; background: var(--color-bg); }                             
+      336 +.login-foot {                                                 
+      337 +  display: flex; flex-wrap: wrap; justify-content: center; gap
+          +: var(--space-6);                                             
+      338 +  padding: var(--space-6) var(--space-4); font-size: var(--tex
+          +t-base);                                                      
+      339 +}                                                             
+      340 +.login-foot a { font-weight: 700; }                           
+      341 +.login-foot a:hover { color: var(--color-accent); }           
+      342 +@media (max-width: 900px) {                                   
+      343 +  .login-main { flex-direction: column; align-items: stretch; 
+          +padding: 0 var(--space-4); }                                  
+      344 +  .login-hello { margin: 0; font-size: 44px; }                
+      345 +  .login-panel { width: auto; padding: var(--space-6); }      
+      346 +  .login-top { padding: var(--space-4); }                     
+      347 +}                                                             
+      348 +                                                              
+      349  /* account page */
+      350  .account { display: flex; flex-direction: column; gap: var(--s
+           pace-4); align-items: flex-start; }
+      351  .account-head { display: flex; align-items: center; gap: var(-
+           -space-4); flex-wrap: wrap; }
+● I'm turning the homepage changes for items 4–6 into a compact icon row with
+  names only, boxed "Rodyti visus" buttons on the rails, and ⓘ pop-ups on the
+  section titles. · summary
+
+● Write(frontend\src\components\ScrollRow.tsx)
+  ⎿  Wrote 45 lines to frontend\src\components\ScrollRow.tsx
+       1 import { useEffect, useRef, useState } from "react";
+       2 import { ChevronLeft, ChevronRight } from "./Icons";
+       3
+       4 /**
+       5  * A row that scrolls sideways, with ‹ › buttons on its sides li
+         ke Eneba's
+       6  * category icons. Each button only shows while there is more to
+          see that way.
+       7  */
+       8 export function ScrollRow({ className, label, children }: { clas
+     … +38 lines (~1 KB) (ctrl+o to expand)
+
+● Write(frontend\src\components\InfoTip.tsx)
+  ⎿  Wrote 18 lines to frontend\src\components\InfoTip.tsx
+       1 import { useId } from "react";
+       2 import { InfoIcon } from "./Icons";
+       3
+       4 /**
+       5  * The ⓘ next to a section title. Hovering or focusing it (keybo
+         ard, or a tap
+       6  * on phones) shows a dark pop-up explaining the section. Pure C
+         SS show/hide.
+       7  */
+       8 export function InfoTip({ text }: { text: string }) {
+     … +10 lines (ctrl+o to expand)
+
+● Now blocks.tsx with the info texts, the bottom button, and the new icon row:
+
+● Write(frontend\src\features\home\blocks.tsx)
+  ⎿  Added 53 lines, removed 24 lines
+       2  import { api } from "../../lib/api";
+       3  import { useAsync } from "../../lib/useAsync";
+       4  import { categoryLabel } from "../../lib/categories";
+       5 -import { formatItemCount } from "../../lib/format";            
+       5  import { Status } from "../../components/Status";
+       6  import { ProductCard } from "../../components/ProductCard";
+       7  import { CategoryIcon } from "../../components/Icons";
+       8 +import { InfoTip } from "../../components/InfoTip";            
+       9 +import { ScrollRow } from "../../components/ScrollRow";        
+      10  import type { Product } from "../../types";
+      11  import { useAuth } from "../auth/AuthContext";
+      12  
+     ...
+      22    );
+      23  }
+      24  
+      24 -/** A titled row of product cards; "Rodyti visus" links to the 
+         -matching store page. */                                        
+      25 -function ProductRail({ title, items, more }: { title: string; i
+         -tems: Product[]; more?: string }) {                            
+      25 +// What the ⓘ next to each title says: what the block shows and
+         + how it differs                                                
+      26 +// for a signed-in user and a guest.                           
+      27 +const INFO = {                                                 
+      28 +  recent:                                                      
+      29 +    "Prekės, kurias neseniai atidarei, naujausios pirmos. Kai e
+         +si prisijungęs, sąrašas saugomas tavo paskyroje ir matomas bet 
+         +kuriame įrenginyje; kitu atveju jis saugomas tik šioje naršyklė
+         +je. Prisijungus naršyklės istorija perkeliama į paskyrą.",     
+      30 +  recommended:                                                 
+      31 +    "Rekomendacijos grindžiamos tavo peržiūrėtomis ir pirktomis
+         + prekėmis: siūlome panašaus žanro, kategorijos ir platformos pr
+         +ekes, kurių dar neturi. Kai esi prisijungęs, rekomendacijos rem
+         +iasi tavo paskyros istorija, kitu atveju – šios naršyklės. Kol 
+         +istorijos nėra, rodomos perkamiausios prekės.",                
+      32 +  bestSellers:                                                 
+      33 +    "Daugiausiai kartų parduotos prekės visoje parduotuvėje. Są
+         +rašas vienodas visiems pirkėjams, nesvarbu, ar esi prisijungęs.
+         +",                                                             
+      34 +  giftCards:                                                   
+      35 +    "Populiariausios el. dovanų kortelės pagal pardavimus. Kodą
+         + gausi iškart po apmokėjimo. Sąrašas tas pats visiems; į krepše
+         +lį dėti gali visi, o apmokėti – tik prisijungę pirkėjai.",     
+      36 +  topUps:                                                      
+      37 +    "Populiariausi žaidimų platformų papildymai (Steam, PlaySta
+         +tion, Xbox ir kt.) pagal pardavimus. Sąrašas vienodas visiems p
+         +irkėjams; apmokant reikės prisijungti.",                       
+      38 +  preOrders:                                                   
+      39 +    "Dar neišleisti žaidimai. Užsisakyk dabar ir kodą gausi išk
+         +art; išleidimo dieną prekė savaime taps įprasta. Sąrašas vienod
+         +as visiems; apmokant reikės prisijungti.",                     
+      40 +};                                                             
+      41 +                                                               
+      42 +/** A titled row of product cards with an ⓘ; "Rodyti visus" is 
+         +a button under the row. */                                     
+      43 +function ProductRail({ title, info, items, more }: { title: str
+         +ing; info: string; items: Product[]; more?: string }) {        
+      44    return (
+      45      <>
+      46        <div className="band-head">
+      47          <h2>{title}</h2>
+      30 -        {more && <Link to={more} className="band-more">Rodyti v
+         -isus</Link>}                                                   
+      48 +        <InfoTip text={info} />                                
+      49        </div>
+      50        <div className="grid rail">{items.map((p) => <ProductCard
+           key={p.id} p={p} />)}</div>
+      51 +      {more && (                                               
+      52 +        <div className="band-foot">                            
+      53 +          <Link to={more} className="btn outline">Rodyti visus<
+         +/Link>                                                         
+      54 +        </div>                                                 
+      55 +      )}                                                       
+      56      </>
+      57    );
+      58  }
+      59  
+      60  /** A product block from one endpoint: loading/error inside its
+           own band. */
+      38 -function RailBlock({ title, load, more, personal }: { title: st
+         -ring; load: () => Promise<{ items: Product[] }>; more?: string;
+         - personal?: boolean }) {                                       
+      61 +function RailBlock({ title, info, load, more, personal }: { tit
+         +le: string; info: string; load: () => Promise<{ items: Product[
+         +] }>; more?: string; personal?: boolean }) {                   
+      62    const uid = useAuth().user?.uid;
+      63    const state = useAsync(load, personal ? [uid] : []); // perso
+          nal blocks reload on sign-in/out
+      64    return (
+      65      <Band>
+      43 -      <Status state={state}>{({ items }) => <ProductRail title=
+         -{title} items={items} more={more} />}</Status>                 
+      66 +      <Status state={state}>{({ items }) => <ProductRail title=
+         +{title} info={info} items={items} more={more} />}</Status>     
+      67      </Band>
+      68    );
+      69  }
+     ...
+       94    if (!state.data?.items.length) return null;
+       95    return (
+       96      <Band>
+       74 -      <ProductRail title="Neseniai peržiūrėta" items={state.da
+          -ta.items} />                                                  
+       97 +      <ProductRail title="Neseniai peržiūrėta" info={INFO.rece
+          +nt} items={state.data.items} />                               
+       98      </Band>
+       99    );
+      100  }
+      101  
+       79 -export const RecommendedBlock = () => <RailBlock title="Rekome
+          -nduojama tau" load={api.recommended} personal />;             
+       80 -export const BestSellersBlock = () => <RailBlock title="Perkam
+          -iausi" load={api.bestSellers} more="/store" />;               
+      102 +export const RecommendedBlock = () => <RailBlock title="Rekome
+          +nduojama tau" info={INFO.recommended} load={api.recommended} p
+          +ersonal />;                                                   
+      103 +export const BestSellersBlock = () => <RailBlock title="Perkam
+          +iausi" info={INFO.bestSellers} load={api.bestSellers} more="/s
+          +tore" />;                                                     
+      104  export const GiftCardsBlock = () => (
+       82 -  <RailBlock title="Populiariausios el. dovanų kortelės" load=
+          -{api.giftCards} more="/store?category=gift-cards" />          
+      105 +  <RailBlock title="Populiariausios el. dovanų kortelės" info=
+          +{INFO.giftCards} load={api.giftCards} more="/store?category=gi
+          +ft-cards" />                                                  
+      106  );
+      107  export const TopUpsBlock = () => (
+       85 -  <RailBlock title="Populiariausi papildymai" load={api.topUps
+          -} more="/store?category=gaming-cards" />                      
+      108 +  <RailBlock title="Populiariausi papildymai" info={INFO.topUp
+          +s} load={api.topUps} more="/store?category=gaming-cards" />   
+      109  );
+       87 -export const PreOrdersBlock = () => <RailBlock title="Įsigyk i
+          -š anksto" load={api.preOrders} />;                            
+      110 +export const PreOrdersBlock = () => <RailBlock title="Įsigyk i
+          +š anksto" info={INFO.preOrders} load={api.preOrders} />;      
+      111  
+       89 -/** Eneba's icon row under the hero: icon, category name and h
+          -ow many products it has. */                                   
+      112 +// We have 5 categories; Eneba's row is full width. Repeating 
+          +the list fills the                                            
+      113 +// row so the ‹ › arrows have something to scroll (the user as
+          +ked for this look).                                           
+      114 +const MIN_ICONS = 16;                                         
+      115 +                                                              
+      116 +/** Eneba's icon row under the hero: icon + name, scrolls side
+          +ways with ‹ › buttons. */                                     
+      117  export function CategoriesBlock() {
+      118    const state = useAsync(() => api.categoryCounts(), []);
+      119    return (
+      120      <section className="category-strip">
+      121        <div className="container">
+      122          <Status state={state}>
+       96 -          {({ items }) => (                                   
+       97 -            <nav className="category-icons" aria-label="Katego
+          -rijos">                                                       
+       98 -              {items.map((c) => (                             
+       99 -                <Link key={c.category} to={`/store?category=${
+          -c.category}`} className="category-icon">                      
+      100 -                  <CategoryIcon id={c.category} />            
+      101 -                  <span className="category-icon-name">{catego
+          -ryLabel(c.category)}</span>                                   
+      102 -                  <span className="muted">{formatItemCount(c.c
+          -ount)}</span>                                                 
+      103 -                </Link>                                       
+      104 -              ))}                                             
+      105 -            </nav>                                            
+      106 -          )}                                                  
+      123 +          {({ items }) => {                                   
+      124 +            const filled = items.length ? Array.from({ length:
+          + Math.max(MIN_ICONS, items.length) }, (_, i) => items[i % item
+          +s.length]) : [];                                              
+      125 +            return (                                          
+      126 +              <ScrollRow className="category-icons" label="Kat
+          +egorijos">                                                    
+      127 +                {filled.map((c, i) => (                       
+      128 +                  <Link key={`${c.category}-${i}`} to={`/store
+          +?category=${c.category}`} className="category-icon">          
+      129 +                    <CategoryIcon id={c.category} size={32} />
+      130 +                    <span className="category-icon-name">{cate
+          +goryLabel(c.category)}</span>                                 
+      131 +                  </Link>                                     
+      132 +                ))}                                           
+      133 +              </ScrollRow>                                    
+      134 +            );                                                
+      135 +          }}                                                  
+      136          </Status>
+      137        </div>
+      138      </section>
+
+● Update(frontend\src\styles\global.css)
+  ⎿  Added 15 lines, removed 4 lines
+      156  
+      157  /* category icon row under the hero */
+      158  .category-strip { padding: var(--space-8) 0 var(--space-4); }
+      159 -.category-icons { display: flex; justify-content: space-around
+          -; gap: var(--space-4); overflow-x: auto; scrollbar-width: none
+          -; }                                                           
+      159 +.category-icons { display: flex; gap: var(--space-2); overflow
+          +-x: auto; scrollbar-width: none; scroll-behavior: smooth; }   
+      160 +.category-icons::-webkit-scrollbar { display: none; }         
+      161  .category-icon {
+      161 -  display: flex; flex-direction: column; align-items: center; 
+          -gap: var(--space-1); min-width: 110px;                        
+      162 -  text-align: center; font-size: var(--text-xs);              
+      162 +  display: flex; flex-direction: column; align-items: center; 
+          +gap: 2px; flex: 0 0 96px;                                     
+      163 +  padding: var(--space-2) 0; text-align: center;              
+      164  }
+      164 -.category-icon-name { font-weight: 700; font-size: var(--text-
+          -sm); margin-top: var(--space-2); }                            
+      165 +.category-icon-name { font-weight: 700; font-size: var(--text-
+          +xs); line-height: 1.2; }                                      
+      166  .category-icon:hover { color: var(--color-accent); }
+      167 +/* ‹ › buttons on the sides of a sideways-scrolling row */    
+      168 +.scroll-row { position: relative; }                           
+      169 +.scroll-btn {                                                 
+      170 +  position: absolute; top: 50%; transform: translateY(-50%); z
+          +-index: 2; display: flex; align-items: center;                
+      171 +  height: 100%; padding: 0 var(--space-1); border: 0; cursor: 
+          +pointer; color: var(--color-text-nav);                        
+      172 +}                                                             
+      173 +.scroll-btn.left { left: calc(-1 * var(--space-6)); background
+          +: linear-gradient(to right, var(--color-bg) 60%, transparent);
+          + }                                                            
+      174 +.scroll-btn.right { right: calc(-1 * var(--space-6)); backgrou
+          +nd: linear-gradient(to left, var(--color-bg) 60%, transparent)
+          +; }                                                           
+      175 +.scroll-btn:hover { color: var(--color-accent); }             
+      176 +@media (max-width: 1260px) { .scroll-btn.left { left: 0; } .sc
+          +roll-btn.right { right: 0; } }                                
+      177  
+      178  /* homepage: every block is a full-width band; colors alternat
+           e page purple / dark band */
+      179  .band { padding: var(--space-6) 0 var(--space-8); }
+
+● Update(frontend\src\styles\global.css)
+  ⎿  Added 31 lines, removed 4 lines
+      178  /* homepage: every block is a full-width band; colors alternat
+           e page purple / dark band */
+      179  .band { padding: var(--space-6) 0 var(--space-8); }
+      180  .band:nth-child(even) { background: var(--color-band); }
+      181 -.band-head { display: flex; justify-content: space-between; al
+          -ign-items: baseline; gap: var(--space-4); margin-bottom: var(-
+          --space-2); }                                                  
+      182 -.band h2 { font-size: 32px; }                                 
+      183 -.band-more { font-size: var(--text-sm); font-weight: 700; colo
+          -r: var(--color-accent); white-space: nowrap; }                
+      184 -.band-more:hover { text-decoration: underline; }              
+      181 +.band-head { position: relative; display: flex; align-items: c
+          +enter; gap: var(--space-2); margin-bottom: var(--space-3); }  
+      182 +.band h2 { font-size: 32px; margin: 0; }                      
+      183 +/* "Rodyti visus" as a boxed button under the rail */         
+      184 +.band-foot { display: flex; justify-content: center; margin-to
+          +p: var(--space-4); }                                          
+      185 +.btn.outline {                                                
+      186 +  background: transparent; color: var(--color-text); border: 2
+          +px solid var(--color-text);                                   
+      187 +  min-width: 220px; text-align: center; padding: var(--space-2
+          +) var(--space-6);                                             
+      188 +}                                                             
+      189 +.btn.outline:hover { border-color: var(--color-accent); color:
+          + var(--color-accent); background: transparent; }              
+      190 +                                                              
+      191 +/* ⓘ next to a section title, with a dark pop-up above it on h
+          +over/focus */                                                 
+      192 +.info-tip { position: relative; display: inline-flex; }       
+      193 +.info-btn { display: flex; background: none; border: 0; paddin
+          +g: 0; color: var(--color-text-muted); cursor: help; }         
+      194 +.info-btn:hover, .info-btn:focus-visible { color: var(--color-
+          +text); }                                                      
+      195 +.info-pop {                                                   
+      196 +  position: absolute; bottom: calc(100% + 14px); left: 50%; tr
+          +ansform: translateX(-50%); z-index: 30;                       
+      197 +  width: 390px; padding: var(--space-3) var(--space-4); backgr
+          +ound: var(--color-tooltip); color: var(--color-text);         
+      198 +  font-size: var(--text-base); font-weight: 400; line-height: 
+          +1.6; box-shadow: var(--shadow);                               
+      199 +  visibility: hidden; opacity: 0; transition: opacity 0.15s; p
+          +ointer-events: none;                                          
+      200 +}                                                             
+      201 +.info-pop::after { /* the little arrow pointing at the ⓘ */   
+      202 +  content: ""; position: absolute; top: 100%; left: 50%; trans
+          +form: translateX(-50%);                                       
+      203 +  border: 10px solid transparent; border-top-color: var(--colo
+          +r-tooltip);                                                   
+      204 +}                                                             
+      205 +.info-tip:hover .info-pop, .info-btn:focus + .info-pop { visib
+          +ility: visible; opacity: 1; }                                 
+      206 +/* phones: pin the pop-up to the title row's width instead of 
+          +centering it on the icon */                                   
+      207 +@media (max-width: 600px) {                                   
+      208 +  .info-tip { position: static; }                             
+      209 +  .info-pop { left: 0; right: 0; width: auto; transform: none;
+          + }                                                            
+      210 +  .info-pop::after { display: none; }                         
+      211 +}                                                             
+      212  /* homepage rails: one row that scrolls sideways, like Eneba's
+            sections. Thin, themed scrollbar. */
+      213  .rail {
+      214    grid-template-columns: none; grid-auto-flow: column; grid-au
+           to-columns: 214px; gap: var(--space-6);
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+● The build passes. Now a visual check: headless Chrome screenshots against a
+  local in-memory API, as in earlier design passes.
+
+  Read 3 files, ran 2 shell commands (ctrl+o to expand)
+
+● The login page matches the screenshot well on desktop. Two problems to fix:
+  1. The homepage didn't load data in this test run.
+  2. The mobile login panel overflows to the right.
+
+  Checking both:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The proxy works. The API log shows no /api requests from the page, so the
+  built bundle is probably calling a different address. Checking:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Neither problem is in the new code: your local .env.local points the API at
+  the live Render server, which rejects localhost requests, so I'll override
+  that only for the screenshots, and the 500px mobile overflow comes from
+  headless Chrome's minimum width, so I'll retake those at 500px. · summary
+
+  Read 2 files, ran 1 shell command (ctrl+o to expand)
+
+● The icon row, header, nav color and login page all look right. Next I'll check
+  further down for the "Rodyti visus" buttons:
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● The "Rodyti visus" buttons are centered under each rail, and blocks without a
+  target get none. The hover pop-up and drawer can't show in a headless
+  screenshot, so please try them in the browser; I'm stopping the test servers
+  now. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Bash(cd .. && PYTHONUTF8=1 python - <<'EOF'
+      p='DECISIONS.md'…)
+  ⎿  Updated DECISIONS.md (+22 -0)
+      315  initials avatars (the user asked for the picture only); Fireba
+           se UI library (new dependency).
+      316  Trade-off: whoever holds a guest id can merge that guest's dat
+           a into their account, the same
+      317  trust model as reading those orders with the id (#20). Merging
+            is not undone on sign-out.
+      318 +                                                              
+      319 +## 29. Third design pass: login page, category drawer, icon ro
+          +w, section info pop-ups                                       
+      320 +From the new screenshots in `docs/screens/` (header logged in/
+          +off, log in page, categories side                             
+      321 +bar, info pop up):                                            
+      322 +- Header: signed out shows "👤 Prisijungti | Registruotis" (re
+          +gister = `/login?mode=register`);                             
+      323 +  signed in shows the avatar menu (#28). Category row links us
+          +e the new `--color-text-nav`.                                 
+      324 +- `/login` is its own page outside the shop layout, like Eneba
+          +'s: greeting on the left, panel on                            
+      325 +  the right, white Google button with Google's G (their brandi
+          +ng asks for it; colors are tokens).                           
+      326 +  The same `SignInForm` is used in the checkout popup.        
+      327 +- "☰ Kategorijos" opens a left drawer (`CategoryDrawer`): "Vi
+          +si pasiūlymai", the 5 categories,                             
+      328 +  then the platforms from the store's facets (no hardcoded pla
+          +tform list).                                                  
+      329 +- Icon row: name only (the count is gone from the UI; the endp
+          +oint still returns it), smaller and                           
+      330 +  tighter. Our 5 categories repeat to fill the row (asked for 
+          +the look), and a reusable                                     
+      331 +  `ScrollRow` adds ‹ › buttons that only show when there is mo
+          +re to scroll that way.                                        
+      332 +- Rails: "Rodyti visus" is an outlined button under the cards.
+          + Every section title has an ⓘ                                 
+      333 +  (`InfoTip`) whose dark pop-up says what the block shows and 
+          +how it differs for guests vs                                  
+      334 +  signed-in users. Shown with CSS on hover/focus, no state.   
+      335 +Skipped on purpose: Facebook/Apple/Steam/Discord buttons and m
+          +agic-link email (not built, a dead                            
+      336 +button would mislead); wishlist heart and language picker (as 
+          +in #27); drawer sub-menus behind                              
+      337 +the › arrows (each row links straight to the store filter).   
+      338 +Rejected: a tooltip library (new dependency for one pop-up); f
+          +ake categories to fill the icon row                           
+      339 +(they would lead to empty store pages).                       
+
+● All six are done. The build passes, and I checked the header, login page, icon
+  row and "Rodyti visus" buttons in headless Chrome at 1280px, plus the login
+  page at 500px. I couldn't capture the ⓘ pop-ups or the category drawer there,
+  because they only open on hover or click, so please try those two in the
+  browser.
+
+  1. Category row color: "Kategorijos", "Žaidimai" and the rest are now #dad6e4,
+     stored as a new token (--color-text-nav).
+  2. Header and login page:
+     - Signed out, the header shows "👤 Prisijungti | Registruotis";
+       "Registruotis" opens the login page in register mode. Signed in, it shows
+       the avatar with its menu.
+     - /login is now its own page like Eneba's: no shop header, "Sveiki! Malonu
+       jus matyti!" on the left, the panel on the right with the white Google
+       button, an "arba" divider, dark inputs and the yellow button. It also
+       works on phones.
+     - The checkout sign-in popup uses the same form.
+  3. Category drawer: "☰ Kategorijos" opens a left side menu: logo, ✕, "Visi
+     pasiūlymai", the 5 categories, then the platforms the store actually has.
+     Each row links to the matching store filter. The store page's filter
+     checkboxes are unchanged; tell me if you meant to replace those too.
+  4. Icon row:
+     - The product counts are gone, the names sit closer under smaller icons,
+       and the icons are tighter together.
+     - The 5 categories repeat to fill the row.
+     - The ‹ › arrows only appear when there's more to scroll in that direction.
+  5. "Rodyti visus": now an outlined button centered under each rail.
+  6. ⓘ pop-ups:
+     - Every section title has one; hovering or tapping shows a dark pop-up with
+       an arrow, like the screenshot.
+     - Each text says what the section shows and how it differs for guests and
+       signed-in users. For example, recently viewed and recommendations follow
+       your account across devices when signed in, and only this browser
+       otherwise.
+
+  I left out the Facebook, Apple, Steam, Discord, Twitch and X buttons and the
+  email-link login, because none of them work here and a dead button would
+  mislead. Same for the heart and the language picker. The › arrows in the
+  drawer go straight to the store instead of opening a sub-menu.
+
+  Your frontend/.env.local now has VITE_API_URL set to the live Render API. A
+  local npm run dev will therefore call the live API, which rejects localhost,
+  so you'll see "Failed to fetch". Clear that value for local work; on Render
+  it's set in the dashboard anyway.
+
+  I added DECISIONS #29. Nothing is committed: the login work and this design
+  pass are both waiting. Want me to commit them as two separate commits and
+  push?
+
+> thats nice you can commit them, but dont push just yet. Another thing I would
+  like to change is when you go to a category there is a filter card on the
+  left. Remove the 1st section called "Kategorija" and replace it with price
+  range filter
+
+● Committing first. The login work and the design pass both changed the same
+  files (sign-in form, account menu, App, global.css, DECISIONS.md), and
+  splitting those by hunk needs interactive git add -p, which isn't available
+  here. So they go in as one commit, with a message covering both.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● You'd already committed the login work yourself as a922447, so my commit
+  contains only the design pass and its message is wrong. It isn't pushed, so
+  I'm correcting the message:
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● Committed as d5407da without a push. Next I'm replacing the sidebar's top
+  price section with a two-handle slider and Nuo/Iki boxes, which needs the
+  backend to report the min and max prices, so I'm checking how facets are
+  built. · summary
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● I'm adding priceMin and priceMax to the facets, computed from products passing
+  all filters except price, so each category's slider spans its own cheapest to
+  most expensive item. · summary
+
+● Bash(cd backend && PYTHONUTF8=1 python - <<'EOF'
+      p='internal/service/catalog.go'…)
+  ⎿  Updated backend\internal\service\catalog.go (+12 -1)
+      83          Regions    []string `json:"regions"`
+      84          Genres     []string `json:"genres"`
+      85          Categories []string `json:"categories"`
+      86 +        // Price range (cents) of the products matching every f
+         +ilter except price,                                            
+      87 +        // so the store's price slider spans what this category
+         +/search can return.                                            
+      88 +        PriceMin int `json:"priceMin"`                         
+      89 +        PriceMax int `json:"priceMax"`                         
+      90  }
+      91  
+      92  type Page struct {
+     ...
+      124          }
+      125  
+      126          out := make([]domain.Product, 0, len(pool))
+      127 +        priceMin, priceMax := 0, 0                            
+      128          for _, p := range pool {
+      129                  if !inSet(f.Platforms, p.Platform) || !inSet(f
+           .Regions, p.Region) || !inSet(f.Genres, p.Genre) ||
+      130                          !inSet(f.Categories, p.Category) {
+      131                          continue
+      132                  }
+      133 +                if priceMin == 0 || p.PriceFrom < priceMin {  
+      134 +                        priceMin = p.PriceFrom                
+      135 +                }                                             
+      136 +                priceMax = max(priceMax, p.PriceFrom)         
+      137                  if f.MinPrice > 0 && p.PriceFrom < f.MinPrice 
+           {
+      138                          continue
+      139                  }
+     ...
+      147  
+      148          total := len(out)
+      149          start, end := pageBounds(f.Page, f.PageSize, total)
+      141 -        return Page{Items: out[start:end], Total: total, Page:
+          - f.Page, PageSize: f.PageSize, Facets: facets(all)}, nil      
+      150 +        fc := facets(all)                                     
+      151 +        fc.PriceMin, fc.PriceMax = priceMin, priceMax         
+      152 +        return Page{Items: out[start:end], Total: total, Page:
+          + f.Page, PageSize: f.PageSize, Facets: fc}, nil               
+      153  }
+      154  
+      155  // pageBounds returns the slice range [start, end) of a 1-base
+           d page. A page
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(backend\internal\service\catalog_test.go)  ⎿  Added 26 lines
+       81    }
+       82  }
+       83  
+       84 +// The price range covers the products matching every filter e
+          +xcept price,                                                  
+       85 +// so narrowing the price does not shrink the slider's own bou
+          +nds.                                                          
+       86 +func TestListPriceRange(t *testing.T) {                       
+       87 +  s := newSvc(t)                                              
+       88 +  ctx := context.Background()                                 
+       89 +                                                              
+       90 +  pg, err := s.List(ctx, Filter{Categories: []string{"dlc"}}) 
+       91 +  if err != nil {                                             
+       92 +    t.Fatal(err)                                              
+       93 +  }                                                           
+       94 +  lo, hi := pg.Items[0].PriceFrom, pg.Items[0].PriceFrom      
+       95 +  for _, p := range pg.Items {                                
+       96 +    lo, hi = min(lo, p.PriceFrom), max(hi, p.PriceFrom)       
+       97 +  }                                                           
+       98 +  if pg.Facets.PriceMin != lo || pg.Facets.PriceMax != hi {   
+       99 +    t.Fatalf("DLC price range: got %d-%d, want %d-%d", pg.Face
+          +ts.PriceMin, pg.Facets.PriceMax, lo, hi)                      
+      100 +  }                                                           
+      101 +  narrowed, _ := s.List(ctx, Filter{Categories: []string{"dlc"
+          +}, MinPrice: hi})                                             
+      102 +  if narrowed.Total != 1 && lo != hi {                        
+      103 +    t.Errorf("min price = most expensive DLC: got %d products"
+          +, narrowed.Total)                                             
+      104 +  }                                                           
+      105 +  if narrowed.Facets.PriceMin != lo || narrowed.Facets.PriceMa
+          +x != hi {                                                     
+      106 +    t.Errorf("price filter changed the range: %d-%d", narrowed
+          +.Facets.PriceMin, narrowed.Facets.PriceMax)                   
+      107 +  }                                                           
+      108 +}                                                             
+      109 +                                                              
+      110  func TestListSearchTypo(t *testing.T) {
+      111    s := newSvc(t)
+      112    pg, err := s.List(context.Background(), Filter{Q: "eldne rig
+           n"})
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Backend is finished and tested, so I'm building the frontend PriceFilter
+  component, with a two-handle slider and whole-euro boxes that apply on release
+  or Enter. · summary
+
+● Write(frontend\src\features\store\PriceFilter.tsx)
+  ⎿  Wrote 84 lines to frontend\src\features\store\PriceFilter.tsx
+       1 import { useEffect, useState } from "react";
+       2
+       3 interface Props {
+       4   /** Cheapest and dearest product for the other filters (cents,
+          from the API's facets). */
+       5   bounds: { min: number; max: number };
+       6   /** The price filter in the URL (cents); undefined = no limit
+         on that side. */
+       7   from?: number;
+       8   to?: number;
+     … +76 lines (ctrl+o to expand)
+
+● Update(frontend\src\types\index.ts)
+  ⎿  Added 2 lines
+      48    regions: string[];
+      49    genres: string[];
+      50    categories: string[];
+      51 +  priceMin: number; // cents: cheapest product matching every f
+         +ilter except price                                             
+      52 +  priceMax: number; // cents                                   
+      53  }
+      54  
+      55  export interface ProductPage {
+
+● An empty "Nuo/Iki" box would currently snap to 0 while typing. I'll let the
+  boxes be empty (meaning "no limit" on that side):
+
+● Bash(cd ../frontend/src/features/store && PYTHONUTF8=1 python - <<'EOF'
+      p='PriceFilter.tsx'…)
+  ⎿  Updated frontend\src\features\store\PriceFilter.tsx (+19 -16)
+      29      setRange([from ? floorEur(from) : lo, to ? ceilEur(to) : hi
+          ]);
+      30    }, [from, to, lo, hi]);
+      31  
+      32 -  const [a, b] = range;                                        
+      33 -  const clamp = (v: number) => Math.min(hi, Math.max(lo, Math.r
+         -ound(v) || 0));                                                
+      32 +  const [a, b] = range; // NaN while a box is empty            
+      33 +  // A box left empty means "no limit" on that side, i.e. the b
+         +ound.                                                          
+      34 +  const clamp = (v: number, empty: number) => (Number.isNaN(v) 
+         +? empty : Math.min(hi, Math.max(lo, Math.round(v))));          
+      35 +  const sliderA = Number.isNaN(a) ? lo : a;                    
+      36 +  const sliderB = Number.isNaN(b) ? hi : b;                    
+      37  
+      35 -  function apply(next: [number, number] = range) {             
+      38 +  function apply(next: [number, number] = [sliderA, sliderB]) {
+      39      const [x, y] = [Math.min(next[0], next[1]), Math.max(next[0
+          ], next[1])];
+      40      setRange([x, y]);
+      41      onApply(x > lo ? x * 100 : undefined, y < hi ? y * 100 : un
+          defined);
+      42    }
+      43  
+      44    const pct = (v: number) => ((v - lo) / (hi - lo)) * 100;
+      42 -  const track = { "--from": `${pct(a)}%`, "--to": `${pct(b)}%` 
+         -} as React.CSSProperties;                                      
+      45 +  const track = { "--from": `${pct(sliderA)}%`, "--to": `${pct(
+         +sliderB)}%` } as React.CSSProperties;                          
+      46  
+      47    return (
+      48      <fieldset className="price-filter">
+      49        <legend>Kaina</legend>
+      50        <div className="price-slider" style={track}>
+      51          <input
+      49 -          type="range" min={lo} max={hi} value={a} aria-label="
+         -Mažiausia kaina"                                               
+      50 -          onChange={(e) => setRange([Math.min(Number(e.target.v
+         -alue), b), b])}                                                
+      52 +          type="range" min={lo} max={hi} value={sliderA} aria-l
+         +abel="Mažiausia kaina"                                         
+      53 +          onChange={(e) => setRange([Math.min(Number(e.target.v
+         +alue), sliderB), sliderB])}                                    
+      54            onPointerUp={() => apply()} onKeyUp={() => apply()}
+      55          />
+      56          <input
+      54 -          type="range" min={lo} max={hi} value={b} aria-label="
+         -Didžiausia kaina"                                              
+      55 -          onChange={(e) => setRange([a, Math.max(Number(e.targe
+         -t.value), a)])}                                                
+      57 +          type="range" min={lo} max={hi} value={sliderB} aria-l
+         +abel="Didžiausia kaina"                                        
+      58 +          onChange={(e) => setRange([sliderA, Math.max(Number(e
+         +.target.value), sliderA)])}                                    
+      59            onPointerUp={() => apply()} onKeyUp={() => apply()}
+      60          />
+     … 29 more lines (ctrl+o to expand)
+
+● apply also fires when a box loses focus without any change, which would reset
+  the page to 1 for nothing. I'll make it skip unchanged values, then wire it
+  into the store page:
+
+● Update(frontend\src\features\store\PriceFilter.tsx)
+  ⎿  Added 3 lines, removed 1 line
+      38    function apply(next: [number, number] = [sliderA, sliderB]) {
+      39      const [x, y] = [Math.min(next[0], next[1]), Math.max(next[0
+          ], next[1])];
+      40      setRange([x, y]);
+      41 -    onApply(x > lo ? x * 100 : undefined, y < hi ? y * 100 : un
+         -defined);                                                      
+      41 +    const nextFrom = x > lo ? x * 100 : undefined;             
+      42 +    const nextTo = y < hi ? y * 100 : undefined;               
+      43 +    if (nextFrom !== from || nextTo !== to) onApply(nextFrom, n
+         +extTo); // e.g. a box left unchanged: no reload                
+      44    }
+      45  
+      46    const pct = (v: number) => ((v - lo) / (hi - lo)) * 100;
+
+● Bash(PYTHONUTF8=1 python - <<'EOF'
+      p='StorePage.tsx'…)
+  ⎿  Updated frontend\src\features\store\StorePage.tsx (+21 -10)
+       6  import { Pager } from "../../components/Pager";
+       7  import { formatItemCount, regionLabel } from "../../lib/format"
+          ;
+       8  import { categoryLabel } from "../../lib/categories";
+       9 +import { PriceFilter } from "./PriceFilter";                   
+      10  
+      11  const SORTS = [
+      12    { value: "", label: "Populiariausi" },
+     ...
+      42      setSp(next);
+      43    }
+      44  
+      44 -  function toggle(key: "category" | "platform" | "region" | "ge
+         -nre", value: string) {                                         
+      45 +  function toggle(key: "platform" | "region" | "genre", value: 
+         +string) {                                                      
+      46      const cur = list(sp.get(key));
+      47      set(key, (cur.includes(value) ? cur.filter((v) => v !== val
+          ue) : [...cur, value]).join(","));
+      48    }
+      49  
+      49 -  // Price inputs are in euros for the user; the API takes cent
+         -s.                                                             
+      50 -  const euros = (cents?: number) => (cents ? String(cents / 100
+         -) : "");                                                       
+      50 +  // Both ends of the price range change in one URL update (cen
+         +ts, like the API).                                             
+      51 +  function setPrice(from?: number, to?: number) {              
+      52 +    const next = new URLSearchParams(sp);                      
+      53 +    for (const [key, v] of [["minPrice", from], ["maxPrice", to
+         +]] as const) {                                                 
+      54 +      if (v) next.set(key, String(v));                         
+      55 +      else next.delete(key);                                   
+      56 +    }                                                          
+      57 +    next.delete("page");                                       
+      58 +    setSp(next);                                               
+      59 +  }                                                            
+      60  
+      61    return (
+      62      <div className="page container store">
+     ...
+      64          <Status state={state}>
+      65            {({ facets }) => (
+      66              <>
+      67 +              {/* No "Kategorija" checkboxes: the category come
+         +s from the header row or the                                   
+      68 +                  side menu. The price range comes first instea
+         +d. */}                                                         
+      69 +              <PriceFilter                                     
+      70 +                bounds={{ min: facets.priceMin, max: facets.pri
+         +ceMax }}                                                       
+      71 +                from={query.minPrice}                          
+      72 +                to={query.maxPrice}                            
+     … 27 more lines (ctrl+o to expand)
+
+● Next, the slider styling: two native range inputs stacked on one track, with
+  the selected part in yellow.
+
+● Update(frontend\src\styles\global.css)
+  ⎿  Added 35 lines
+      222  .filters .check { display: flex; gap: var(--space-2); font-wei
+           ght: 400; color: var(--color-text-muted); }
+      223  .filters .check:hover { color: var(--color-text); }
+      224  .filters input[type="checkbox"] { accent-color: var(--color-pr
+           imary); }
+      225 +                                                              
+      226 +/* price range: two range inputs stacked on one track; the par
+          +t between the handles is yellow */                            
+      227 +.price-filter { border: 0; padding: 0; margin: 0; min-width: 0
+          +; }                                                           
+      228 +.price-filter legend { padding: 0; margin-bottom: var(--space-
+          +3); font-size: var(--text-sm); font-weight: 800; }            
+      229 +.price-slider { position: relative; height: 24px; margin: 0 va
+          +r(--space-2) var(--space-3); }                                
+      230 +.price-slider::before { /* the track */                       
+      231 +  content: ""; position: absolute; left: 0; right: 0; top: 50%
+          +; height: 4px; transform: translateY(-50%); border-radius: 2px
+          +;                                                             
+      232 +  background: linear-gradient(to right,                       
+      233 +    var(--color-border) var(--from), var(--color-primary) var(
+          +--from),                                                      
+      234 +    var(--color-primary) var(--to), var(--color-border) var(--
+          +to));                                                         
+      235 +}                                                             
+      236 +.price-slider input[type="range"] {                           
+      237 +  position: absolute; inset: 0; width: 100%; height: 100%; mar
+          +gin: 0; padding: 0;                                           
+      238 +  appearance: none; -webkit-appearance: none; background: none
+          +; border: 0; pointer-events: none;                            
+      239 +}                                                             
+      240 +/* only the round handles take the mouse, so both inputs can b
+          +e grabbed */                                                  
+      241 +.price-slider input[type="range"]::-webkit-slider-thumb {     
+      242 +  -webkit-appearance: none; width: 18px; height: 18px; border-
+          +radius: 50%; cursor: pointer; pointer-events: auto;           
+      243 +  background: var(--color-text); border: 3px solid var(--color
+          +-primary);                                                    
+      244 +}                                                             
+      245 +.price-slider input[type="range"]::-moz-range-thumb {         
+      246 +  width: 12px; height: 12px; border-radius: 50%; cursor: point
+          +er; pointer-events: auto;                                     
+      247 +  background: var(--color-text); border: 3px solid var(--color
+          +-primary);                                                    
+      248 +}                                                             
+      249 +.price-slider input[type="range"]:focus-visible::-webkit-slide
+          +r-thumb { outline: 2px solid var(--color-text); outline-offset
+          +: 2px; }                                                      
+      250 +.price-boxes { display: flex; align-items: center; gap: var(--
+          +space-2); }                                                   
+      251 +.filters .price-boxes label {                                 
+      252 +  flex: 1; display: flex; align-items: center; gap: var(--spac
+          +e-1); margin: 0;                                              
+      253 +  background: var(--color-surface-2); border: 1px solid var(--
+          +color-border); border-radius: var(--radius);                  
+      254 +  padding: 0 var(--space-2); font-size: var(--text-xs); font-w
+          +eight: 600; color: var(--color-text-muted);                   
+      255 +}                                                             
+      256 +.price-boxes input { width: 100%; min-width: 0; border: 0; bac
+          +kground: none; padding: var(--space-2) 0; text-align: right; -
+          +moz-appearance: textfield; }                                  
+      257 +.price-boxes input::-webkit-inner-spin-button { -webkit-appear
+          +ance: none; }                                                 
+      258 +.price-boxes input:focus { outline: none; }                   
+      259 +.filters .price-boxes label:focus-within { border-color: var(-
+          +-color-accent); }                                             
+      260  .toolbar { display: flex; justify-content: space-between; alig
+           n-items: center; gap: var(--space-4); margin-bottom: var(--spa
+           ce-4); }
+      261  .pager { display: flex; gap: var(--space-2); justify-content: 
+           center; align-items: center; margin-top: var(--space-6); }
+      262  @media (max-width: 800px) { .store { grid-template-columns: 1f
+           r; } }
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Build passes. Screenshots of a category page, once with no price limit and
+  once with one:
+
+  Read 2 files, ran 1 shell command (ctrl+o to expand)
+
+● The price filter now works: on "Žaidimai" it spans 10–83 €, and a 20–45 €
+  range cuts results from 17 to 9, with "Platforma" following it. I'm adding the
+  DECISIONS entry and committing this as its own slice, unpushed. · summary
+
+● Bash(cd .. && PYTHONUTF8=1 python - <<'EOF'
+      p='DECISIONS.md'…)
+  ⎿  Updated DECISIONS.md (+14 -0)
+      337  the › arrows (each row links straight to the store filter).
+      338  Rejected: a tooltip library (new dependency for one pop-up); f
+           ake categories to fill the icon row
+      339  (they would lead to empty store pages).
+      340 +                                                              
+      341 +## 30. Store sidebar: price range slider instead of the "Kateg
+          +orija" checkboxes                                             
+      342 +The category already comes from the header row, the side menu 
+          +(#29) and the homepage icons, so                              
+      343 +the sidebar's first section is now a price range: a two-handle
+          + slider plus "Nuo/Iki" boxes in                               
+      344 +whole euros (URL and API stay in cents, rule 2). The slider's 
+          +ends come from the API:                                       
+      345 +`facets.priceMin/priceMax` are the cheapest and dearest produc
+          +ts matching every filter except                               
+      346 +price, so inside "Žaidimai" it spans the games, and moving the
+          + handles never shrinks the slider                             
+      347 +itself (test: `TestListPriceRange`). The store reloads when a 
+          +handle is let go or a box is left                             
+      348 +or Entered, not on every keystroke like the old inputs; an emp
+          +ty box or a handle at the end means                           
+      349 +no limit on that side.                                        
+      350 +Rejected: a slider library (two stacked native `<input type="r
+          +ange">` do it with ~30 lines of                               
+      351 +CSS); fixed bounds such as 0-100 € (useless for cheap categori
+          +es); keeping category checkboxes                              
+      352 +as well (the user asked for them to go; `?category=` in the UR
+          +L still filters).                                             
+      353 +                                                              
+  ⎿  (timeout 3m)
+
+● The "Kategorija" checkboxes are gone, and the first section of the store
+  sidebar is now a price range. Everything is committed locally and nothing is
+  pushed.
+
+  Commits:
+  - d5407da, the design pass. You had already committed the login work yourself
+    as a922447, so my first commit held only the design changes. I corrected its
+    message to say so; that was safe because it hadn't been pushed.
+  - e51e8ba, the price filter.
+
+  How the price filter works:
+  - It's a slider with two handles plus "Nuo … €" and "Iki … €" boxes. The
+    yellow part of the slider shows the selected range.
+  - The slider's ends fit whatever you're browsing. On "Žaidimai" it runs from
+    10 € to 83 €, the cheapest and most expensive game. To make that work, the
+    API now sends the lowest and highest price of the products matching every
+    other filter.
+  - The results reload when you let go of a handle or press Enter or leave a
+    box, not on every keystroke like the old inputs did.
+  - An empty box, or a handle at the end, means no limit on that side.
+
+  Checks: backend tests pass, including a new one for the price range, and the
+  frontend builds. In a local screenshot of "Žaidimai" the slider runs 10–83 €.
+  Setting 20–45 € narrowed the results from 17 games to 9.
+
+  Something I noticed but didn't change: the "Platforma" list still shows every
+  platform in the store, even inside a category. That's how it already behaved,
+  and it's easy to narrow to the current category if you want.
+
+  The /category= links from the header row, the side menu and the homepage icons
+  still filter the store as before. I added DECISIONS #30.
+
+> few small fixes, can you reduce the size of categories side bar text and
+  maybe remove few if needed so it would fit into one card without scrolling,
+  and the original page has this cool feature where if you drag your mouse on a
+  game or anything the bottom card (with the name and details extends) and
+  shows option to add to cart or buy. "Prideti į krepšelį" button is yellow.
+
+  Searched for 2 patterns, read 2 files (ctrl+o to expand)
+
+● The drawer will be shrunk with platforms in a two-column grid to roughly halve
+  its height, and the card will get an actions bar that slides the cover up on
+  hover so its size never changes. Clicking a button will add the cheapest
+  in-stock offer of that product. · summary
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(frontend\src\features\cart\CartContext.tsx)
+  ⎿  Added 6 lines
+      16    liveStock: Record<string, number>;
+      17    /** Reserves one more unit on the server, then opens the popu
+          p (success or error). */
+      18    add: (offerId: string) => Promise<void>;
+      19 +  /**                                                          
+      20 +   * Card hover buttons: adds one unit of the product's cheapes
+         +t offer in stock.                                              
+      21 +   * `quiet` skips the success popup ("Pirkti dabar" goes strai
+         +ght to checkout).                                              
+      22 +   * Errors still open the popup. Returns whether a unit was ad
+         +ded.                                                           
+      23 +   */                                                          
+      24 +  addProduct: (productId: string, quiet?: boolean) => Promise<b
+         +oolean>;                                                       
+      25    /** Sets a line's quantity on the server (0 = remove). Return
+          s an error message or null. */
+      26    setQty: (offerId: string, qty: number) => Promise<string | nu
+          ll>;
+      27    /** Simulated payment; starts a new cart and returns the deli
+          vered order. Throws on failure. */
+
+● Update(frontend\src\features\cart\CartContext.tsx)
+  ⎿  Added 21 lines, removed 2 lines
+      162        }
+      163      });
+      164  
+      165 -  const add = async (offerId: string) => {                    
+      165 +  const addOne = async (offerId: string, quiet: boolean) => { 
+      166      const error = await sync(offerId, quantityOf(cartRef.curre
+           nt.items, offerId) + 1);
+      167 -    setNotice(error ? { kind: "error", message: error } : { ki
+          -nd: "added" });                                               
+      167 +    if (error) setNotice({ kind: "error", message: error });  
+      168 +    else if (!quiet) setNotice({ kind: "added" });            
+      169 +    return !error;                                            
+      170    };
+      171 +  const add = async (offerId: string) => void (await addOne(of
+          +ferId, false));                                               
+      172  
+      173 +  const addProduct = async (productId: string, quiet = false) 
+          +=> {                                                          
+      174 +    let offerId: string | undefined;                          
+      175 +    try {                                                     
+      176 +      // The API lists offers cheapest first; the server re-ch
+          +ecks stock when reserving.                                    
+      177 +      offerId = (await api.product(productId)).offers.find((o)
+          + => o.stock > 0)?.id;                                         
+      178 +    } catch {                                                 
+      179 +      setNotice({ kind: "error", message: FAILED });          
+      180 +      return false;                                           
+      181 +    }                                                         
+      182 +    if (!offerId) {                                           
+      183 +      setNotice({ kind: "error", title: "Išparduota", message:
+          + "Šios prekės šiuo metu neturi nė vienas pardavėjas." });     
+      184 +      return false;                                           
+      185 +    }                                                         
+      186 +    return addOne(offerId, quiet);                            
+      187 +  };                                                          
+      188 +                                                              
+      189    const setQty = (offerId: string, qty: number) => sync(offerI
+           d, qty);
+      190  
+      191    /**
+
+● Update(frontend\src\features\cart\CartContext.tsx)
+  ⎿  Added 1 line
+      209      currency: cart.currency,
+      210      liveStock,
+      211      add,
+      212 +    addProduct,                                               
+      213      setQty,
+      214      checkout,
+      215      notice,
+
+● Write(frontend\src\components\ProductCard.tsx)
+  ⎿  Added 49 lines, removed 22 lines
+       1 -import { Link } from "react-router-dom";                       
+       1 +import { useState } from "react";                              
+       2 +import { Link, useNavigate } from "react-router-dom";          
+       3  import type { Product } from "../types";
+       4  import { formatPrice, regionLabel } from "../lib/format";
+       5 +import { useCart } from "../features/cart/CartContext";        
+       6  
+       5 -/** Eneba-style card: cover, platform strip, then title, region
+         -, "Nuo" + old price, price. */                                 
+       7 +/**                                                            
+       8 + * Eneba-style card: cover, platform strip, then title, region,
+         + "Nuo" + old price, price.                                     
+       9 + * On hover (or keyboard focus) the info panel grows over the c
+         +over and shows                                                 
+      10 + * "Pridėti į krepšelį" and "Pirkti dabar"; both use the cheape
+         +st offer in stock.                                             
+      11 + * The buttons sit outside the link, because a button inside a 
+         +link is invalid HTML.                                          
+      12 + */                                                            
+      13  export function ProductCard({ p }: { p: Product }) {
+      14 +  const { addProduct } = useCart();                            
+      15 +  const navigate = useNavigate();                              
+      16 +  const [busy, setBusy] = useState(false);                     
+      17 +                                                               
+      18 +  async function run(buyNow: boolean) {                        
+      19 +    setBusy(true);                                             
+      20 +    try {                                                      
+      21 +      const added = await addProduct(p.id, buyNow);            
+      22 +      if (added && buyNow) navigate("/checkout");              
+      23 +    } finally {                                                
+      24 +      setBusy(false);                                          
+      25 +    }                                                          
+      26 +  }                                                            
+      27 +                                                               
+      28    return (
+       8 -    <Link to={`/product/${p.id}`} className="card">            
+       9 -      {p.preOrder && <span className="card-tag" title="Išanksti
+         -nis užsakymas">Iš anksto · {p.releaseDate}</span>}             
+      10 -      {p.imageUrl ? (                                          
+      11 -        <img className="card-img" src={p.imageUrl} alt={p.name}
+         - />                                                            
+      12 -      ) : (                                                    
+      13 -        <div className="card-img card-img-empty" aria-hidden="t
+         -rue">{p.name}</div>                                            
+      14 -      )}                                                       
+      15 -      <div className="card-platform">{p.platform}</div>        
+      16 -      <div className="card-body">                              
+      17 -        <div className="card-title">{p.name}</div>             
+      18 -        <div className="card-region">{regionLabel(p.region)}</d
+         -iv>                                                            
+      19 -        <div className="card-from">                            
+      20 -          Nuo{" "}                                             
+      21 -          {p.discountPercent > 0 && (                          
+      22 -            <>                                                 
+      23 -              <s>{formatPrice(p.listPrice, p.currency)}</s> <sp
+         -an className="discount">-{p.discountPercent}%</span>           
+      24 -            </>                                                
+      25 -          )}                                                   
+      29 +    <div className="card">                                     
+      30 +      <Link to={`/product/${p.id}`} className="card-link">     
+      31 +        {p.preOrder && <span className="card-tag" title="Išanks
+         +tinis užsakymas">Iš anksto · {p.releaseDate}</span>}           
+      32 +        {p.imageUrl ? (                                        
+      33 +          <img className="card-img" src={p.imageUrl} alt={p.nam
+         +e} />                                                          
+      34 +        ) : (                                                  
+      35 +          <div className="card-img card-img-empty" aria-hidden=
+         +"true">{p.name}</div>                                          
+      36 +        )}                                                     
+      37 +        <div className="card-platform">{p.platform}</div>      
+      38 +        <div className="card-body">                            
+      39 +          <div className="card-title">{p.name}</div>           
+      40 +          <div className="card-region">{regionLabel(p.region)}<
+         +/div>                                                          
+      41 +          <div className="card-from">                          
+      42 +            Nuo{" "}                                           
+      43 +            {p.discountPercent > 0 && (                        
+      44 +              <>                                               
+      45 +                <s>{formatPrice(p.listPrice, p.currency)}</s> <
+         +span className="discount">-{p.discountPercent}%</span>         
+      46 +              </>                                              
+      47 +            )}                                                 
+      48 +          </div>                                               
+      49 +          <div className="price">{formatPrice(p.priceFrom, p.cu
+         +rrency)}</div>                                                 
+      50          </div>
+      27 -        <div className="price">{formatPrice(p.priceFrom, p.curr
+         -ency)}</div>                                                   
+      51 +      </Link>                                                  
+      52 +      <div className="card-actions">                           
+      53 +        <button type="button" className="btn block" disabled={b
+         +usy} onClick={() => run(false)}>Pridėti į krepšelį</button>    
+      54 +        <button type="button" className="btn outline block" dis
+         +abled={busy} onClick={() => run(true)}>Pirkti dabar</button>   
+      55        </div>
+      29 -    </Link>                                                    
+      56 +    </div>                                                     
+      57    );
+      58  }
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Next the CSS: the actions bar starts at zero height and opens on hover, and
+  the cover slides up by the same amount. Plus the smaller drawer:
+
+● Update(frontend\src\styles\global.css)  ⎿  Added 16 lines, removed 1 line
+      107    background: var(--color-primary); color: var(--color-on-prim
+           ary); padding: 2px var(--space-2);
+      108    font-size: var(--text-xs); font-weight: 800; text-align: cen
+           ter; border-radius: var(--radius);
+      109  }
+      110 -.card:hover { border-color: var(--color-primary); }           
+      110 +.card:hover, .card:focus-within { border-color: var(--color-pr
+          +imary); }                                                     
+      111 +.card-link { display: flex; flex-direction: column; flex: 1; }
+      112 +/* Hover: the info panel grows by --actions-h and the cover sl
+          +ides up by the same amount,                                   
+      113 +   so the card keeps its size (nothing jumps, and scrolling ra
+          +ils don't clip it). */                                        
+      114 +.card { --actions-h: 104px; }                                 
+      115 +.card-img { transition: margin-top 0.2s ease; }               
+      116 +.card-actions {                                               
+      117 +  display: flex; flex-direction: column; gap: var(--space-2); 
+          +height: 0; overflow: hidden;                                  
+      118 +  padding: 0 var(--space-3); transition: height 0.2s ease, pad
+          +ding 0.2s ease;                                               
+      119 +}                                                             
+      120 +.card-actions .btn { height: 38px; padding: 0 var(--space-2); 
+          +white-space: nowrap; }                                        
+      121 +.card-actions .btn.outline { min-width: 0; border-width: 1px; 
+          +}                                                             
+      122 +.card:hover .card-actions, .card:focus-within .card-actions { 
+          +height: var(--actions-h); padding: var(--space-1) var(--space-
+          +3) var(--space-3); }                                          
+      123 +.card:hover .card-img, .card:focus-within .card-img { margin-t
+          +op: calc(-1 * var(--actions-h)); }                            
+      124 +/* touch screens have no hover: keep the plain card, the produ
+          +ct page has the buttons */                                    
+      125 +@media (hover: none) { .card-actions { display: none; } .card:
+          +hover .card-img { margin-top: 0; } }                          
+      126  .card-img {
+      127    aspect-ratio: 3 / 4; width: 100%; object-fit: cover;
+      128    background: linear-gradient(160deg, var(--color-secondary), 
+           var(--color-band) 60%, var(--color-card));
+
+● Update(frontend\src\styles\global.css)
+  ⎿  Added 9 lines, removed 2 lines
+      355  .drawer-head .logo { font-size: 28px; }
+      356  .drawer-close { display: flex; background: none; border: 0; pa
+           dding: 0; color: var(--color-text); cursor: pointer; }
+      357  .drawer-close:hover { color: var(--color-accent); }
+      358 -.drawer-list { display: flex; flex-direction: column; padding:
+          - var(--space-3) 0; }                                          
+      358 +.drawer-list { display: flex; flex-direction: column; padding:
+          + var(--space-2) 0; }                                          
+      359  .drawer-list a {
+      360    display: flex; align-items: center; justify-content: space-b
+           etween;
+      361 -  padding: var(--space-3) var(--space-6); font-size: 18px;    
+      361 +  padding: var(--space-2) var(--space-6); font-size: var(--tex
+          +t-base);                                                      
+      362  }
+      363  .drawer-list a:hover { background: var(--color-band); color: v
+           ar(--color-accent); }
+      364 +.drawer-section {                                             
+      365 +  margin: var(--space-3) var(--space-6) var(--space-1); paddin
+          +g-top: var(--space-3); border-top: 1px solid var(--color-band)
+          +;                                                             
+      366 +  font-size: var(--text-xs); font-weight: 700; text-transform:
+          + uppercase; letter-spacing: 1px; color: var(--color-text-nav);
+      367 +}                                                             
+      368 +/* platforms: two short columns instead of one long list, so t
+          +he menu fits without scrolling */                             
+      369 +.drawer-grid { display: grid; grid-template-columns: 1fr 1fr; 
+          +}                                                             
+      370 +.drawer-grid a { padding: var(--space-2) var(--space-6); font-
+          +size: var(--text-sm); }                                       
+      371  
+      372  /* header account dropdown (same box as the cart's) */
+      373  .account-menu { position: relative; }
+
+● Update(frontend\src\components\CategoryDrawer.tsx)
+  ⎿  Added 10 lines, removed 5 lines
+      38                {c.label} <ChevronRight size={20} />
+      39              </Link>
+      40            ))}
+      41 -          {platforms.data?.facets.platforms.map((p) => (       
+      42 -            <Link key={p} to={`/store?platform=${encodeURICompo
+         -nent(p)}`}>                                                    
+      43 -              {p} <ChevronRight size={20} />                   
+      44 -            </Link>                                            
+      45 -          ))}                                                  
+      41 +          {!!platforms.data?.facets.platforms.length && (      
+      42 +            <>                                                 
+      43 +              <p className="drawer-section">Platformos</p>     
+      44 +              <div className="drawer-grid">                    
+      45 +                {platforms.data.facets.platforms.map((p) => (  
+      46 +                  <Link key={p} to={`/store?platform=${encodeUR
+         +IComponent(p)}`}>{p}</Link>                                    
+      47 +                ))}                                            
+      48 +              </div>                                           
+      49 +            </>                                                
+      50 +          )}                                                   
+      51          </nav>
+      52        </aside>
+      53      </div>
+
+● Update(frontend\src\components\CategoryDrawer.tsx)
+  ⎿  Added 1 line, removed 1 line
+      35            <Link to="/store">Visi pasiūlymai</Link>
+      36            {CATEGORIES.map((c) => (
+      37              <Link key={c.id} to={`/store?category=${c.id}`}>
+      38 -              {c.label} <ChevronRight size={20} />             
+      38 +              {c.label} <ChevronRight size={18} />             
+      39              </Link>
+      40            ))}
+      41            {!!platforms.data?.facets.platforms.length && (
+
+● I'm building the site first, then checking the hover and drawer states with a
+  throwaway test page in dist/, since headless Chrome can't hover or click.
+  · summary
+
+  Read 2 files, ran 2 shell commands (ctrl+o to expand)
+
+● The drawer now fits a 720px window, but the hover test showed no buttons,
+  likely because the @media (hover: none) rule hides them in headless Chrome.
+  I'm overriding that rule in the test page only and retaking the screenshot.
+  · summary
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● Still no buttons, though the forced border did apply. I'll check the built CSS
+  itself instead of guessing:
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● The built CSS looks correct, so the screenshot may be catching a
+  mid-transition frame; I'm retrying with transitions disabled in the test page.
+  · summary
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● The hover state now shows the info panel over the cover, with the yellow
+  "Pridėti į krepšelį" and outlined "Pirkti dabar" buttons, and the card height
+  holds. Next I'll add a short DECISIONS entry and commit without pushing.
+  · summary
+
+● Bash(cd .. && PYTHONUTF8=1 python - <<'EOF'
+      p='DECISIONS.md'…)
+  ⎿  Updated DECISIONS.md (+12 -0)
+      351  CSS); fixed bounds such as 0-100 € (useless for cheap categori
+           es); keeping category checkboxes
+      352  as well (the user asked for them to go; `?category=` in the UR
+           L still filters).
+      353  
+      354 +## 31. Card hover buttons; compact side menu                  
+      355 +Like Eneba, hovering a product card grows its info panel and s
+          +hows a yellow "Pridėti į krepšelį"                            
+      356 +and an outlined "Pirkti dabar". The cover slides up by exactly
+          + the buttons' height, so the card                             
+      357 +keeps its size: nothing jumps and the scrolling rails don't cl
+          +ip it (pure CSS). The buttons sit                             
+      358 +next to the link, not inside it (a button inside a link is inv
+          +alid HTML). The list API has no                               
+      359 +offer ids, so a click loads the product and adds its cheapest 
+          +offer in stock                                                
+      360 +(`CartContext.addProduct`; the server still re-checks stock wh
+          +en reserving). "Pirkti dabar"                                 
+      361 +skips the popup and opens checkout. Touch screens (no hover) k
+          +eep the plain card.                                           
+      362 +Side menu: smaller text, platforms in two columns under "Platf
+          +ormos", so it fits without scrolling.                         
+      363 +Rejected: offer ids in every product list response (bigger pay
+          +load for a hover action);                                     
+      364 +a card that grows downward (clipped by the rails' horizontal s
+          +croll).                                                       
+      365 +                                                              
+
+● Both fixes are in, committed as 6c33e9d and not pushed.
+
+  Category side menu: I made the text smaller and moved the platforms into two
+  columns under a "Platformos" heading, so nothing had to be removed. It now
+  fits in a 720px-tall window without scrolling.
+
+  Card hover:
+  - Look: hovering a product card makes the bottom info panel grow and shows a
+    yellow "Pridėti į krepšelį" button with an outlined "Pirkti dabar" under it.
+    The cover slides up to make room, so the card keeps its size: nothing below
+    it moves, and the sideways-scrolling rails don't cut it off.
+  - Pridėti į krepšelį: adds the product's cheapest seller offer that's in stock
+    and shows the usual "Pridėta į krepšelį" popup.
+  - Pirkti dabar: adds the same offer and goes straight to checkout. As before,
+    a guest is asked to sign in when they press pay.
+  - Sold out: if no seller has stock, a popup says "Išparduota".
+  - Phones and tablets: they have no hover, so they keep the plain card; the
+    product page has the buttons there.
+
+  Checks: the build passes. In screenshots the drawer fits and the hovered card
+  shows both buttons at the same size. Headless Chrome can't actually hover, so
+  I made the hover screenshot by forcing those styles onto the first card.
+  Clicking the two buttons isn't tested yet, so please try them in the browser.
+
+  I added DECISIONS #31.
+
+  ## Session 6 - 2026-12-13 cleaning up the skeleton + connecting db
+
+  ## Session 7 - 2026-12-13 cleaning up the skeleton + connecting db
 
 
