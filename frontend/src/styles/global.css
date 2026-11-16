@@ -297,7 +297,31 @@ input::placeholder { color: var(--color-text-muted); }
 .filters .price-boxes label:focus-within { border-color: var(--color-accent); }
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); margin-bottom: var(--space-4); }
 .pager { display: flex; gap: var(--space-2); justify-content: center; align-items: center; margin-top: var(--space-6); }
-@media (max-width: 800px) { .store { grid-template-columns: 1fr; } }
+.toolbar-actions { display: flex; gap: var(--space-2); align-items: center; }
+/* grid items default to min-width: auto and would grow to their content, widening the page on phones */
+.store > section { min-width: 0; }
+/* Wide screens: the filters are a sidebar; the panel parts stay hidden. */
+.filters-head, .filters-done, .filters-toggle, .filters-backdrop { display: none; }
+/* Phones: the sidebar becomes a panel from the left behind the "Filtrai" button (like Eneba).
+   Same <aside>, so there is one set of filters, not two. */
+@media (max-width: 800px) {
+  .store { grid-template-columns: 1fr; }
+  .toolbar { flex-wrap: wrap; }
+  .toolbar-actions { width: 100%; }
+  .toolbar-actions select { flex: 1; min-width: 0; }
+  .filters-toggle { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .filters { display: none; }
+  .filters-open .filters {
+    display: flex; position: fixed; inset: 0 auto 0 0; z-index: 101; width: min(340px, 88vw);
+    overflow-y: auto; padding-bottom: 0; animation: drawer-in 0.2s ease-out;
+  }
+  .filters-open .filters-backdrop { display: block; position: fixed; inset: 0; z-index: 100; background: var(--color-overlay); }
+  .filters-head { display: flex; justify-content: space-between; align-items: center; font-size: var(--text-lg); font-weight: 800; }
+  /* sticky at the bottom of the panel, over the list while scrolling */
+  .filters .btn.filters-done {
+    position: sticky; bottom: 0; flex-shrink: 0; width: auto; margin: auto calc(-1 * var(--space-4)) 0; border-radius: 0;
+  }
+}
 
 /* product page + offers */
 .product { display: grid; grid-template-columns: 300px 1fr; gap: var(--space-6); }

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, type ProductQuery } from "../../lib/api";
 import { useAsync } from "../../lib/useAsync";
@@ -6,6 +7,7 @@ import { ProductCard } from "../../components/ProductCard";
 import { Pager } from "../../components/Pager";
 import { formatItemCount, regionLabel } from "../../lib/format";
 import { categoryLabel } from "../../lib/categories";
+import { CloseIcon, FilterIcon } from "../../components/Icons";
 import { PriceFilter } from "./PriceFilter";
 
 const SORTS = [
@@ -33,6 +35,19 @@ export function StorePage() {
     page: Number(sp.get("page")) || 1,
   };
   const state = useAsync((signal) => api.products(query, signal), [sp.toString()]);
+  // Phones only (CSS): the filters are a panel behind the "Filtrai" button, like Eneba's.
+  // On wide screens the panel is the normal sidebar and this flag changes nothing.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilters =
+    (query.platform?.length ?? 0) + (query.region?.length ?? 0) + (query.genre?.length ?? 0) +
+    (query.minPrice || query.maxPrice ? 1 : 0);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setFiltersOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [filtersOpen]);
 
   function set(key: string, value: string) {
     const next = new URLSearchParams(sp);
@@ -59,8 +74,15 @@ export function StorePage() {
   }
 
   return (
-    <div className="page container store">
-      <aside className="filters">
+    <div className={`page container store${filtersOpen ? " filters-open" : ""}`}>
+      <div className="filters-backdrop" onClick={() => setFiltersOpen(false)} />
+      <aside className="filters" aria-label="Filtrai">
+        <div className="filters-head">
+          <span>Filtrai</span>
+          <button type="button" className="drawer-close" aria-label="Uždaryti" onClick={() => setFiltersOpen(false)}>
+            <CloseIcon size={24} />
+          </button>
+        </div>
         <Status state={state}>
           {({ facets }) => (
             <>
@@ -92,6 +114,10 @@ export function StorePage() {
             </>
           )}
         </Status>
+        {/* filters apply at once (URL); this only closes the panel and shows the count */}
+        <button type="button" className="btn block filters-done" onClick={() => setFiltersOpen(false)}>
+          Rodyti {state.data ? formatItemCount(state.data.total) : "prekes"}
+        </button>
       </aside>
 
       <section>
@@ -103,9 +129,14 @@ export function StorePage() {
                 ? categoryLabel(query.category[0])
                 : "Parduotuvė"}
           </h1>
-          <select value={query.sort} onChange={(e) => set("sort", e.target.value)} aria-label="Rūšiuoti">
-            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
+          <div className="toolbar-actions">
+            <button type="button" className="btn outline filters-toggle" onClick={() => setFiltersOpen(true)}>
+              <FilterIcon size={18} /> Filtrai{activeFilters > 0 && ` (${activeFilters})`}
+            </button>
+            <select value={query.sort} onChange={(e) => set("sort", e.target.value)} aria-label="Rūšiuoti">
+              {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </div>
         </div>
         <Status state={state}>
           {(pg) => (

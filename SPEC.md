@@ -8,8 +8,8 @@ status; the "why" column is what I will say when asked.
 
 | Area | Status | Depth / why |
 |---|---|---|
-| Store (filters, sort, search, pagination) | Scaffolded | Core of a marketplace. Filters + sort in Go (see DECISIONS #2). Aim: polish + tests. |
-| Homepage blocks | Done | 8 blocks, each its own endpoint, alternating bands: banners, recently viewed, recommended (#25), best sellers, gift cards, top-ups, pre-orders, category counts (#26). |
+| Store (filters, sort, search, pagination) | Done | Core of a marketplace. Filters + sort in Go (DECISIONS #2), price slider (#30), state in the URL; on phones the filters open as a panel (#36). |
+| Homepage blocks | Done | 8 blocks, each its own endpoint, alternating bands: banners, recently viewed, recommended (#25), best sellers, gift cards, top-ups, pre-orders, category counts (#26). Order, titles, info texts and links come from the API too (`GET /api/home`, #35): nothing about the homepage is written in the frontend. |
 | Search | Done | Typo/partial tolerant (trigram) and acronyms ("gta 5", "rdr2", DECISIONS #34); header dropdown + results via store page. |
 | Product page + seller offers | Scaffolded | Offer comparison table with add-to-cart per offer. |
 | Auth | Done | Firebase email/password + Google. Guests can do everything but pay; paying opens a sign-in popup, and guest views/orders merge into the account on sign-in (DECISIONS #28). Avatar menu + `/account` page. |
@@ -34,7 +34,7 @@ status; the "why" column is what I will say when asked.
    Cart changes take ~1.5-2s (transaction round trips); consider an optimistic UI if it feels slow.
 2. ~~Checkout + key delivery~~ Done (DECISIONS #19).
 3. ~~Order history~~ Done; signed-in only since DECISIONS #32.
-4. ~~**Eneba styling.**~~ Done (DECISIONS #24, #27, #29). Left: collapse store filters on phones. Covers are generated (#33).
+4. ~~**Eneba styling.**~~ Done (DECISIONS #24, #27, #29). Covers are generated (#33); phone filter panel (#36).
 5. ~~**Deploy to Render**~~ Done 2026-11-16: https://eneba-web.onrender.com (API `eneba-api-10wc`).
    Smoke-tested over HTTP: health, products, typo search, SPA routes, checkout 401 for guests.
    Not yet seen live: the 30-min expiry sweep (free tier sleeps; it runs once the API wakes).

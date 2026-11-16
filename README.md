@@ -65,9 +65,9 @@ Deployed and working end to end (store, search, product, cart, checkout, keys, o
 
 | Part | What it does |
 |---|---|
-| Store | Filters (platform, region, genre, price slider), sort, typo-tolerant search, pagination; state in the URL. |
-| Homepage | 8 blocks, each from its own endpoint (banners, recently viewed, recommended, best sellers, gift cards, top-ups, pre-orders, categories). |
-| Search | Header dropdown from anywhere; trigram matching copes with typos and partial names (`witchr`, `eldne rign`). |
+| Store | Filters (platform, region, genre, price slider), sort, typo- and acronym-tolerant search, pagination; state in the URL; filters open as a panel on phones. |
+| Homepage | 8 blocks, each from its own endpoint (banners, recently viewed, recommended, best sellers, gift cards, top-ups, pre-orders, categories). The block order, titles and texts come from the API as well (`GET /api/home`), so nothing is hardcoded in the frontend. |
+| Search | Header dropdown from anywhere; trigram matching copes with typos and partial names (`witchr`, `eldne rign`), and acronyms (`gta 5`, `rdr2`, `bg3`). |
 | Product page | Details + offers from several sellers, cheapest first, add to cart per offer. |
 | Cart | Server-side: adding an item reserves real keys from the pool for 30 min; no overselling (transactions). |
 | Checkout | Simulated payment, then the reserved keys are delivered and shown with copy buttons. |
@@ -75,7 +75,7 @@ Deployed and working end to end (store, search, product, cart, checkout, keys, o
 | Styling | Colors, font (Metropolis), sizes from eneba.com's CSS in `tokens.css`; components use only those variables. |
 
 Known gaps (see `SPEC.md`): covers are generated (gradient + category icon + title, `DECISIONS.md` #33)
-instead of real art, and store filters do not collapse on phones yet.
+instead of real art.
 
 Firestore collections: `products`, `offers` (stock = available keys), `banners`,
 `keys` (`offerId, code, status: available|reserved|sold, orderId`) and

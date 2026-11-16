@@ -401,3 +401,36 @@ GTA products); an exact name match is still +2, so plain names keep winning. Two
 Tested in `search_test.go` and checked against all 28 seed names for false hits.
 Rejected: a hand-written alias list ("gta" -> ...) (data to keep in sync for every new product);
 matching acronyms anywhere in a name, not only at the start (too many accidental hits on 2-3 letters).
+
+## 35. The homepage layout and block texts come from the API (refines #6, #26)
+The assignment says the frontend "only displays what it receives and nothing is hardcoded there". The
+items already came from one endpoint per block, but the block order, titles, ⓘ texts and "Rodyti visus"
+links were written in `blocks.tsx`. Now:
+- `GET /api/home` returns the layout: `[{id, type, personal}]` top to bottom. `type` says which component
+  draws the block (`banners`, `categories`, `products`), `personal` says to send the user and reload on
+  sign-in.
+- Each block's own endpoint (`/api/home/{id}`, unchanged paths) returns its text with its items:
+  `{id, title, info, moreUrl, hideWhenEmpty, items}`. So one block = one endpoint for all its content.
+- The texts live in `service/home.go` (Lithuanian, like the UI); the handlers add them with one helper
+  (`writeBlock`). The frontend keeps only the drawing components and a `type -> component` map; an
+  unknown type is skipped, so the server can add a new kind later without breaking an old frontend.
+- `router_test.go` walks the layout and calls every block, so a block listed without a working
+  endpoint (or a product rail without a title) fails the build.
+Trade-off: if `/api/home` fails, the homepage shows one error instead of the blocks; each block still
+fails on its own once the layout is loaded (#6).
+Rejected: texts inside each product rail's items call only (no single place to see the page order);
+a Firestore `home` collection (editable without a deploy, but no admin UI exists to edit it, and it
+adds reads to every homepage view); a generic `/api/home/block?type=` (#26: one endpoint per block).
+Not moved: category names (`lib/categories.ts`) and fixed UI words ("Rodyti visus", "Kraunama…"):
+they are interface labels, not homepage content.
+
+## 36. Store filters become a panel on phones
+Under 800px the sidebar is hidden and a "Filtrai (N)" button (N = active filters) opens the same
+`<aside>` as a panel from the left, over a dark backdrop, with a close button and a sticky
+"Rodyti N prekės" button at the bottom. Filters still apply immediately through the URL, so the count
+is live; the button only closes the panel. Escape and a click on the backdrop close it too. Desktop is
+unchanged. Found while testing: the results column was a grid item with `min-width: auto`, so on
+phones it grew to its content and made the whole page wider than the screen (browsers then zoom out);
+`min-width: 0` fixes it.
+Rejected: a second, phone-only copy of the filters (two UIs to keep in sync); "Apply" semantics with
+draft state (more code, and Eneba also applies at once); a drawer library (new dependency).
