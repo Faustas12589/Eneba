@@ -127,7 +127,7 @@ lazy expiry on the next request (stock stays blocked if nobody calls the API).
 Note: Render's free tier sleeps when idle, so the sweep runs once the API wakes.
 
 ## 17. `.env.example` files restored
-They were deleted in 684c9f0 but README/CLAUDE.md still pointed to them. Restored as
+They were deleted in 2e97d09 ("Connected firestore db") but README/CLAUDE.md still pointed to them. Restored as
 templates; real `backend/.env` and `frontend/.env.local` are gitignored.
 
 ## 18. Stay on Firestore; search stays in Go
