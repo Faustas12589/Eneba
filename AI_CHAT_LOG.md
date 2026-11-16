@@ -13663,3 +13663,3399 @@ code 0)
   Clicking the two buttons isn't tested yet, so please try them in the browser.
 
   I added DECISIONS #31.
+
+  ## Session 6 - 2026-11-16 updating readme and other inconsistances with app state, and deleting some artifacts from git, cleaning up the code, updated phone UI
+
+  
+> /clear
+
+> check Eneba Intership Assignment.pdf. What could be better in this app, what
+  are the 3 biggest issues you see before commiting the assignment?
+
+  Searched for 1 pattern, read 1 file, ran 4 shell commands (ctrl+o to expand)
+
+● I've read the assignment PDF and checked the repo against it. Go tests pass
+  and npm run build is clean, so the code works. The three biggest issues are
+  about what the graders will see, not about bugs.
+
+  The 3 biggest issues
+
+  1. The app isn't deployed, and the PDF says there's no evaluation without a
+  public URL.
+  The README still says **Live:** _add URL_ · **Repo:** _add URL_. render.yaml
+  is ready, but nobody has opened the live site. Expect setup problems to show
+  up only once it's live: Firebase "Authorized domains" for Google sign-in,
+  CORS_ORIGINS, VITE_API_URL being baked in at build time, and the free API's
+  30–60s cold start. Do this first, because it's the only issue that blocks
+  grading.
+
+  2. Order history is open to guests, but the spec says it's for signed-in users
+  only.
+  The PDF says: "Some parts of the app, such as checkout and order history, are
+  only for signed-in users." Checkout is protected on the backend (POST /orders
+  sits under RequireAuth). But:
+  - router.go:33 (backend/internal/router/router.go#L33): GET /orders sits in
+    the Identify group, which accepts a guest id.
+  - App.tsx:42-43 (frontend/src/app/App.tsx#L42-L43): /checkout and /orders
+    aren't wrapped in <RequireAuth>, while /account is.
+
+  Since DECISIONS #28, guests can't pay, so they never have orders. The guest
+  path is now leftover code that contradicts the spec. The fix is about 2 lines:
+  move GET /orders into the RequireAuth group and wrap the frontend route.
+  Guest views and recommendations can stay; they're a reasonable extra.
+
+  3. The submission files are messy, and the graders will read them first.
+  - A 27 MB backend/seed.exe is committed (commit b52dbee). .gitignore has
+    *.exe, but the file was added anyway. git rm --cached removes it going
+    forward, but it stays in the history unless you rewrite it.
+  - The README is out of date. It says "Login is switched off" and "TODO: Eneba
+    styling pass, deploy", and it points to AI_LOG.md, but the file is called
+    AI_CHAT_LOG.md. SPEC "Next tasks" #1 also still says login is off.
+  - The AI log has placeholder headings. "Session 6" and "Session 7" appear
+    twice each with no content, all dated 2026-12-13 (a month in the future) and
+    titled "cleaning up the skeleton + connecting db". Session 1 is only a
+    share link, so make sure it opens when you're logged out. The PDF says it
+    wants to "understand how you use AI", so this file gets read.
+
+  Other things that could be better (after the top 3)
+
+  - Some packages have no tests. handler, router and repository have none, so
+    the Firestore transactions behind your no-oversell claims (#15, #19) are
+    only covered through the memory repo. One handler test for the cart and
+    checkout flow (409, 410, 401 for a guest at checkout) would back up the
+    claims you'll make in the interview.
+  - On phones, the store filters don't collapse yet. SPEC lists this as a TODO.
+  - Product cards use gradients instead of cover images. It's a fair call since
+    images are brand assets, but it's the most visible gap compared with
+    eneba.com.
+  - The 30-minute reservation expiry has never run on Firestore. It's noted in
+    SPEC and worth checking once the app is deployed.
+
+  I can fix #2 and the repo cleanup in #3 now: untrack seed.exe, update the
+  README and SPEC, and remove the empty log headings. Deploying needs your
+  Render and Firebase dashboards, so that part is yours, but I can write a
+  step-by-step checklist for it.
+
+> the app is live on https://eneba-web.onrender.com/
+  so you can fix them all, in the ai chat log you can for now. I dont really
+  know what do to with the images I am thinking of leaving it as the gradiant
+  but if we can think of place holder images, not sure about this decision tbh
+
+● Starting the fixes. First I'll look at the orders flow on both sides and at
+  the git remote.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● eneba-api.onrender.com is someone else's app (a Laravel 404 page). I'll get
+  the real API URL from the live bundle.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● The live site is working, with health, products, typo search and SPA routes
+  all responding, and checkout correctly returns 401 for guests. However, GET
+  /api/orders still returns 200 for guests, so I'm fixing that now. · summary
+
+  Read 3 files (ctrl+o to expand)
+
+● The checkout page already matches the PDF's diagram, with guests seeing the
+  summary and "Apmokėti" prompting sign-in. So I only need to add the guard to
+  order history. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Now the edits. While I'm at it I'll add a small router test so the route's
+  protection is checked by a test.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Applying the order-history fix (backend route, frontend route and API call)
+  and adding the router test.
+
+● Update(backend\internal\router\router.go)
+  ⎿  Removed 1 line
+      34      // guests and signed-in users: a login token if sent, else 
+          the X-Guest-Id
+      35      r.Group(func(r chi.Router) {
+      36        r.Use(middleware.Identify(verifier))
+      37 -      r.Get("/orders", h.ListOrders)                           
+      37        r.Post("/profile/views", h.RecordView)
+      38        r.Get("/home/recently-viewed", h.RecentlyViewed)
+      39        r.Get("/home/recommended", h.Recommended)
+
+● Update(backend\internal\router\router.go)
+  ⎿  Added 3 lines, removed 1 line
+      39        r.Get("/home/recommended", h.Recommended)
+      40      })
+      41  
+      42 -    // signed-in only: paying, the account page, and merging gu
+         -est data on sign-in                                            
+      42 +    // signed-in only (the assignment: checkout and order histo
+         +ry need an account):                                           
+      43 +    // paying, order history, the account page, and merging gue
+         +st data on sign-in                                             
+      44      r.Group(func(r chi.Router) {
+      45        r.Use(middleware.RequireAuth(verifier))
+      46        r.Post("/orders", h.Checkout)
+      47 +      r.Get("/orders", h.ListOrders)                           
+      48        r.Get("/me", h.Me)
+      49        r.Post("/me/merge-guest", h.MergeGuest)
+      50      })
+
+● Write(backend\internal\router\router_test.go)
+  ⎿  Wrote 67 lines to backend\internal\router\router_test.go
+       1 package router
+       2
+       3 import (
+       4   "net/http"
+       5   "net/http/httptest"
+       6   "testing"
+       7
+       8   "eneba-marketplace/backend/internal/handler"
+       9   "eneba-marketplace/backend/internal/middleware"
+      10   "eneba-marketplace/backend/internal/repository"
+     … +57 lines (ctrl+o to expand)
+
+● Update(frontend\src\app\App.tsx)
+  ⎿  Added 3 lines, removed 2 lines
+      38              <Route path="/store" element={<StorePage />} />
+      39              <Route path="/product/:id" element={<ProductPage />
+          } />
+      40              <Route path="/cart" element={<CartPage />} />
+      41 -            {/* Guests may use checkout and orders too; paying 
+         -asks them to sign in (DECISIONS #28). */}                      
+      41 +            {/* Guests see the checkout summary; pressing "Apmo
+         +kėti" asks them to sign in (DECISIONS #28).                    
+      42 +                Order history and the account page need an acco
+         +unt (DECISIONS #32). */}                                       
+      43              <Route path="/checkout" element={<CheckoutPage />} 
+          />
+      43 -            <Route path="/orders" element={<OrdersPage />} />  
+      44 +            <Route path="/orders" element={<RequireAuth><Orders
+         +Page /></RequireAuth>} />                                      
+      45              <Route path="/account" element={<RequireAuth><Accou
+          ntPage /></RequireAuth>} />
+      46              <Route path="*" element={<div className="page conta
+          iner"><h1>Puslapis nerastas</h1></div>} />
+      47            </Route>
+
+● Update(frontend\src\lib\api.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      106    /** Simulated payment (signed in only): turns the cart into 
+           a delivered order with its keys. Safe to retry. */
+      107    checkout: (cartId: string) =>
+      108      request<Order>("/api/orders", { auth: true, method: "POST"
+           , body: { cartId } }),
+      109 -  /** One page of the user's (or this browser's guest) orders,
+          - newest first. */                                             
+      109 +  /** Signed in: one page of the user's orders, newest first. 
+          +*/                                                            
+      110    orders: (page: number, signal?: AbortSignal) =>
+      111 -    request<OrderPage>(`/api/orders?page=${page}`, { user: tru
+          -e, signal }),                                                 
+      111 +    request<OrderPage>(`/api/orders?page=${page}`, { auth: tru
+          +e, signal }),                                                 
+      112  };
+
+● Update(frontend\src\features\orders\OrdersPage.tsx)
+  ⎿  Added 2 lines, removed 2 lines
+       7  import { useAuth } from "../auth/AuthContext";
+       8  
+       9  /**
+      10 - * The user's past orders (or this browser's, for a guest), new
+         -est first, paged,                                              
+      11 - * with their key codes. Page number lives in the URL. Reloads 
+         -on sign-in/out.                                                
+      10 + * The signed-in user's past orders, newest first, paged, with 
+         +their key codes.                                               
+      11 + * Page number lives in the URL. Behind <RequireAuth> (DECISION
+         +S #32).                                                        
+      12   */
+      13  export function OrdersPage() {
+      14    const [sp, setSp] = useSearchParams();
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Tests and build pass, and the new router test covers the 401s. gofmt flags
+  many files, though, so I'll check whether that's only Windows line endings.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The gofmt warnings come only from CRLF line endings in the working copy, while
+  the committed files are already clean. I'm untracking seed.exe next, then
+  updating the README, SPEC and DECISIONS. · summary
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && python - <<'EOF'
+      import io…)
+  ⎿  Updated README.md (+25 -7)
+       3  Digital game-key marketplace (internship assignment). React + T
+          ypeScript frontend,
+       4  Go REST backend, Firebase (Firestore + Auth), deployed on Rende
+          r.
+       5  
+       6 -**Live:** _add URL_ · **Repo:** _add URL_ · See `SPEC.md` (scop
+         -e), `DECISIONS.md` (trade-offs), `AI_LOG.md` (agent history).  
+       6 +**Live:** https://eneba-web.onrender.com (API: https://eneba-ap
+         +i-10wc.onrender.com/healthz) ·                                 
+       7 +**Repo:** https://github.com/Faustas12589/Eneba                
+       8 +                                                               
+       9 +See `SPEC.md` (scope and why), `DECISIONS.md` (trade-offs, numb
+         +ered), `docs/api.md` (endpoints),                              
+      10 +`docs/DESIGN.md` (Eneba styling reference) and `AI_CHAT_LOG.md`
+         + (full agent chat history).                                    
+      11 +                                                               
+      12 +> The free Render API sleeps when idle: the first page load aft
+         +er a while can take ~30-60 s                                   
+      13 +> while it wakes up. After that it is fast.                    
+      14  
+      15  ## Architecture
+      16  ```
+     ...
+      26  ### 1. Backend (works without Firebase)
+      27  ```bash
+      28  cd backend
+      22 -go mod tidy          # generates go.sum (required once, commit 
+         -it)                                                            
+      29 +go mod download      # go.sum is committed                     
+      30  go test ./...
+      31  go run ./cmd/api     # :8080, STORE=memory serves embedded demo
+           data
+      32  ```
+     ...
+      41  you in as a local dev user (only accepted by a `STORE=memory` b
+          ackend). See `DECISIONS.md` #10.
+      42  
+      43  ### 3. Firebase (when ready)
+      37 -1. Create a Firebase project; enable **Firestore** and **Authen
+         -tication > Email/Password**.                                   
+      44 +1. Create a Firebase project; enable **Firestore** and **Authen
+         +tication > Email/Password** and **Google**.                    
+      45  2. Project settings > Service accounts > generate a private key
+           (keep it OUT of git).
+      46  3. Project settings > Your apps > add a Web app; copy config in
+          to `frontend/.env.local` (see `.env.example`).
+      47  4. Firestore > Rules: paste `firestore.rules` (deny all client 
+          access; only the Go API reads/writes).
+     ...
+      61  4. Note: the free API service sleeps when idle; the first reque
+          st can take ~30-60s.
+      62  
+      63  ## Status
+      57 -Done: catalog, filters/sort/search, homepage blocks, product pa
+         -ge with offers,                                                
+      58 -cart with server-side key reservation, checkout (simulated paym
+         -ent) + key delivery, order history.                            
+      59 -Login is switched off for now: orders belong to a random per-br
+         -owser guest id (`DECISIONS.md` #20).                           
+      60 -TODO: Eneba styling pass, deploy. See `SPEC.md`.               
+      64 +Deployed and working end to end (store, search, product, cart, 
+         +checkout, keys, order history).                                
+      65 +                                                               
+     … 16 more lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Update(CLAUDE.md)  ⎿  Added 1 line, removed 1 line
+      40  
+      41  ## AI log (required deliverable)
+      42  The full chat history (prompts AND responses) must be submitted
+          . At the end of each
+      43 -session, run `/export` and append the result to `AI_LOG.md` une
+         -dited, with a date heading.                                    
+      43 +session, run `/export` and append the result to `AI_CHAT_LOG.md
+         +` unedited, with a date heading.                               
+
+  Read 1 file (ctrl+o to expand)
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && python - <<'EOF'
+      import io…)
+  ⎿  Updated SPEC.md (+13 -14)
+      15  | Auth | Done | Firebase email/password + Google. Guests can do
+           everything but pay; paying opens a sign-in popup, and guest vi
+          ews/orders merge into the account on sign-in (DECISIONS #28). A
+          vatar menu + `/account` page. |
+      16  | Cart | Done | The cart is a server-side order (status `cart`)
+          ; the UI renders that document and the browser keeps only the c
+          art id. Stock + keys reserved when an item is added (DECISIONS 
+          #15, #19, #21). Popup, header dropdown, live stock errors. |
+      17  | Checkout + key delivery | Done | Cart is the first stage of a
+          n order: cart -> paid -> delivered. Keys are reserved from the 
+          available pool when added to the cart, sold on delivery. Line d
+          ata (name, price, keys) is written once at add time; checkout o
+          nly changes status fields. Simulated payment (DECISIONS #8, #19
+          , #21). |
+      18 -| Order history | Done | Per account, or per browser guest id f
+         -or guests (DECISIONS #20, #28); `GET /api/orders?page=`, paged 
+         -10 per page (#22), lists orders with copyable key codes. |     
+      19 -| Eneba styling | Done | Values from eneba.com CSS in docs/DESI
+         -GN.md -> tokens.css; header, cards, store, product, cart restyl
+         -ed (DECISIONS #24). Mobile filter drawer still TODO. |         
+      18 +| Order history | Done | Signed-in only, as the assignment asks
+         + (DECISIONS #32); `GET /api/orders?page=`, paged 10 per page (#
+         +22), lists orders with copyable key codes. Guest orders from be
+         +fore login made it back merge into the account on sign-in (#28)
+         +. |                                                            
+      19 +| Eneba styling | Done | Values from eneba.com CSS in docs/DESI
+         +GN.md -> tokens.css; header, cards, store, product, cart restyl
+         +ed (DECISIONS #24, #27, #29, #31). Mobile filter drawer still T
+         +ODO. Cards without art show the name on a gradient (#24). |    
+      20  
+      21  ## Explicitly out of scope (and why)
+      22  - Real payments: assignment allows simulation; no value in wiri
+          ng a provider.
+     ...
+      31  ## Next tasks (in order)
+      32  1. ~~Run on real Firestore~~ Done 2026-11-15: seeded 5559 keys;
+           cart -> checkout -> history
+      33     checked over HTTP, and stock == available keys for all 48 of
+          fers afterwards.
+      34 -   Not yet seen live: the 30-min expiry sweep on Firestore. Car
+         -t changes take ~1.5-2s                                         
+      35 -   (transaction round trips); consider an optimistic UI if it f
+         -eels slow.                                                     
+      36 -   Login is switched off for now (DECISIONS #20); bring it back
+         - before or after deploy.                                       
+      34 +   Cart changes take ~1.5-2s (transaction round trips); conside
+         +r an optimistic UI if it feels slow.                           
+      35  2. ~~Checkout + key delivery~~ Done (DECISIONS #19).
+      38 -3. ~~Order history~~ Done.                                     
+      39 -4. ~~**Eneba styling.**~~ Done (DECISIONS #24). Left: collapse 
+         -store filters on phones; real cover images.                    
+      40 -5. **Deploy to Render** with `render.yaml`, set env vars, test 
+         -the live site end to end                                       
+      41 -   (free tier sleeps; the reservation sweep runs once it wakes)
+         -.                                                              
+      42 -6. **Tests + polish.** Handler tests for the cart endpoints; st
+         -ore/search edge cases; frontend                                
+      43 -   unit tests for `cart.ts` (needs Vitest: ask first, rule 8); 
+         -update README to match the code.                               
+      44 -7. **Optional, if time:** 1-2 more homepage blocks (e.g. "Nauji
+         -enos", a per-platform rail),                                   
+      45 -   Google sign-in.                                             
+      46 -8. **Every session:** `/export` the chat and append it to `AI_L
+         -OG.md` (required deliverable).                                 
+      36 +3. ~~Order history~~ Done; signed-in only since DECISIONS #32. 
+      37 +4. ~~**Eneba styling.**~~ Done (DECISIONS #24, #27, #29). Left:
+         + collapse store filters on phones; real cover images.          
+      38 +5. ~~**Deploy to Render**~~ Done 2026-11-16: https://eneba-web.
+         +onrender.com (API `eneba-api-10wc`).                           
+      39 +   Smoke-tested over HTTP: health, products, typo search, SPA r
+         +outes, checkout 401 for guests.                                
+      40 +   Not yet seen live: the 30-min expiry sweep (free tier sleeps
+         +; it runs once the API wakes).                                 
+      41 +6. ~~Login back~~ Done (DECISIONS #28), incl. Google sign-in.  
+      42 +7. **Tests + polish.** Handler tests for the cart endpoints (40
+         +9/410); store/search edge cases;                               
+      43 +   frontend unit tests for `cart.ts` (needs Vitest: ask first, 
+         +rule 8). Router auth test done (#32).                          
+      44 +8. **Optional, if time:** 1-2 more homepage blocks (e.g. "Nauji
+         +enos", a per-platform rail).                                   
+      45 +9. **Every session:** `/export` the chat and append it to `AI_C
+         +HAT_LOG.md` (required deliverable).                            
+
+● README and SPEC are updated. Now the DECISIONS entry and the API doc, then the
+  AI log.
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && cat >>
+      DECISIONS.md <<'EOF'…)
+  ⎿  Updated DECISIONS.md (+12 -0)
+      363  Rejected: offer ids in every product list response (bigger pay
+           load for a hover action);
+      364  a card that grows downward (clipped by the rails' horizontal s
+           croll).
+      365  
+      366 +                                                              
+      367 +## 32. Order history is signed-in only (refines #28)          
+      368 +The assignment says "checkout and order history are only for s
+          +igned-in users". Since #28 guests                             
+      369 +can't pay, so they never get new orders, but `GET /api/orders`
+          + still accepted a guest id. It now                            
+      370 +sits in the `RequireAuth` group next to checkout, and `/orders
+          +` is wrapped in `<RequireAuth>` (a guest                      
+      371 +is sent to `/login` and comes back after). Checkout keeps its 
+          +#28 shape: guests see the summary,                            
+      372 +"Apmokėti" opens the sign-in popup, which matches the assignme
+          +nt's flow diagram (Cart -> Checkout ->                        
+      373 +sign-in required -> Payment). Old guest orders are not lost: t
+          +hey merge into the account on sign-in.                        
+      374 +`router_test.go` checks each protected route: no token, guest 
+          +id and bad token get 401, signed-in 200,                      
+      375 +while the personal homepage blocks still accept a guest id.   
+      376 +Rejected: keeping guest order history and justifying it (the s
+          +pec names it explicitly, and with                             
+      377 +paying behind login it would only ever show an empty list).   
+  ⎿  Updated docs\api.md (+1 -1)
+      28  | Method | Path | Notes |
+      29  |---|---|---|
+      30  | POST | `/api/orders` | body `{cartId}`: simulated payment, th
+          en delivery. 201 delivered order with key codes. Safe to retry 
+          |
+      31 -| GET | `/api/orders?page=&pageSize=` | `{items,total,page,page
+         -Size}`, newest first (DECISIONS #22) |                         
+      31 +| GET | `/api/orders?page=&pageSize=` | signed in: `{items,tota
+         +l,page,pageSize}`, newest first (DECISIONS #22, #32) |         
+      32  | POST | `/api/profile/views` | body `{productId}`: adds it to 
+          the profile's recently viewed. 204; 404 unknown product |
+      33  | GET | `/api/home/recently-viewed` | homepage block: `{items}`
+           up to 8, newest first |
+      34  | GET | `/api/home/recommended` | homepage block: `{items}` 8 p
+          roducts scored by genre/category/platform overlap with views + 
+          purchases (DECISIONS #25) |
+
+● The API doc is out of date too: it still lists checkout under "Guest user".
+  Fixing that section.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && python - <<'EOF'
+      import io…)
+  ⎿  Updated docs\api.md (+8 -6)
+      22  | GET | `/api/carts/{cartId}` | the cart order as stored; 410 o
+          nce paid |
+      23  | PUT | `/api/carts/{cartId}/items/{offerId}` | body `{quantity
+          }` (0 = remove). Reserves stock + keys. `{cart, offerId, stock}
+          `; 409 not enough stock, 410 paid |
+      24  
+      25 -## Guest user (header `X-Guest-Id: <random id>`, while login is
+         - off: DECISIONS #20)                                           
+      26 -Missing or malformed id -> 401.                                
+      25 +## Guest or signed-in (login token if sent, else header `X-Gues
+         +t-Id: <random id>`; DECISIONS #28)                             
+      26 +A bad login token is 401 (never silently a guest); a missing or
+         + malformed guest id is 401.                                    
+      27  
+      28  | Method | Path | Notes |
+      29  |---|---|---|
+      30 -| POST | `/api/orders` | body `{cartId}`: simulated payment, th
+         -en delivery. 201 delivered order with key codes. Safe to retry 
+         -|                                                              
+      31 -| GET | `/api/orders?page=&pageSize=` | signed in: `{items,tota
+         -l,page,pageSize}`, newest first (DECISIONS #22, #32) |         
+      30  | POST | `/api/profile/views` | body `{productId}`: adds it to 
+          the profile's recently viewed. 204; 404 unknown product |
+      31  | GET | `/api/home/recently-viewed` | homepage block: `{items}`
+           up to 8, newest first |
+      32  | GET | `/api/home/recommended` | homepage block: `{items}` 8 p
+          roducts scored by genre/category/platform overlap with views + 
+          purchases (DECISIONS #25) |
+      33  
+      36 -## Signed-in (header `Authorization: Bearer <Firebase ID token>
+         -`)                                                             
+      34 +## Signed-in only (header `Authorization: Bearer <Firebase ID t
+         +oken>`)                                                        
+      35  With `STORE=memory` the only accepted token is `dev` (user `dev
+          -user`), see DECISIONS #10.
+      36 +Anything else, including a guest id, is 401 (`router_test.go`).
+      37  
+      38  | Method | Path | Notes |
+      39  |---|---|---|
+      41 -| GET | `/api/me` | `{uid,email}` |                            
+      40 +| POST | `/api/orders` | body `{cartId}`: simulated payment, th
+         +en delivery. 201 delivered order with key codes. Safe to retry 
+         +|                                                              
+      41 +| GET | `/api/orders?page=&pageSize=` | `{items,total,page,page
+         +Size}`, newest first (DECISIONS #22, #32) |                    
+      42 +| GET | `/api/me` | account numbers: order count, total spent |
+      43 +| POST | `/api/me/merge-guest` | body `{guestId}`: moves that g
+         +uest's views and orders to the account. Safe to repeat |       
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && sed -i 's#| GET |
+      `/api/me` | account number…)
+  ⎿  Updated docs\api.md (+1 -1)
+      39  |---|---|---|
+      40  | POST | `/api/orders` | body `{cartId}`: simulated payment, th
+          en delivery. 201 delivered order with key codes. Safe to retry 
+          |
+      41  | GET | `/api/orders?page=&pageSize=` | `{items,total,page,page
+          Size}`, newest first (DECISIONS #22, #32) |
+      42 -| GET | `/api/me` | account numbers: order count, total spent |
+      42 +| GET | `/api/me` | `{uid,email,orderCount,totalSpent}` (cents)
+         + |                                                             
+      43  | POST | `/api/me/merge-guest` | body `{guestId}`: moves that g
+          uest's views and orders to the account. Safe to repeat |
+
+● The headings for sessions 3–5 are fine, but the empty "Session 6/7"
+  placeholders dated 2026-12-13 need removing, and I'm checking that the Session
+  1 share link is public. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && head -n 13665
+      AI_CHAT_LOG.md > /tmp/log && c…)
+  ⎿  Updated AI_CHAT_LOG.md (+0 -6)
+      13663    Clicking the two buttons isn't tested yet, so please try t
+             hem in the browser.
+      13664  
+      13665    I added DECISIONS #31.
+      13666 -                                                            
+      13667 -  ## Session 6 - 2026-12-13 cleaning up the skeleton + conne
+            -cting db                                                    
+      13668 -                                                            
+      13669 -  ## Session 7 - 2026-12-13 cleaning up the skeleton + conne
+            -cting db                                                    
+      13670 -                                                            
+      13671 -                                                            
+
+● Everything is in place. Final check, then commits: one for the auth slice and
+  one for the cleanup, per your one-commit-per-slice rule. I won't push.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● git add refused the ignored seed.exe, so the second commit didn't happen. The
+  staged removal of seed.exe probably went into the first commit instead.
+  Checking, then committing the rest:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The seed.exe removal landed in the auth commit. That commit isn't pushed yet,
+  so I'll split it cleanly:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All three issues are fixed and committed locally as two commits. Nothing is
+  pushed yet. Go tests pass and npm run build is clean.
+
+  I also checked the live site over HTTP: the homepage, products, typo search
+  ("witchr" finds The Witcher) and direct links like /store all work, and
+  checkout already returns 401 for guests. The live API is
+  eneba-api-10wc.onrender.com (I took it from the deployed site's code). The
+  plain eneba-api.onrender.com is someone else's app.
+
+  1. Order history needs an account now (commit 8e4fae5)
+  - Guests asking for their orders now get a 401, the same protection checkout
+    already had (router.go (backend/internal/router/router.go)).
+  - A guest who opens /orders is sent to the login page and comes back after
+    signing in (App.tsx (frontend/src/app/App.tsx)).
+  - Checkout is unchanged: guests see the summary, and "Apmokėti" asks them to
+    sign in. That matches the assignment's diagram (Cart → Checkout → sign-in
+    required → Payment).
+  - New router_test.go (backend/internal/router/router_test.go) checks that a
+    guest, a missing token and a bad token all get 401 on the protected routes.
+    It also checks that guests can still see their recently viewed and
+    recommended blocks.
+  - Added DECISIONS #32 and fixed docs/api.md, which still listed checkout as
+    open to guests.
+
+  2. Repo cleanup (commit 7d34b48)
+  - seed.exe is no longer tracked. The 27 MB copy is still in old commits, so
+    the clone stays large. Removing it from history needs a force-push, so I
+    left that alone.
+  - The README has the live and GitHub URLs, a table of what each part does, a
+    cold-start warning and the known gaps. It no longer says login is off or
+    that styling is TODO.
+  - SPEC tasks now show deploy and login as done. CLAUDE.md and SPEC point to
+    AI_CHAT_LOG.md.
+  - In the AI log I removed the empty "Session 6/7" headings dated 2026-12-13.
+    The Session 1 share link opens without logging in.
+
+  To do:
+  - git push. If Render auto-deploys from main, that pushes fix 1 to the live
+    site.
+  - Run /export at the end of this session and append it to AI_CHAT_LOG.md.
+
+  Images. You have three options:
+  1. Keep the gradient as it is. It's honest, needs no outside images, and
+     DECISIONS #24 already explains it. But it's the clearest visual difference
+     from Eneba.
+  2. Generated covers. Each card would get a gradient picked from the product's
+     category, the platform icon, and the title in big type. It's one component
+     plus the icons you already have, with no new dependency and nothing to
+     license. The store would look designed rather than unfinished.
+  3. Real game art from Steam's image server. It would look the most like Eneba,
+     but the art belongs to the publishers, gift cards and top-ups have none,
+     and it contradicts the brand-assets stance you took for Eneba's images.
+
+  I'd go with option 2. It closes most of the visual gap, stays consistent with
+  your earlier decision, and is easy to explain in the interview. Want me to
+  build it?
+
+> Number 2 works nice. Can you also check double check git repo for other
+  fliles? I believe there were some conversation files or other files that were
+  deleted but still in the history
+
+● I'll start with the git history audit, then build the covers.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● History has four files that no longer exist in the current code. Before
+  deciding what to do, I'll scan every version of every file for secrets.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● No secrets turned up; the only match is an empty credentials template line in
+  the chat log. I'm checking whether the deleted conversation files hold
+  anything personal. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● History is clean apart from the size issue (details at the end). Now the
+  covers. I'll look at where product images are shown today.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● I'll make one Cover component for every place a product image appears. To use
+  it in the cart and orders, I first need to know what data each place has.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Order and cart lines only have product id and name, so I'm giving each product
+  a color from its id and drawing the category icon on cards and the product
+  page, with the first letter in cart and order thumbnails. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Writing the component, the hash helper and the tokens.
+
+● Write(frontend\src\lib\cover.ts)
+  ⎿  Wrote 14 lines to frontend\src\lib\cover.ts
+       1 /** How many cover gradients tokens.css defines (--cover-1-* ..
+         --cover-6-*). */
+       2 export const COVER_VARIANTS = 6;
+       3
+       4 /**
+       5  * Picks a cover gradient (1..COVER_VARIANTS) from a product id.
+          The same id
+       6  * always gives the same number, so a product has one color on i
+         ts card, its
+       7  * product page, in the cart and in orders. A plain string hash:
+     … +8 lines (ctrl+o to expand)
+● Write(frontend\src\components\Cover.tsx)
+  ⎿  Wrote 39 lines to frontend\src\components\Cover.tsx
+       1 import { coverVariant } from "../lib/cover";
+       2 import { categoryLabel } from "../lib/categories";
+       3 import { CategoryIcon } from "./Icons";
+       4
+       5 interface CoverProps {
+       6   productId: string;
+       7   name: string;
+       8   imageUrl?: string;
+       9   category?: string; // order/cart lines don't carry it; then th
+         e cover has no icon or label
+     … +30 lines (ctrl+o to expand)
+
+● Update(frontend\src\styles\tokens.css)
+  ⎿  Added 10 lines
+      34    --color-google-yellow: #fbbc05;
+      35    --color-google-red: #ea4335;
+      36    --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      37 +  /* generated product covers (components/Cover.tsx): 6 gradien
+         +ts, picked per product id.                                     
+      38 +     Hues from Eneba's palette above, plus a blue for variety; 
+         +each fades into the card color. */                             
+      39 +  --cover-1-from: #7a4edf;  --cover-1-to: #2c0e6c;   /* violet 
+         +*/                                                             
+      40 +  --cover-2-from: #d32252;  --cover-2-to: #351183;   /* crimson
+         + */                                                            
+      41 +  --cover-3-from: #23c299;  --cover-3-to: #1f0a4d;   /* teal */
+      42 +  --cover-4-from: #3a6ff0;  --cover-4-to: #1f0a4d;   /* blue */
+      43 +  --cover-5-from: #f0a613;  --cover-5-to: #5825cc;   /* amber *
+         +/                                                              
+      44 +  --cover-6-from: #e76a8c;  --cover-6-to: #2c0e6c;   /* pink */
+      45 +  --cover-shade: rgba(31, 10, 77, 0.85);              /* bottom
+         + fade so the title stays readable */                           
+      46 +  --cover-stripe: rgba(255, 255, 255, 0.05);          /* faint 
+         +diagonal texture */                                            
+      47  
+      48    /* typography */
+      49    --font-sans: "Metropolis", Arial, Helvetica, sans-serif;
+
+● Now the CSS, then I'll switch the four call sites to Cover.
+
+● Update(frontend\src\styles\global.css)
+  ⎿  Added 29 lines, removed 6 lines
+      124  /* touch screens have no hover: keep the plain card, the produ
+           ct page has the buttons */
+      125  @media (hover: none) { .card-actions { display: none; } .card:
+           hover .card-img { margin-top: 0; } }
+      126  .card-img {
+      127 -  aspect-ratio: 3 / 4; width: 100%; object-fit: cover;        
+      128 -  background: linear-gradient(160deg, var(--color-secondary), 
+          -var(--color-band) 60%, var(--color-card));                    
+      127 +  aspect-ratio: 3 / 4; width: 100%; object-fit: cover; backgro
+          +und: var(--color-card);                                       
+      128  }
+      130 -/* no cover image in the seed data: show the name on the gradi
+          -ent instead */                                                
+      131 -.card-img-empty {                                             
+      132 -  display: flex; align-items: flex-end; padding: var(--space-3
+          -);                                                            
+      133 -  font-weight: 800; font-size: var(--text-lg); line-height: 1.
+          -2; overflow: hidden; word-break: break-word;                  
+      129 +                                                              
+      130 +/* Generated covers (components/Cover.tsx, DECISIONS #33). Lay
+          +ers, top to bottom: a dark fade                               
+      131 +   at the bottom for the title, a faint diagonal stripe, and t
+          +he product's gradient. */                                     
+      132 +.cover {                                                      
+      133 +  --from: var(--cover-1-from); --to: var(--cover-1-to);       
+      134 +  position: relative; overflow: hidden; color: var(--color-tex
+          +t);                                                           
+      135 +  display: flex; flex-direction: column; justify-content: flex
+          +-end;                                                         
+      136 +  background:                                                 
+      137 +    linear-gradient(to top, var(--cover-shade), transparent 55
+          +%),                                                           
+      138 +    repeating-linear-gradient(135deg, var(--cover-stripe) 0 12
+          +px, transparent 12px 24px),                                   
+      139 +    linear-gradient(160deg, var(--from), var(--to));          
+      140  }
+      141 +.cover-v2 { --from: var(--cover-2-from); --to: var(--cover-2-t
+          +o); }                                                         
+      142 +.cover-v3 { --from: var(--cover-3-from); --to: var(--cover-3-t
+          +o); }                                                         
+      143 +.cover-v4 { --from: var(--cover-4-from); --to: var(--cover-4-t
+          +o); }                                                         
+      144 +.cover-v5 { --from: var(--cover-5-from); --to: var(--cover-5-t
+          +o); }                                                         
+      145 +.cover-v6 { --from: var(--cover-6-from); --to: var(--cover-6-t
+          +o); }                                                         
+      146 +.cover-icon { position: absolute; top: 10%; right: -12%; opaci
+          +ty: 0.22; transform: rotate(-12deg); line-height: 0; }        
+      147 +.cover-text { position: relative; display: flex; flex-directio
+          +n: column; gap: var(--space-1); padding: var(--space-3); }    
+      148 +.cover-kicker {                                               
+      149 +  font-size: var(--text-xs); font-weight: 700; text-transform:
+          + uppercase; letter-spacing: 0.06em; color: var(--color-text-na
+          +v);                                                           
+      150 +}                                                             
+      151 +.cover-title {                                                
+      152 +  font-weight: 800; font-size: var(--text-lg); line-height: 1.
+          +15; word-break: break-word;                                   
+      153 +  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-ori
+          +ent: vertical; overflow: hidden;                              
+      154 +}                                                             
+      155 +.cover-large .cover-text { padding: var(--space-6); }         
+      156 +.cover-large .cover-title { font-size: var(--text-xl); }      
+      157 +.cover-thumb { align-items: center; justify-content: center; f
+          +ont-weight: 800; font-size: var(--text-xl); }                 
+      158  .card-platform {
+      159    padding: var(--space-1) var(--space-2); font-size: var(--tex
+           t-xs); font-weight: 600; text-align: center;
+      160    border-bottom: 1px solid var(--color-surface);
+
+● Update(frontend\src\components\ProductCard.tsx)
+  ⎿  Added 1 line, removed 5 lines
+      29      <div className="card">
+      30        <Link to={`/product/${p.id}`} className="card-link">
+      31          {p.preOrder && <span className="card-tag" title="Išanks
+          tinis užsakymas">Iš anksto · {p.releaseDate}</span>}
+      32 -        {p.imageUrl ? (                                        
+      33 -          <img className="card-img" src={p.imageUrl} alt={p.nam
+         -e} />                                                          
+      34 -        ) : (                                                  
+      35 -          <div className="card-img card-img-empty" aria-hidden=
+         -"true">{p.name}</div>                                          
+      36 -        )}                                                     
+      32 +        <Cover className="card-img" productId={p.id} name={p.na
+         +me} imageUrl={p.imageUrl} category={p.category} />             
+      33          <div className="card-platform">{p.platform}</div>
+      34          <div className="card-body">
+      35            <div className="card-title">{p.name}</div>
+
+● Update(frontend\src\components\ProductCard.tsx)
+  ⎿  Added 1 line
+      3  import type { Product } from "../types";
+      4  import { formatPrice, regionLabel } from "../lib/format";
+      5  import { useCart } from "../features/cart/CartContext";
+      6 +import { Cover } from "./Cover";                                
+      7  
+      8  /**
+      9   * Eneba-style card: cover, platform strip, then title, region, 
+         "Nuo" + old price, price.
+
+● Update(frontend\src\features\product\ProductPage.tsx)
+  ⎿  Added 1 line, removed 1 line
+      31        <Status state={state}>
+      32          {({ product: p, offers }) => (
+      33            <div className="product">
+      34 -            {p.imageUrl ? <img className="card-img" src={p.imag
+         -eUrl} alt={p.name} /> : <div className="card-img" />}          
+      34 +            <Cover className="card-img" size="large" productId=
+         +{p.id} name={p.name} imageUrl={p.imageUrl} category={p.category
+         +} />                                                           
+      35              <div>
+      36                <h1>{p.name}</h1>
+      37                <p className="muted">
+
+● Update(frontend\src\features\cart\CartLine.tsx)
+  ⎿  Added 1 line, removed 1 line
+      23  
+      24    return (
+      25      <li className="cart-line">
+      26 -      {item.imageUrl ? <img className="cart-img" src={item.imag
+         -eUrl} alt="" /> : <div className="cart-img" />}                
+      26 +      <Cover className="cart-img" size="thumb" productId={item.
+         +productId} name={item.productName} imageUrl={item.imageUrl} /> 
+      27        <div className="cart-info">
+      28          <span className="muted small">Parduoda <strong>{item.se
+          llerName}</strong></span>
+      29          <Link to={`/product/${item.productId}`} className="cart
+          -title">{item.productName}</Link>
+
+● Update(frontend\src\features\cart\CartLine.tsx)
+  ⎿  Added 1 line
+      2  import { Link } from "react-router-dom";
+      3  import { formatPrice, formatTime } from "../../lib/format";
+      4  import { useCart } from "./CartContext";
+      5 +import { Cover } from "../../components/Cover";                 
+      6  import type { OrderItem } from "../../types";
+      7  
+      8  /**
+
+● Update(frontend\src\features\orders\OrderCard.tsx)
+  ⎿  Added 1 line, removed 1 line
+      21        <ul className="order-items">
+      22          {order.items.map((it) => (
+      23            <li key={it.offerId} className="order-item">
+      24 -            {it.imageUrl ? <img className="cart-img" src={it.im
+         -ageUrl} alt="" /> : <div className="cart-img" />}              
+      24 +            <Cover className="cart-img" size="thumb" productId=
+         +{it.productId} name={it.productName} imageUrl={it.imageUrl} /> 
+      25              <div className="cart-info">
+      26                <Link to={`/product/${it.productId}`} className="
+          cart-title">{it.productName}</Link>
+      27                <span className="muted small">
+
+● Adding the imports to ProductPage and OrderCard:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba/frontend" && sed -i
+      '8a import { Cover } from ".…)
+  ⎿  Updated frontend\src\features\orders\OrderCard.tsx (+64 -63)
+       1 -import { useState } from "react";                              
+       2 -import { Link } from "react-router-dom";                       
+       3 -import { formatPrice } from "../../lib/format";                
+       4 -import type { Order, OrderStatus } from "../../types";         
+       5 -                                                               
+       6 -const STATUS: Record<OrderStatus, string> = {                  
+       7 -  cart: "Krepšelis",                                           
+       8 -  paid: "Apmokėta",                                            
+       9 -  delivered: "Pristatyta",                                     
+      10 -};                                                             
+      11 -                                                               
+      12 -/** One order with its key codes; used after checkout and in th
+         -e order history. */                                            
+      13 -export function OrderCard({ order }: { order: Order }) {       
+      14 -  const date = new Date(order.paidAt ?? order.createdAt).toLoca
+         -leString("lt-LT");                                             
+      15 -  return (                                                     
+      16 -    <section className="order">                                
+      17 -      <header className="order-head">                          
+      18 -        <span className="muted small">Užsakymas {order.id.slice
+         -(0, 8)} · {date}</span>                                        
+      19 -        <span className={`status status-${order.status}`}>{STAT
+         -US[order.status]}</span>                                       
+      20 -      </header>                                                
+      21 -      <ul className="order-items">                             
+      22 -        {order.items.map((it) => (                             
+      23 -          <li key={it.offerId} className="order-item">         
+      24 -            <Cover className="cart-img" size="thumb" productId=
+         -{it.productId} name={it.productName} imageUrl={it.imageUrl} /> 
+      25 -            <div className="cart-info">                        
+      26 -              <Link to={`/product/${it.productId}`} className="
+         -cart-title">{it.productName}</Link>                            
+      27 -              <span className="muted small">                   
+      28 -                Pardavėjas: {it.sellerName} · {it.quantity} × {
+         -formatPrice(it.price, order.currency)}                         
+      29 -              </span>                                          
+      30 -              {it.keys?.length ? (                             
+      31 -                it.keys.map((k) => <KeyCode key={k.code} code={
+         -k.code} />)                                                    
+      32 -              ) : (                                            
+      33 -                <span className="muted small">Raktai bus parody
+         -ti, kai užsakymas bus pristatytas.</span>                      
+      34 -              )}                                               
+      35 -            </div>                                             
+      36 -          </li>                                                
+      37 -        ))}                                                    
+      38 -      </ul>                                                    
+      39 -      <div className="cart-total">                             
+      40 -        <span>Iš viso</span>                                   
+     … 87 more lines (ctrl+o to expand)
+  ⎿  Updated frontend\src\features\product\ProductPage.tsx (+77 -76)
+       1 -import { useEffect, useState } from "react";                   
+       2 -import { useParams } from "react-router-dom";                  
+       3 -import type { Offer } from "../../types";                      
+       4 -import { api } from "../../lib/api";                           
+       5 -import { useAsync } from "../../lib/useAsync";                 
+       6 -import { formatPrice, regionLabel } from "../../lib/format";   
+       7 -import { categoryLabel } from "../../lib/categories";          
+       8 -import { Status } from "../../components/Status";              
+       9 -import { useCart } from "../cart/CartContext";                 
+      10 -                                                               
+      11 -export function ProductPage() {                                
+      12 -  const { id = "" } = useParams();                             
+      13 -  const state = useAsync(() => api.product(id), [id]);         
+      14 -  // Feeds "Neseniai peržiūrėta" / "Rekomenduojama tau". Fire a
+         -nd forget:                                                     
+      15 -  // a failed save must never break the product page.          
+      16 -  useEffect(() => {                                            
+      17 -    api.recordView(id).catch(() => {});                        
+      18 -  }, [id]);                                                    
+      19 -  const { items, add, liveStock } = useCart();                 
+      20 -  const [pending, setPending] = useState<string | null>(null); 
+         -// offer id being added                                        
+      21 -  const inCart = (offerId: string) => items.find((i) => i.offer
+         -Id === offerId)?.quantity ?? 0;                                
+      22 -  // Stock changes as carts reserve it; prefer the newest numbe
+         -r the server gave us.                                          
+      23 -  const stockOf = (o: Offer) => liveStock[o.id] ?? o.stock;    
+      24 -  const onAdd = async (o: Offer) => {                          
+      25 -    setPending(o.id);                                          
+      26 -    await add(o.id); // reserves on the server; the popup shows
+         - success or the error                                          
+      27 -    setPending(null);                                          
+      28 -  };                                                           
+      29 -  return (                                                     
+      30 -    <div className="page container">                           
+      31 -      <Status state={state}>                                   
+      32 -        {({ product: p, offers }) => (                         
+      33 -          <div className="product">                            
+      34 -            <Cover className="card-img" size="large" productId=
+         -{p.id} name={p.name} imageUrl={p.imageUrl} category={p.category
+         -} />                                                           
+      35 -            <div>                                              
+      36 -              <h1>{p.name}</h1>                                
+      37 -              <p className="muted">                            
+      38 -                {[p.platform, regionLabel(p.region), categoryLa
+         -bel(p.category), p.genre].filter(Boolean).join(" · ")}         
+      39 -              </p>                                             
+      40 -              {p.preOrder && (                                 
+     … 113 more lines (ctrl+o to expand)
+  ⎿  (timeout 3m)
+
+● The build passes. Next I'll take screenshots in headless Chrome (as in earlier
+  sessions) to see how the covers look.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● I'll run the backend in memory mode (STORE=memory overrides your .env) so
+  screenshots don't touch real Firestore, and start the Vite dev server next to
+  it.
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+● Background command "Run backend API in memory mode" failed with exit code 1
+
+  Read 1 file (ctrl+o to expand)
+
+● Something else already holds port 8080. Checking what it is:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Nothing is listening on 8080 now, so it was probably a Windows port
+  reservation. I'll run the backend on 8090 and point Vite at it with
+  VITE_API_URL.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Stop Task
+  ⎿  cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+     Technology/temp-------------------------------/Eneba/frontend" && npx
+     vite --port 5173 --strictPort · stopped
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Background command "Run Vite pointing at backend on 8090" failed with exit
+code 1
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The first Vite process (pid 27212) survived the stop. I'll confirm it's the
+  one I started before killing it.
+
+  Ran 1 shell command (ctrl+o to expand)
+● That's the one I started at 14:59. Stopping it and restarting Vite against
+  8090:
+
+  Read 2 files, ran 3 shell commands (ctrl+o to expand)
+
+● The store and home covers look good. I'll check the product page and the phone
+  width too.
+
+  Read 2 files (ctrl+o to expand)
+
+● Cover checks pass on the store and product pages, with only the known phone
+  filter-collapse gap showing. Next I'm stopping the dev servers, then recording
+  the DECISIONS entry and committing. · summary
+
+● Stop Task
+  ⎿  cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+     Technology/temp-------------------------------/Eneba/frontend" &&
+     VITE_API_URL=http://localhost:8090… · stopped
+
+● Stop Task
+  ⎿  cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+     Technology/temp-------------------------------/Eneba/backend" &&
+     STORE=memory PORT=8090 go run ./cmd/… · stopped
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && cat >>
+      DECISIONS.md <<'EOF'…)
+  ⎿  Updated DECISIONS.md (+14 -0)
+      375  while the personal homepage blocks still accept a guest id.
+      376  Rejected: keeping guest order history and justifying it (the s
+           pec names it explicitly, and with
+      377  paying behind login it would only ever show an empty list).
+      378 +                                                              
+      379 +## 33. Generated product covers instead of images (refines #24
+          +)                                                             
+      380 +The seed has no cover art, and the real art belongs to Eneba o
+          +r the publishers (#24 already                                 
+      381 +rejected copying it). The plain "name on one gradient" made ev
+          +ery card look the same, so                                    
+      382 +`components/Cover.tsx` draws a cover when `imageUrl` is empty:
+          + one of 6 gradients from `tokens.css`,                        
+      383 +a faint diagonal stripe, the category icon as a watermark, the
+          + category label and the title.                                
+      384 +- The gradient is picked by `coverVariant(productId)` (`lib/co
+          +ver.ts`): a plain string hash mod 6.                          
+      385 +  The same product gets the same color on its card, product pa
+          +ge, cart line and order (cart and                             
+      386 +  order lines only know id + name, so they show the color and 
+          +the first letter).                                            
+      387 +- Pure CSS (layered `background`s + custom properties), no ima
+          +ges to host; a real `imageUrl`                                
+      388 +  still wins, so adding art later is a data change only.      
+      389 +Rejected: Steam's CDN art (looks closest to Eneba, but not our
+          +s to use, and gift cards/top-ups have                         
+      390 +none); random colors per render (a product would change color 
+          +on every visit); an image service                             
+      391 +such as placeholder.com (outside dependency at runtime for som
+          +ething CSS can do).                                           
+  ⎿  Updated README.md (+2 -2)
+      74  | Auth | Firebase email/password + Google. Guests can browse an
+          d fill a cart; **paying and order history need an account** (si
+          gn-in popup at "Apmokėti"); guest data merges into the account 
+          on sign-in. |
+      75  | Styling | Colors, font (Metropolis), sizes from eneba.com's C
+          SS in `tokens.css`; components use only those variables. |
+      76  
+      77 -Known gaps (see `SPEC.md`): no real cover images (cards show th
+         -e name on a gradient), store filters do                        
+      78 -not collapse on phones yet.                                    
+      77 +Known gaps (see `SPEC.md`): covers are generated (gradient + ca
+         +tegory icon + title, `DECISIONS.md` #33)                       
+      78 +instead of real art, and store filters do not collapse on phone
+         +s yet.                                                         
+      79  
+      80  Firestore collections: `products`, `offers` (stock = available 
+          keys), `banners`,
+      81  `keys` (`offerId, code, status: available|reserved|sold, orderI
+          d`) and
+  ⎿  Updated SPEC.md (+2 -2)
+      16  | Cart | Done | The cart is a server-side order (status `cart`)
+          ; the UI renders that document and the browser keeps only the c
+          art id. Stock + keys reserved when an item is added (DECISIONS 
+          #15, #19, #21). Popup, header dropdown, live stock errors. |
+      17  | Checkout + key delivery | Done | Cart is the first stage of a
+          n order: cart -> paid -> delivered. Keys are reserved from the 
+          available pool when added to the cart, sold on delivery. Line d
+          ata (name, price, keys) is written once at add time; checkout o
+          nly changes status fields. Simulated payment (DECISIONS #8, #19
+          , #21). |
+      18  | Order history | Done | Signed-in only, as the assignment asks
+           (DECISIONS #32); `GET /api/orders?page=`, paged 10 per page (#
+          22), lists orders with copyable key codes. Guest orders from be
+          fore login made it back merge into the account on sign-in (#28)
+          . |
+      19 -| Eneba styling | Done | Values from eneba.com CSS in docs/DESI
+         -GN.md -> tokens.css; header, cards, store, product, cart restyl
+         -ed (DECISIONS #24, #27, #29, #31). Mobile filter drawer still T
+         -ODO. Cards without art show the name on a gradient (#24). |    
+      19 +| Eneba styling | Done | Values from eneba.com CSS in docs/DESI
+         +GN.md -> tokens.css; header, cards, store, product, cart restyl
+         +ed (DECISIONS #24, #27, #29, #31). Mobile filter drawer still T
+         +ODO. Cards without art get a generated cover (#33). |          
+      20  
+      21  ## Explicitly out of scope (and why)
+      22  - Real payments: assignment allows simulation; no value in wiri
+          ng a provider.
+     ...
+      34     Cart changes take ~1.5-2s (transaction round trips); conside
+          r an optimistic UI if it feels slow.
+      35  2. ~~Checkout + key delivery~~ Done (DECISIONS #19).
+      36  3. ~~Order history~~ Done; signed-in only since DECISIONS #32.
+      37 -4. ~~**Eneba styling.**~~ Done (DECISIONS #24, #27, #29). Left:
+         - collapse store filters on phones; real cover images.          
+      37 +4. ~~**Eneba styling.**~~ Done (DECISIONS #24, #27, #29). Left:
+         + collapse store filters on phones. Covers are generated (#33). 
+      38  5. ~~**Deploy to Render**~~ Done 2026-11-16: https://eneba-web.
+          onrender.com (API `eneba-api-10wc`).
+      39     Smoke-tested over HTTP: health, products, typo search, SPA r
+          outes, checkout 401 for guests.
+      40     Not yet seen live: the 30-min expiry sweep (free tier sleeps
+          ; it runs once the API wakes).
+
+● Generated covers are built and committed (de46b12). The git history has no
+  secrets or personal data in it; the only real problem is size.
+
+  Covers
+
+  Screenshots:
+  - Store: C:\Users\faust\AppData\Local\Temp\claude\f3b14c1c18b2a3c6\079b33a7-98
+    ae-4c6e-ad5d-11c0b98214af\scratchpad\cover-store.png
+  - Homepage: C:\Users\faust\AppData\Local\Temp\claude\f3b14c1c18b2a3c6\079b33a7
+    -98ae-4c6e-ad5d-11c0b98214af\scratchpad\cover-home.png
+  - Product page: C:\Users\faust\AppData\Local\Temp\claude\f3b14c1c18b2a3c6\079b
+    33a7-98ae-4c6e-ad5d-11c0b98214af\scratchpad\cover-product.png
+  - What a cover shows: a colored gradient with faint stripes, the category icon
+    as a large faint watermark, the category name in small capitals, and the
+    product title.
+  - Color: lib/cover.ts (frontend/src/lib/cover.ts) turns the product id into
+    one of 6 gradients defined in tokens.css. A product has the same color on
+    its card, its product page, in the cart and in orders. The colors are fixed
+    per product, never random, so you can explain it in two sentences.
+  - Cart and order rows: these only know the product id and name, so they show
+    the product's color and its first letter.
+  - Adding real images later: Cover.tsx (frontend/src/components/Cover.tsx)
+    shows imageUrl whenever a product has one, so real art only needs a change
+    in the seed data.
+  - I added DECISIONS #33 and updated README and SPEC.
+
+  I didn't screenshot the cart thumbnails because that needs items in a cart, so
+  please check them once in the browser.
+
+  Git history
+
+  I checked every file that was ever committed:
+
+  File: backend/seed.exe
+  Status: removed today
+  What it is: 27 MB compiled binary
+  Concern?: Yes: most of the clone size
+  ────────────────────────────────────────
+  File: 2026-11-15-…-checkout-and-key-delivery….txt
+  Status: deleted in 1462bcb
+  What it is: an exported chat (4,730 lines), already in AI_CHAT_LOG.md
+  Concern?: No
+  ────────────────────────────────────────
+  File: AI_LOG.md
+  Status: deleted twice
+  What it is: the 9-line empty log template
+  Concern?: No
+  ────────────────────────────────────────
+  File: frontend/src/features/cart/QtyStepper.tsx
+  Status: deleted in 1df28af
+  What it is: old component
+  Concern?: No
+
+  - Secrets: I scanned every version of every file for private keys,
+    service-account JSON, API keys and tokens. The only hit is an empty
+    FIREBASE_CREDENTIALS_JSON= template line quoted in the chat log.
+  - Personal data: your email and Windows user paths appear nowhere in the
+    history.
+
+  The deleted chat export is fine to leave, since graders are meant to read your
+  chat history anyway. The only thing worth deciding about is seed.exe.
+
+  About seed.exe: the old commit that contains it is already on GitHub. Removing
+  it from history means rewriting most of the commits (new hashes) and
+  force-pushing main. That can't be undone on GitHub, and it would leave any
+  other clone out of sync. In return the repo goes from about 30 MB to about 3
+  MB. It's harmless to leave, so it comes down to how clean you want the repo to
+  look. If you want it gone, say so and I'll do the rewrite and force-push
+  carefully. Otherwise just push the 3 new commits as they are.
+
+  Still to do: git push (Render redeploys with the order-history fix and the
+  covers), then /export this session into AI_CHAT_LOG.md.
+
+> yeah I want it and other 3 Files that you found removed. Do it cleanly dont
+  change the dates or anything
+
+● Before I rewrite anything, one thing about QtyStepper.tsx you should know:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● User answered Claude's questions:
+  ⎿  · QtyStepper.tsx is ordinary source code, not junk: commit c24db88 (Nov 14)
+     added it and CartLine.tsx imported it until 1df28af. If I remove it from
+     history, those commits will show CartLine importing a file that isn't
+     there, so they won't build if a grader checks them out. seed.exe, the old
+     chat .txt and the AI_LOG.md template have no such side effect. Remove
+     QtyStepper.tsx too? → Keep QtyStepper (Recommended)
+
+● Keeping QtyStepper.tsx; next I'm checking which commits touch only these
+  files, whether every AI_LOG.md version was just the template, and whether any
+  commits are signed. · summary
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● A backup bundle of the whole repo is saved and verified. Running the rewrite
+  now. filter-branch keeps author and committer names, emails and dates as they
+  are.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Rewrite finished. Verifying that the metadata is identical, the files are
+  gone, and the code at the tip is unchanged:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All 27 commits share the same names, emails, dates and messages, and the 3
+  files are gone from each while QtyStepper.tsx remains. I'm clearing the old
+  local copies, then force-pushing with --force-with-lease so it fails if GitHub
+  has changed since my last fetch. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The pack size went up because the origin/main reference still pointed at the
+  old history during cleanup. The push has moved it, so one more gc:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All three files are gone from the GitHub history, and dates, authors and
+  messages are unchanged. The rewrite changed every commit hash, so I'll check
+  whether the docs mention any old hashes.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && new=$(git log
+      --format="%h %s" | grep "Conne…)
+  ⎿  Updated DECISIONS.md (+1 -1)
+      127  Note: Render's free tier sleeps when idle, so the sweep runs o
+           nce the API wakes.
+      128  
+      129  ## 17. `.env.example` files restored
+      130 -They were deleted in 684c9f0 but README/CLAUDE.md still pointe
+          -d to them. Restored as                                        
+      130 +They were deleted in 2e97d09 ("Connected firestore db") but RE
+          +ADME/CLAUDE.md still pointed to them. Restored as             
+      131  templates; real `backend/.env` and `frontend/.env.local` are g
+           itignored.
+      132  
+      133  ## 18. Stay on Firestore; search stays in Go
+
+● seed.exe, the old chat .txt export and the AI_LOG.md template are now removed
+  from the entire git history, and the result is pushed to GitHub.
+  QtyStepper.tsx is still there, so every old commit still builds.
+
+  Checked after the rewrite:
+  - Commit details unchanged: I compared author and committer names, emails,
+    dates and messages for all 27 commits before and after, and they match
+    exactly.
+  - Current code unchanged: today's files are byte-for-byte what they were
+    before.
+  - GitHub copy: a fresh clone has 27 commits, none of the 3 files anywhere in
+    its history, and is 2.9 MB instead of about 30 MB.
+  - Safe push: I used --force-with-lease, so the push would have stopped if
+    anything had changed on GitHub since I last checked.
+
+  What changed anyway (can't be avoided):
+  - Commit hashes are all new. Old hashes won't match anymore. DECISIONS #17
+    quoted one (684c9f0), so I updated it to the new 2e97d09 and pushed that as
+    one extra commit.
+  - "Delete old files" lost GitHub's "Verified" badge. You made it on the GitHub
+    website, so GitHub had signed it, and that signature can't be carried over
+    to a rewritten commit.
+  - "clean up artifacts" is now an empty commit. It only deleted the .txt, and I
+    kept it rather than drop a commit from your history. "Stop tracking
+    seed.exe" also keeps its message even though it no longer removes anything.
+  - The old commits may still open on GitHub for a while if someone has their
+    exact hash, until GitHub cleans them up. No branch shows them, and since
+    none of them contained secrets that doesn't matter.
+
+  A full backup of the repo from before the rewrite is at
+  C:\Users\faust\AppData\Local\Temp\claude\f3b14c1c18b2a3c6\079b33a7-98ae-4c6e-a
+  d5d-11c0b98214af\scratchpad\eneba-before-rewrite.bundle. You can restore from
+  it with git clone <path>. Delete it once you're happy; your system may also
+  clear that temp folder on its own.
+
+  All the new commits are pushed: the order-history fix, the cleanup and the
+  covers. Render should redeploy if it auto-deploys from main. After that, once
+  you're signed out, /orders on the live site should send you to the login page.
+  What's left is to run /export and append this session to AI_CHAT_LOG.md.
+
+> <ide_opened_file>The user opened the file c:\Users\faust\Desktop\OneDrive -
+  Kaunas University of
+  Technology\temp-------------------------------\Eneba\AI_CHAT_LOG.md in the
+  IDE. This may or may not be related to the current task.</ide_opened_file>
+
+> can you do one final skim? anything hard coded? maybe ive missed something
+  from the creteria files? also is there a way to upgrade the search function
+  like so it would match acronyms?
+
+● I'll start with the hardcoding scan and read the search code alongside it.
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● Nothing of note in those hits, just token references, a fixed button shape,
+  layout sizes and an empty-cart default. Next I'm checking the homepage data
+  path and how the seed names look for acronym search. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Homepage block titles, info texts and "more" links are written in the
+  frontend; only the items come from the API. I'll note that and check the page
+  layout and the remaining criteria.
+  Ran 1 shell command (ctrl+o to expand)
+
+● The scan is finished and I'll report the results at the end. Next I'm adding
+  acronym search, building each product's acronyms when the index is created,
+  and I'm writing the tests first. · summary
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(backend\internal\search\search_test.go)
+  ⎿  Added 65 lines
+      29      t.Errorf("expected no results, got %+v", got)
+      30    }
+      31  }
+      32 +                                                               
+      33 +// Acronyms gamers type: first letters of the words, numbers ke
+         +pt whole,                                                      
+      34 +// Roman numerals as letters or digits, "the" optional, apostro
+         +phes ignored.                                                  
+      35 +func TestQueryAcronyms(t *testing.T) {                         
+      36 +  idx := Build([]Item{                                         
+      37 +    {"gta5", "Grand Theft Auto V"},                            
+      38 +    {"gta6", "Grand Theft Auto VI (PS5)"},                     
+      39 +    {"rdr2", "Red Dead Redemption 2"},                         
+      40 +    {"bg3", "Baldur's Gate 3"},                                
+      41 +    {"cod", "Call of Duty: Modern Warfare III"},               
+      42 +    {"tw3", "The Witcher 3: Wild Hunt GOTY"},                  
+      43 +    {"fh5", "Forza Horizon 5"},                                
+      44 +    {"elden", "Elden Ring"},                                   
+      45 +  })                                                           
+      46 +  cases := []struct {                                          
+      47 +    q, want string                                             
+      48 +  }{                                                           
+      49 +    {"gtav", "gta5"},                                          
+      50 +    {"gta 5", "gta5"},                                         
+      51 +    {"GTA V", "gta5"},                                         
+      52 +    {"gta 6", "gta6"},                                         
+      53 +    {"rdr2", "rdr2"},                                          
+      54 +    {"rdr 2", "rdr2"},                                         
+      55 +    {"bg3", "bg3"},                                            
+      56 +    {"cod", "cod"},                                            
+      57 +    {"codmw3", "cod"},                                         
+      58 +    {"tw3", "tw3"},                                            
+      59 +    {"w3", "tw3"}, // without "the"                            
+      60 +    {"fh5", "fh5"},                                            
+      61 +    {"elden", "elden"}, // normal names still win on their own 
+         +words                                                          
+      62 +  }                                                            
+      63 +  for _, c := range cases {                                    
+      64 +    got := idx.Query(c.q, 3)                                   
+      65 +    if len(got) == 0 || got[0].ID != c.want {                  
+      66 +      t.Errorf("Query(%q) = %+v, want first %s", c.q, got, c.wa
+         +nt)                                                            
+      67 +    }                                                          
+      68 +  }                                                            
+      69 +  // "gta" is a prefix of both GTA acronyms: both are found    
+      70 +  if got := idx.Query("gta", 5); len(got) < 2 {                
+      71 +    t.Errorf("Query(gta) = %+v, want both GTA games", got)     
+      72 +  }                                                            
+      73 +}                                                              
+      74 +                                                               
+      75 +func TestAcronyms(t *testing.T) {                              
+      76 +  cases := map[string][]string{                                
+      77 +    "Grand Theft Auto V":              {"gtav", "gta5"},       
+      78 +    "Baldur's Gate 3":                 {"bg3"},                
+      79 +    "The Witcher 3: Wild Hunt GOTY":   {"tw3whg", "w3whg"},    
+      80 +    "Call of Duty: Modern Warfare III": {"codmwiii", "codmw3"},
+      81 +    "Elden Ring":                      {"er"},                 
+      82 +  }                                                            
+      83 +  for name, want := range cases {                              
+      84 +    got := acronyms(name)                                      
+      85 +    if len(got) != len(want) {                                 
+      86 +      t.Errorf("acronyms(%q) = %v, want %v", name, got, want)  
+      87 +      continue                                                 
+      88 +    }                                                          
+      89 +    for i := range want {                                      
+      90 +      if got[i] != want[i] {                                   
+      91 +        t.Errorf("acronyms(%q) = %v, want %v", name, got, want)
+      92 +        break                                                  
+      93 +      }                                                        
+      94 +    }                                                          
+      95 +  }                                                            
+      96 +}                                                              
+
+● Now the implementation:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All three tests pass. To catch false matches, I'll run common queries against
+  the full 28-product seed with a throwaway test file:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Searches for six games land correctly and normal queries still rank as before,
+  though mw3 finds nothing yet and go matching "GOTY" comes from the existing
+  word-prefix rule. Next I'll build acronyms from the subtitle after a colon so
+  that mw3 and sote resolve. · summary
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba/backend" && python -
+      <<'EOF'
+      import io…)
+  ⎿  Updated backend\internal\search\search.go (+14 -6)
+      106  // acronyms of a name, e.g. "Grand Theft Auto V" -> ["gtav", "
+           gta5"]:
+      107  // the first letter of each word, numbers kept whole ("Red Dea
+           d Redemption 2" -> "rdr2"),
+      108  // Roman numerals once as letters and once as digits, and agai
+           n without a leading
+      109 -// "the" ("The Witcher 3" -> "tw3", "w3"). Apostrophes are dro
+          -pped first, so                                                
+      110 -// "Baldur's Gate 3" gives "bg3", not "bsg3". Built once per p
+          -roduct in Build.                                              
+      109 +// "the" ("The Witcher 3" -> "tw3", "w3"), and for the subtitl
+          +e after a colon too                                           
+      110 +// ("Call of Duty: Modern Warfare III" -> also "mw3"). Apostro
+          +phes are dropped first,                                       
+      111 +// so "Baldur's Gate 3" gives "bg3", not "bsg3". Built once pe
+          +r product in Build.                                           
+      112  func acronyms(name string) []string {
+      112 -        words := strings.Fields(normalize(dropApostrophes(name
+          -)))                                                           
+      113 -        variants := [][]string{words}                         
+      114 -        if len(words) > 1 && words[0] == "the" {              
+      115 -                variants = append(variants, words[1:])        
+      113 +        parts := []string{name}                               
+      114 +        if i := strings.Index(name, ":"); i > 0 {             
+      115 +                parts = append(parts, name[i+1:])             
+      116 +        }                                                     
+      117 +        var variants [][]string                               
+      118 +        for _, part := range parts {                          
+      119 +                words := strings.Fields(normalize(dropApostrop
+          +hes(part)))                                                   
+      120 +                variants = append(variants, words)            
+      121 +                if len(words) > 1 && words[0] == "the" {      
+      122 +                        variants = append(variants, words[1:])
+      123 +                }                                             
+      124          }
+      125          var out []string
+      126          for _, ws := range variants {
+  ⎿  Updated backend\internal\search\search_test.go (+3 -2)
+      55                  {"bg3", "bg3"},
+      56                  {"cod", "cod"},
+      57                  {"codmw3", "cod"},
+      58 +                {"mw3", "cod"}, // subtitle after the colon    
+      59                  {"tw3", "tw3"},
+      60                  {"w3", "tw3"}, // without "the"
+      61                  {"fh5", "fh5"},
+     ...
+      77          cases := map[string][]string{
+      78                  "Grand Theft Auto V":               {"gtav", "g
+          ta5"},
+      79                  "Baldur's Gate 3":                  {"bg3"},
+      79 -                "The Witcher 3: Wild Hunt GOTY":    {"tw3whg", 
+         -"w3whg"},                                                      
+      80 -                "Call of Duty: Modern Warfare III": {"codmwiii"
+         -, "codmw3"},                                                   
+      80 +                "The Witcher 3: Wild Hunt GOTY":    {"tw3whg", 
+         +"w3whg", "whg"},                                               
+      81 +                "Call of Duty: Modern Warfare III": {"codmwiii"
+         +, "codmw3", "mwiii", "mw3"},                                   
+      82                  "Elden Ring":                       {"er"},
+      83          }
+      84          for name, want := range cases {
+
+● All tests pass. Adding the DECISIONS entry and committing:
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && cat >>
+      DECISIONS.md <<'EOF'…)
+  ⎿  Updated DECISIONS.md (+12 -0)
+      389  Rejected: Steam's CDN art (looks closest to Eneba, but not our
+           s to use, and gift cards/top-ups have
+      390  none); random colors per render (a product would change color 
+           on every visit); an image service
+      391  such as placeholder.com (outside dependency at runtime for som
+           ething CSS can do).
+      392 +                                                              
+      393 +## 34. Search matches acronyms (extends #3)                   
+      394 +Gamers search "gta 5", "rdr2", "bg3", "cod". Trigrams can't co
+          +nnect "gta" to "Grand Theft Auto", so                         
+      395 +`search.Build` also stores each name's acronyms (`acronyms()`,
+          + computed once per product):                                  
+      396 +first letter of each word, numbers kept whole, Roman numerals 
+          +both as letters and as digits                                 
+      397 +("Grand Theft Auto V" -> `gtav`, `gta5`), again without a lead
+          +ing "the" (`tw3`, `w3`) and for the                           
+      398 +subtitle after a colon (`mw3`). Apostrophes are dropped first 
+          +("Baldur's" -> `bg3`). The query with                         
+      399 +spaces removed gets +1.5 if it equals an acronym and +1.0 if i
+          +t starts one ("gta" finds all three                           
+      400 +GTA products); an exact name match is still +2, so plain names
+          + keep winning. Two characters minimum.                        
+      401 +Tested in `search_test.go` and checked against all 28 seed nam
+          +es for false hits.                                            
+      402 +Rejected: a hand-written alias list ("gta" -> ...) (data to ke
+          +ep in sync for every new product);                            
+      403 +matching acronyms anywhere in a name, not only at the start (t
+          +oo many accidental hits on 2-3 letters).                      
+  ⎿  Updated SPEC.md (+1 -1)
+      10  |---|---|---|
+      11  | Store (filters, sort, search, pagination) | Scaffolded | Core
+           of a marketplace. Filters + sort in Go (see DECISIONS #2). Aim
+          : polish + tests. |
+      12  | Homepage blocks | Done | 8 blocks, each its own endpoint, alt
+          ernating bands: banners, recently viewed, recommended (#25), be
+          st sellers, gift cards, top-ups, pre-orders, category counts (#
+          26). |
+      13 -| Search | Scaffolded | Typo/partial tolerant (trigram), header
+         - dropdown + results via store page. |                          
+      13 +| Search | Done | Typo/partial tolerant (trigram) and acronyms 
+         +("gta 5", "rdr2", DECISIONS #34); header dropdown + results via
+         + store page. |                                                 
+      14  | Product page + seller offers | Scaffolded | Offer comparison 
+          table with add-to-cart per offer. |
+      15  | Auth | Done | Firebase email/password + Google. Guests can do
+           everything but pay; paying opens a sign-in popup, and guest vi
+          ews/orders merge into the account on sign-in (DECISIONS #28). A
+          vatar menu + `/account` page. |
+      16  | Cart | Done | The cart is a server-side order (status `cart`)
+          ; the UI renders that document and the browser keeps only the c
+          art id. Stock + keys reserved when an item is added (DECISIONS 
+          #15, #19, #21). Popup, header dropdown, live stock errors. |
+
+● Acronym search works and is committed locally (d8f1154), not pushed yet. The
+  skim found one thing a strict grader could flag: the homepage block titles are
+  written in the frontend.
+
+  Acronym search
+
+  Each product name's acronyms are computed once, when the search index is
+  built:
+
+  ┌─────────────────┬───────────────────────────────────────────────────────┐
+  │    You type     │                         Finds                         │
+  ├─────────────────┼───────────────────────────────────────────────────────┤
+  │ gta, gta 5, GTA │ Grand Theft Auto V (gta finds all three GTA products) │
+  │  V, gtav        │                                                       │
+  ├─────────────────┼───────────────────────────────────────────────────────┤
+  │ gta 6           │ both GTA VI products                                  │
+  ├─────────────────┼───────────────────────────────────────────────────────┤
+  │ rdr2, bg3, fh5, │ Red Dead Redemption 2, Baldur's Gate 3, Forza Horizon │
+  │  hl             │  5, Hogwarts Legacy                                   │
+  ├─────────────────┼───────────────────────────────────────────────────────┤
+  │ cod, mw3        │ Call of Duty: Modern Warfare III (mw3 works because   │
+  │                 │ the subtitle after ":" is used too)                   │
+  ├─────────────────┼───────────────────────────────────────────────────────┤
+  │ tw3, w3         │ The Witcher 3 (a leading "the" is optional)           │
+  └─────────────────┴───────────────────────────────────────────────────────┘
+
+  - How it's built: acronyms use the first letter of each word and keep numbers
+    whole. Roman numerals count both ways (V = 5), and apostrophes are dropped,
+    so "Baldur's Gate 3" gives bg3, not bsg3.
+  - Ranking: an acronym match ranks below an exact name match. I ran 22 queries
+    against all 28 seed products: normal searches ("witcher", "elden", "steam",
+    "gift") rank as before, and I found no false hits.
+  - Doesn't work: cp2077, because "Cyberpunk" is a single word.
+  - Tests and docs: new tests are in search_test.go, I added DECISIONS #34, and
+    the SPEC search row is updated.
+
+  Skim: hardcoding
+
+  - Colors: none outside tokens.css.
+  - Product data: none in the frontend.
+  - URLs: none, apart from the localhost CORS default for development.
+
+  The block titles: worth fixing. The PDF says each homepage block "gets its
+  content from its own backend service… nothing is hardcoded there". Product
+  lists come from the API, but three things live in the frontend:
+  - The 8 block titles and the ⓘ info texts (blocks.tsx:27
+    (frontend/src/features/home/blocks.tsx#L27)).
+  - The "Rodyti visus" links.
+  - The order of the blocks (HomePage.tsx
+    (frontend/src/features/home/HomePage.tsx)).
+
+  A grader reading strictly could call that hardcoded. The fix is small and
+  keeps "one endpoint per block":
+  - Each block endpoint returns {title, info, moreUrl, items} instead of
+    {items}.
+  - Optionally, a GET /api/home returns the list of blocks in order, so the
+    frontend only matches each one to a component.
+
+  That's about 8 handler changes plus one generic block component on the
+  frontend.
+
+  Smaller version of the same thing: the category names (Žaidimai, DLC…) in the
+  header row and the side menu come from lib/categories.ts in the frontend.
+  These are fixed labels, not homepage content, so they're easy to defend. They
+  could also come from the existing /api/home/categories endpoint.
+
+  Skim: assignment criteria
+
+  Every item in the PDF is covered:
+  - Store with filters, sort and search
+  - Search from anywhere, coping with typos
+  - Product page with several sellers' offers
+  - Cart → pay → key delivered
+  - Sign-up and sign-in, with checkout and order history now behind an account
+  - Eneba styling
+  - Deployed on Render, GitHub repo, chat log
+
+  The one visible gap is phones: the store page shows the whole filter list
+  before any products. You already have this in SPEC as a TODO, and "Eneba
+  styling applies to every screen" is in the PDF's diagram. If you have time for
+  one more fix, this one is visible and roughly an hour's work: a "Filtrai"
+  button that opens the filters as a drawer.
+
+  Want me to do the homepage block metadata, the mobile filter drawer, or both?
+  Either way, run git push to publish the search change, and /export this
+  session into AI_CHAT_LOG.md at the end.
+
+> yeah let's do both
+
+● Starting with the homepage blocks. I'll read the current handlers and frontend
+  blocks first.
+
+  Read 2 files, ran 2 shell commands (ctrl+o to expand)
+
+● The home page will be driven by GET /api/home, which returns an ordered list
+  of blocks with their types, and each block fetches its own title, text and
+  link from /api/home/{id}. The frontend will then only hold the drawing
+  components, with no titles, texts, links or ordering of its own. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Backend first: the block definitions in the service, then the handlers and the
+  route.
+
+● Write(backend\internal\service\home.go)
+  ⎿  Wrote 75 lines to backend\internal\service\home.go
+       1 package service
+       2
+       3 // The homepage is built from the server's data only (the assign
+         ment: "the frontend only
+       4 // displays what it receives and nothing is hardcoded there"). T
+         wo parts (DECISIONS #35):
+       5 //   - HomeLayout: which blocks, in which order, and how each is
+          drawn (GET /api/home);
+       6 //   - each block's own endpoint (GET /api/home/{id}) returns it
+         s text from HomeBlock
+     … +69 lines (ctrl+o to expand)
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba/backend" && python -
+      <<'EOF'
+      import io,re…)
+  ⎿  Updated backend\internal\handler\handler.go (+33 -36)
+       87  }
+       88  
+       89  // --- Homepage blocks: one endpoint per block ---------------
+           --------------
+       90 +// Every block answers {"id", "title", "info", "moreUrl", "ite
+          +ms"}: its text                                                
+       91 +// (service.HomeBlock) plus its items, so the frontend hardcod
+          +es nothing (DECISIONS #35).                                   
+       92  
+       93 +// Home: GET /api/home -> {"blocks": [{"id", "type", "personal
+          +"}...]}, top to bottom.                                       
+       94 +func (h *Handler) Home(w http.ResponseWriter, r *http.Request)
+          + {                                                            
+       95 +        writeJSON(w, http.StatusOK, map[string]any{"blocks": s
+          +ervice.HomeLayout})                                           
+       96 +}                                                             
+       97 +                                                              
+       98 +// Banners: GET /api/home/banners -> the hero tiles.          
+       99  func (h *Handler) Banners(w http.ResponseWriter, r *http.Reque
+           st) {
+      100          items, err := h.Catalog.Banners(r.Context())
+       93 -        if err != nil {                                       
+       94 -                writeErr(w, err)                              
+       95 -                return                                        
+       96 -        }                                                     
+       97 -        writeJSON(w, http.StatusOK, map[string]any{"items": it
+          -ems})                                                         
+      101 +        writeBlock(w, "banners", items, err)                  
+      102  }
+      103  
+      104 +// BestSellers: GET /api/home/best-sellers -> most sold produc
+          +ts.                                                           
+      105  func (h *Handler) BestSellers(w http.ResponseWriter, r *http.R
+           equest) {
+      106          items, err := h.Catalog.BestSellers(r.Context(), 8)
+      102 -        if err != nil {                                       
+      103 -                writeErr(w, err)                              
+      104 -                return                                        
+      105 -        }                                                     
+      106 -        writeJSON(w, http.StatusOK, map[string]any{"items": it
+          -ems})                                                         
+      107 +        writeBlock(w, "best-sellers", items, err)             
+      108  }
+      109  
+      110  // GiftCards: GET /api/home/gift-cards -> best-selling eGift c
+           ards (Amazon, Spotify...).
+      111  func (h *Handler) GiftCards(w http.ResponseWriter, r *http.Req
+           uest) {
+      112          items, err := h.Catalog.TopInCategory(r.Context(), "gi
+           ft-cards", 8)
+      112 -        writeItems(w, items, err)                             
+      113 +        writeBlock(w, "gift-cards", items, err)               
+      114  }
+      115  
+     … 74 more lines (ctrl+o to expand)
+  ⎿  Updated backend\internal\router\router.go (+1 -0)
+      22                  r.Get("/products", h.ListProducts)
+      23                  r.Get("/products/{id}", h.GetProduct)
+      24                  r.Get("/search", h.Suggest)
+      25 +                r.Get("/home", h.Home)                         
+      26                  r.Get("/home/banners", h.Banners)
+      27                  r.Get("/home/best-sellers", h.BestSellers)
+      28                  r.Get("/home/gift-cards", h.GiftCards)
+
+● The backend builds. I'll add a router test that walks the layout and calls
+  every block's endpoint, so a block in the layout without a working route fails
+  the test.
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba/backend" && python -
+      <<'EOF'
+      import io…)
+  ⎿  Updated backend\internal\router\router_test.go (+42 -0)
+      1  package router
+      2  
+      3  import (
+      4 +        "encoding/json"                                         
+      5          "net/http"
+      6          "net/http/httptest"
+      7          "testing"
+     ...
+       66                  })
+       67          }
+       68  }
+       69 +                                                              
+       70 +// The homepage is whatever GET /api/home lists: every block i
+          +n it must have a working                                      
+       71 +// endpoint that answers its own id, its items, and a title if
+          + it is a product rail.                                        
+       72 +func TestHomeLayoutBlocks(t *testing.T) {                     
+       73 +        r := newTestRouter(t)                                 
+       74 +        get := func(path string, out any) {                   
+       75 +                t.Helper()                                    
+       76 +                req := httptest.NewRequest(http.MethodGet, pat
+          +h, nil)                                                       
+       77 +                req.Header.Set("X-Guest-Id", "0123456789abcdef
+          +0123456789abcdef") // personal blocks need a user             
+       78 +                rec := httptest.NewRecorder()                 
+       79 +                r.ServeHTTP(rec, req)                         
+       80 +                if rec.Code != http.StatusOK {                
+       81 +                        t.Fatalf("GET %s: %d %s", path, rec.Co
+          +de, rec.Body)                                                 
+       82 +                }                                             
+       83 +                if err := json.Unmarshal(rec.Body.Bytes(), out
+          +); err != nil {                                               
+       84 +                        t.Fatalf("GET %s: %v", path, err)     
+       85 +                }                                             
+       86 +        }                                                     
+       87 +                                                              
+       88 +        var layout struct {                                   
+       89 +                Blocks []struct{ ID, Type string } `json:"bloc
+          +ks"`                                                          
+       90 +        }                                                     
+       91 +        get("/api/home", &layout)                             
+       92 +        if len(layout.Blocks) == 0 {                          
+       93 +                t.Fatal("empty homepage layout")              
+       94 +        }                                                     
+       95 +        for _, b := range layout.Blocks {                     
+       96 +                var block struct {                            
+       97 +                        ID    string            `json:"id"`   
+       98 +                        Title string            `json:"title"`
+     … 11 more lines (ctrl+o to expand)
+
+● Backend done and tested. Now the frontend: types, API calls, and the block
+  components that draw whatever the server sends.
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba/frontend/src" &&
+      python - <<'EOF'
+      import io…)
+  ⎿  Updated frontend\src\lib\api.ts (+9 -10)
+      1  import { getIdToken } from "./firebase";
+      2  import { guestId } from "./guest";
+      3 -import type { Account, Banner, CartUpdate, CategoryCount, Order,
+        - OrderPage, Product, ProductDetail, ProductPage } from "../types
+        -";                                                              
+      3 +import type { Account, CartUpdate, HomeBlock, HomeBlockRef, Orde
+        +r, OrderPage, ProductDetail, ProductPage, Product } from "../typ
+        +es";                                                            
+      4  
+      5  const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/,
+          "");
+      6  
+     ...
+      75    product: (id: string) => request<ProductDetail>(`/api/product
+          s/${encodeURIComponent(id)}`),
+      76    suggest: (q: string, signal?: AbortSignal) =>
+      77      request<{ items: Product[] }>(`/api/search?q=${encodeURICom
+          ponent(q)}`, { signal }),
+      78 -  banners: () => request<{ items: Banner[] }>("/api/home/banner
+         -s"),                                                           
+      79 -  bestSellers: () => request<{ items: Product[] }>("/api/home/b
+         -est-sellers"),                                                 
+      80 -  giftCards: () => request<{ items: Product[] }>("/api/home/gif
+         -t-cards"),                                                     
+      81 -  topUps: () => request<{ items: Product[] }>("/api/home/top-up
+         -s"),                                                           
+      82 -  preOrders: () => request<{ items: Product[] }>("/api/home/pre
+         --orders"),                                                     
+      83 -  categoryCounts: () => request<{ items: CategoryCount[] }>("/a
+         -pi/home/categories"),                                          
+      84 -  /** Personal blocks: built from the signed-in user's profile,
+         - or this browser's guest profile. */                           
+      85 -  recentlyViewed: () => request<{ items: Product[] }>("/api/hom
+         -e/recently-viewed", { user: true }),                           
+      86 -  recommended: () => request<{ items: Product[] }>("/api/home/r
+         -ecommended", { user: true }),                                  
+      78 +  /** The homepage layout: which blocks, in which order, drawn 
+         +how. */                                                        
+      79 +  homeLayout: () => request<{ blocks: HomeBlockRef[] }>("/api/h
+         +ome"),                                                         
+      80 +  /**                                                          
+      81 +   * One homepage block from its own endpoint: its title/info/l
+         +ink and items.                                                 
+      82 +   * Personal blocks send the login token, or this browser's gu
+         +est id.                                                        
+      83 +   */                                                          
+      84 +  homeBlock: <T,>(id: string, personal = false) =>             
+      85 +    request<HomeBlock<T>>(`/api/home/${encodeURIComponent(id)}`
+         +, { user: personal }),                                         
+      86    /** Remember that this browser opened a product page (feeds t
+          he two blocks above). */
+      87    recordView: (productId: string) =>
+      88      request<void>("/api/profile/views", { user: true, method: "
+          POST", body: { productId } }),
+  ⎿  Updated frontend\src\types\index.ts (+17 -0)
+      121    orderCount: number;
+      122    totalSpent: number; // cents
+      123  }
+      124 +                                                              
+      125 +/** One homepage section from GET /api/home, top to bottom (DE
+          +CISIONS #35). */                                              
+      126 +export interface HomeBlockRef {                               
+      127 +  id: string; // the block's endpoint is /api/home/{id}       
+      128 +  type: "banners" | "categories" | "products"; // which compon
+          +ent draws it                                                  
+      129 +  personal?: boolean; // built per user: send the login token 
+          +/ guest id, reload on sign-in                                 
+      130 +}                                                             
+      131 +                                                              
+      132 +/** What a block's own endpoint answers: its text plus its ite
+          +ms. */                                                        
+      133 +export interface HomeBlock<T> {                               
+      134 +  id: string;                                                 
+      135 +  title?: string;                                             
+      136 +  info?: string; // the ⓘ pop-up text                         
+      137 +  moreUrl?: string; // "Rodyti visus" link                    
+      138 +  hideWhenEmpty?: boolean;                                    
+      139 +  items: T[];                                                 
+      140 +}                                                             
+
+● Now the block components and the homepage:
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba/frontend/src" && sed
+      -i 's#  /\*\* Remember that…)
+  ⎿  Updated frontend\src\lib\api.ts (+1 -1)
+      83     */
+      84    homeBlock: <T,>(id: string, personal = false) =>
+      85      request<HomeBlock<T>>(`/api/home/${encodeURIComponent(id)}`
+          , { user: personal }),
+      86 -  /** Remember that this browser opened a product page (feeds t
+         -he two blocks above). */                                       
+      86 +  /** Remember that this browser opened a product page (feeds "
+         +recently viewed" and "recommended"). */                        
+      87    recordView: (productId: string) =>
+      88      request<void>("/api/profile/views", { user: true, method: "
+          POST", body: { productId } }),
+      89    /**
+
+● Write(frontend\src\features\home\blocks.tsx)
+  ⎿  Added 26 lines, removed 55 lines
+       7  import { CategoryIcon } from "../../components/Icons";
+       8  import { InfoTip } from "../../components/InfoTip";
+       9  import { ScrollRow } from "../../components/ScrollRow";
+      10 -import type { Product } from "../../types";                    
+      10 +import type { Banner, CategoryCount, HomeBlock, HomeBlockRef, P
+         +roduct } from "../../types";                                   
+      11  import { useAuth } from "../auth/AuthContext";
+      12  
+      13  // Each block fetches from its OWN endpoint and handles its own
+           loading/error,
+      14  // so one failing service never blanks the whole homepage (DECI
+          SIONS #6).
+      15 +// Titles, info texts and links come from that endpoint too: no
+         +thing about a                                                  
+      16 +// block's content is written here, only how each type is drawn
+         + (DECISIONS #35).                                              
+      17  // Every block is one full-width band; CSS alternates the band 
+          colors.
+      18  
+      19 +/** Loads one block from /api/home/{id}. Personal blocks reload
+         + on sign-in/out. */                                            
+      20 +function useBlock<T>(ref: HomeBlockRef) {                      
+      21 +  const uid = useAuth().user?.uid;                             
+      22 +  return useAsync(() => api.homeBlock<T>(ref.id, ref.personal),
+         + ref.personal ? [ref.id, uid] : [ref.id]);                     
+      23 +}                                                              
+      24 +                                                               
+      25  function Band({ children }: { children: React.ReactNode }) {
+      26    return (
+      27      <section className="band">
+     ...
+      30    );
+      31  }
+      32  
+      25 -// What the ⓘ next to each title says: what the block shows and
+         - how it differs                                                
+      26 -// for a signed-in user and a guest.                           
+      27 -const INFO = {                                                 
+      28 -  recent:                                                      
+      29 -    "Prekės, kurias neseniai atidarei, naujausios pirmos. Kai e
+         -si prisijungęs, sąrašas saugomas tavo paskyroje ir matomas bet 
+         -kuriame įrenginyje; kitu atveju jis saugomas tik šioje naršyklė
+         -je. Prisijungus naršyklės istorija perkeliama į paskyrą.",     
+      30 -  recommended:                                                 
+      31 -    "Rekomendacijos grindžiamos tavo peržiūrėtomis ir pirktomis
+         - prekėmis: siūlome panašaus žanro, kategorijos ir platformos pr
+         -ekes, kurių dar neturi. Kai esi prisijungęs, rekomendacijos rem
+         -iasi tavo paskyros istorija, kitu atveju – šios naršyklės. Kol 
+         -istorijos nėra, rodomos perkamiausios prekės.",                
+      32 -  bestSellers:                                                 
+      33 -    "Daugiausiai kartų parduotos prekės visoje parduotuvėje. Są
+         -rašas vienodas visiems pirkėjams, nesvarbu, ar esi prisijungęs.
+         -",                                                             
+      34 -  giftCards:                                                   
+      35 -    "Populiariausios el. dovanų kortelės pagal pardavimus. Kodą
+         - gausi iškart po apmokėjimo. Sąrašas tas pats visiems; į krepše
+         -lį dėti gali visi, o apmokėti – tik prisijungę pirkėjai.",     
+      36 -  topUps:                                                      
+      37 -    "Populiariausi žaidimų platformų papildymai (Steam, PlaySta
+         -tion, Xbox ir kt.) pagal pardavimus. Sąrašas vienodas visiems p
+         -irkėjams; apmokant reikės prisijungti.",                       
+      38 -  preOrders:                                                   
+      39 -    "Dar neišleisti žaidimai. Užsisakyk dabar ir kodą gausi išk
+         -art; išleidimo dieną prekė savaime taps įprasta. Sąrašas vienod
+         -as visiems; apmokant reikės prisijungti.",                     
+      40 -};                                                             
+      41 -                                                               
+      33  /** A titled row of product cards with an ⓘ; "Rodyti visus" is 
+          a button under the row. */
+      43 -function ProductRail({ title, info, items, more }: { title: str
+         -ing; info: string; items: Product[]; more?: string }) {        
+      34 +function ProductRail({ block }: { block: HomeBlock<Product> }) 
+         +{                                                              
+      35    return (
+      36      <>
+      37        <div className="band-head">
+      47 -        <h2>{title}</h2>                                       
+      48 -        <InfoTip text={info} />                                
+      38 +        <h2>{block.title}</h2>                                 
+      39 +        {block.info && <InfoTip text={block.info} />}          
+      40        </div>
+      50 -      <div className="grid rail">{items.map((p) => <ProductCard
+         - key={p.id} p={p} />)}</div>                                   
+      51 -      {more && (                                               
+      41 +      <div className="grid rail">{block.items.map((p) => <Produ
+         +ctCard key={p.id} p={p} />)}</div>                             
+      42 +      {block.moreUrl && (                                      
+      43          <div className="band-foot">
+      53 -          <Link to={more} className="btn outline">Rodyti visus<
+         -/Link>                                                         
+      44 +          <Link to={block.moreUrl} className="btn outline">Rody
+         +ti visus</Link>                                                
+      45          </div>
+      46        )}
+      47      </>
+      48    );
+      49  }
+      50  
+      60 -/** A product block from one endpoint: loading/error inside its
+         - own band. */                                                  
+      61 -function RailBlock({ title, info, load, more, personal }: { tit
+         -le: string; info: string; load: () => Promise<{ items: Product[
+         -] }>; more?: string; personal?: boolean }) {                   
+      62 -  const uid = useAuth().user?.uid;                             
+      63 -  const state = useAsync(load, personal ? [uid] : []); // perso
+         -nal blocks reload on sign-in/out                               
+      51 +/** A product rail block. With `hideWhenEmpty` (recently viewed
+         +) there is no band                                             
+      52 + *  at all until it has items, like on Eneba. */               
+      53 +export function ProductsBlock({ blockRef }: { blockRef: HomeBlo
+         +ckRef }) {                                                     
+      54 +  const state = useBlock<Product>(blockRef);                   
+      55 +  if (state.data?.hideWhenEmpty && !state.data.items.length) re
+         +turn null;                                                     
+      56 +  if (!state.data && blockRef.personal && state.loading) return
+         + null; // don't flash a band that may stay hidden              
+      57    return (
+      58      <Band>
+      66 -      <Status state={state}>{({ items }) => <ProductRail title=
+         -{title} info={info} items={items} more={more} />}</Status>     
+      59 +      <Status state={state}>{(block) => <ProductRail block={blo
+         +ck} />}</Status>                                               
+      60      </Band>
+      61    );
+      62  }
+      63  
+      64  /** Full-bleed hero like Eneba's: the first banner is wide, the
+           rest are narrow tall tiles. */
+      72 -export function BannerBlock() {                                
+      73 -  const state = useAsync(() => api.banners(), []);             
+      65 +export function BannerBlock({ blockRef }: { blockRef: HomeBlock
+         +Ref }) {                                                       
+      66 +  const state = useBlock<Banner>(blockRef);                    
+      67    return (
+      68      <section className="hero">
+      69        <Status state={state}>
+     ...
+       80    );
+       81  }
+       82  
+       90 -/** "Neseniai peržiūrėta": no band at all until the browser ha
+          -s viewed something, like on Eneba. */                         
+       91 -export function RecentlyViewedBlock() {                       
+       92 -  const uid = useAuth().user?.uid;                            
+       93 -  const state = useAsync(() => api.recentlyViewed(), [uid]);  
+       94 -  if (!state.data?.items.length) return null;                 
+       95 -  return (                                                    
+       96 -    <Band>                                                    
+       97 -      <ProductRail title="Neseniai peržiūrėta" info={INFO.rece
+          -nt} items={state.data.items} />                               
+       98 -    </Band>                                                   
+       99 -  );                                                          
+      100 -}                                                             
+      101 -                                                              
+      102 -export const RecommendedBlock = () => <RailBlock title="Rekome
+          -nduojama tau" info={INFO.recommended} load={api.recommended} p
+          -ersonal />;                                                   
+      103 -export const BestSellersBlock = () => <RailBlock title="Perkam
+          -iausi" info={INFO.bestSellers} load={api.bestSellers} more="/s
+          -tore" />;                                                     
+      104 -export const GiftCardsBlock = () => (                         
+      105 -  <RailBlock title="Populiariausios el. dovanų kortelės" info=
+          -{INFO.giftCards} load={api.giftCards} more="/store?category=gi
+          -ft-cards" />                                                  
+      106 -);                                                            
+      107 -export const TopUpsBlock = () => (                            
+      108 -  <RailBlock title="Populiariausi papildymai" info={INFO.topUp
+          -s} load={api.topUps} more="/store?category=gaming-cards" />   
+      109 -);                                                            
+      110 -export const PreOrdersBlock = () => <RailBlock title="Įsigyk i
+          -š anksto" info={INFO.preOrders} load={api.preOrders} />;      
+      111 -                                                              
+       83  // We have 5 categories; Eneba's row is full width. Repeating 
+           the list fills the
+       84  // row so the ‹ › arrows have something to scroll (the user as
+           ked for this look).
+       85  const MIN_ICONS = 16;
+       86  
+       87  /** Eneba's icon row under the hero: icon + name, scrolls side
+           ways with ‹ › buttons. */
+      117 -export function CategoriesBlock() {                           
+      118 -  const state = useAsync(() => api.categoryCounts(), []);     
+       88 +export function CategoriesBlock({ blockRef }: { blockRef: Home
+          +BlockRef }) {                                                 
+       89 +  const state = useBlock<CategoryCount>(blockRef);            
+       90    return (
+       91      <section className="category-strip">
+       92        <div className="container">
+
+● Write(frontend\src\features\home\HomePage.tsx)
+  ⎿  Added 26 lines, removed 19 lines
+       1 -import {                                                       
+       2 -  BannerBlock,                                                 
+       3 -  BestSellersBlock,                                            
+       4 -  CategoriesBlock,                                             
+       5 -  GiftCardsBlock,                                              
+       6 -  PreOrdersBlock,                                              
+       7 -  RecentlyViewedBlock,                                         
+       8 -  RecommendedBlock,                                            
+       9 -  TopUpsBlock,                                                 
+      10 -} from "./blocks";                                             
+       1 +import { api } from "../../lib/api";                           
+       2 +import { useAsync } from "../../lib/useAsync";                 
+       3 +import { Status } from "../../components/Status";              
+       4 +import type { HomeBlockRef } from "../../types";               
+       5 +import { BannerBlock, CategoriesBlock, ProductsBlock } from "./
+         +blocks";                                                       
+       6  
+      12 -/** Homepage = a stack of independent blocks; each is a full-wi
+         -dth band, colors alternate (CSS). */                           
+       7 +/** Which component draws each block type the server can send. 
+         +*/                                                             
+       8 +const DRAW: Record<HomeBlockRef["type"], (p: { blockRef: HomeBl
+         +ockRef }) => React.ReactNode> = {                              
+       9 +  banners: BannerBlock,                                        
+      10 +  categories: CategoriesBlock,                                 
+      11 +  products: ProductsBlock,                                     
+      12 +};                                                             
+      13 +                                                               
+      14 +/**                                                            
+      15 + * Homepage = the blocks GET /api/home lists, in that order (DE
+         +CISIONS #35).                                                  
+      16 + * Each block then loads its own endpoint. A type this build do
+         +esn't know is skipped,                                         
+      17 + * so the server can add a new kind of block without breaking o
+         +lder frontends.                                                
+      18 + */                                                            
+      19  export function HomePage() {
+      20 +  const state = useAsync(() => api.homeLayout(), []);          
+      21    return (
+      22      <div className="home">
+      16 -      <BannerBlock />                                          
+      17 -      <CategoriesBlock />                                      
+      18 -      <RecentlyViewedBlock />                                  
+      19 -      <RecommendedBlock />                                     
+      20 -      <BestSellersBlock />                                     
+      21 -      <GiftCardsBlock />                                       
+      22 -      <TopUpsBlock />                                          
+      23 -      <PreOrdersBlock />                                       
+      23 +      <Status state={state}>                                   
+      24 +        {({ blocks }) =>                                       
+      25 +          blocks.map((b) => {                                  
+      26 +            const Draw = DRAW[b.type];                         
+      27 +            return Draw ? <Draw key={b.id} blockRef={b} /> : nu
+         +ll;                                                            
+      28 +          })                                                   
+      29 +        }                                                      
+      30 +      </Status>                                                
+      31      </div>
+      32    );
+      33  }
+
+  Ran 1 shell command (ctrl+o to expand)
+● The frontend builds. I'll do the mobile filter drawer next, then screenshot
+  both changes in one go. Reading the store page:
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● On phones under 800px the filter sidebar becomes a "Filtrai (N)" panel opened
+  from the toolbar, with a sticky "Rodyti N prekių" button, while desktop and
+  the shared <aside> stay unchanged. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba/frontend/src" &&
+      python - <<'EOF'
+      import io…)
+  ⎿  Updated frontend\src\components\Icons.tsx (+4 -0)
+      24  export const ChevronLeft = (p: P) => <Svg {...p}><path d="M15 5
+          l-7 7 7 7" /></Svg>;
+      25  export const ChevronRight = (p: P) => <Svg {...p}><path d="M9 5
+          l7 7-7 7" /></Svg>;
+      26  export const CloseIcon = (p: P) => <Svg {...p}><path d="M5 5l14
+           14M19 5L5 19" /></Svg>;
+      27 +/** Three sliders: the "Filtrai" button on phones. */          
+      28 +export const FilterIcon = (p: P) => (                          
+      29 +  <Svg {...p}><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20
+         + 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12"
+         + r="2" /><circle cx="18" cy="18" r="2" /></Svg>                
+      30 +);                                                             
+      31  export const InfoIcon = (p: P) => (
+      32    <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 11v6
+          " /><circle cx="12" cy="7.5" r="0.6" /></Svg>
+      33  );
+  ⎿  Updated frontend\src\features\store\StorePage.tsx (+36 -5)
+      1 +import { useEffect, useState } from "react";                    
+      2  import { useSearchParams } from "react-router-dom";
+      3  import { api, type ProductQuery } from "../../lib/api";
+      4  import { useAsync } from "../../lib/useAsync";
+     ...
+       7  import { Pager } from "../../components/Pager";
+       8  import { formatItemCount, regionLabel } from "../../lib/format"
+          ;
+       9  import { categoryLabel } from "../../lib/categories";
+      10 +import { CloseIcon, FilterIcon } from "../../components/Icons";
+      11  import { PriceFilter } from "./PriceFilter";
+      12  
+      13  const SORTS = [
+     ...
+      35      page: Number(sp.get("page")) || 1,
+      36    };
+      37    const state = useAsync((signal) => api.products(query, signal
+          ), [sp.toString()]);
+      38 +  // Phones only (CSS): the filters are a panel behind the "Fil
+         +trai" button, like Eneba's.                                    
+      39 +  // On wide screens the panel is the normal sidebar and this f
+         +lag changes nothing.                                           
+      40 +  const [filtersOpen, setFiltersOpen] = useState(false);       
+      41 +  const activeFilters =                                        
+      42 +    (query.platform?.length ?? 0) + (query.region?.length ?? 0)
+         + + (query.genre?.length ?? 0) +                                
+      43 +    (query.minPrice || query.maxPrice ? 1 : 0);                
+      44 +                                                               
+      45 +  useEffect(() => {                                            
+      46 +    if (!filtersOpen) return;                                  
+      47 +    const onKey = (e: KeyboardEvent) => e.key === "Escape" && s
+         +etFiltersOpen(false);                                          
+      48 +    window.addEventListener("keydown", onKey);                 
+      49 +    return () => window.removeEventListener("keydown", onKey); 
+      50 +  }, [filtersOpen]);                                           
+      51  
+      52    function set(key: string, value: string) {
+      53      const next = new URLSearchParams(sp);
+     ...
+      74    }
+      75  
+      76    return (
+      62 -    <div className="page container store">                     
+      63 -      <aside className="filters">                              
+      77 +    <div className={`page container store${filtersOpen ? " filt
+         +ers-open" : ""}`}>                                             
+      78 +      <div className="filters-backdrop" onClick={() => setFilte
+         +rsOpen(false)} />                                              
+      79 +      <aside className="filters" aria-label="Filtrai">         
+      80 +        <div className="filters-head">                         
+      81 +          <span>Filtrai</span>                                 
+     … 34 more lines (ctrl+o to expand)
+  ⎿  Updated frontend\src\styles\global.css (+19 -1)
+      297  .filters .price-boxes label:focus-within { border-color: var(-
+           -color-accent); }
+      298  .toolbar { display: flex; justify-content: space-between; alig
+           n-items: center; gap: var(--space-4); margin-bottom: var(--spa
+           ce-4); }
+      299  .pager { display: flex; gap: var(--space-2); justify-content: 
+           center; align-items: center; margin-top: var(--space-6); }
+      300 -@media (max-width: 800px) { .store { grid-template-columns: 1f
+          -r; } }                                                        
+      300 +.toolbar-actions { display: flex; gap: var(--space-2); align-i
+          +tems: center; }                                               
+      301 +/* Wide screens: the filters are a sidebar; the panel parts st
+          +ay hidden. */                                                 
+      302 +.filters-head, .filters-done, .filters-toggle, .filters-backdr
+          +op { display: none; }                                         
+      303 +/* Phones: the sidebar becomes a panel from the left behind th
+          +e "Filtrai" button (like Eneba).                              
+      304 +   Same <aside>, so there is one set of filters, not two. */  
+      305 +@media (max-width: 800px) {                                   
+      306 +  .store { grid-template-columns: 1fr; }                      
+      307 +  .toolbar { flex-wrap: wrap; }                               
+      308 +  .filters-toggle { display: inline-flex; align-items: center;
+          + gap: var(--space-2); }                                       
+      309 +  .filters { display: none; }                                 
+      310 +  .filters-open .filters {                                    
+      311 +    display: flex; position: fixed; inset: 0 auto 0 0; z-index
+          +: 101; width: min(340px, 88vw);                               
+      312 +    overflow-y: auto; padding-bottom: 0; animation: drawer-in 
+          +0.2s ease-out;                                                
+      313 +  }                                                           
+      314 +  .filters-open .filters-backdrop { display: block; position: 
+          +fixed; inset: 0; z-index: 100; background: var(--color-overlay
+          +); }                                                          
+      315 +  .filters-head { display: flex; justify-content: space-betwee
+          +n; align-items: center; font-size: var(--text-lg); font-weight
+          +: 800; }                                                      
+      316 +  /* sticky at the bottom of the panel, over the list while sc
+          +rolling */                                                    
+      317 +  .filters-done { display: flex; position: sticky; bottom: 0; 
+          +margin: auto calc(-1 * var(--space-4)) 0; border-radius: 0; } 
+      318 +}                                                             
+      319  
+      320  /* product page + offers */
+      321  .product { display: grid; grid-template-columns: 300px 1fr; ga
+           p: var(--space-6); }
+  ⎿  (timeout 3m)
+
+● The build passes. One cleanup in the icon (it has a stray zero-length path
+  segment), then visual checks.
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+● Update(frontend\src\components\Icons.tsx)
+  ⎿  Added 1 line, removed 1 line
+      26  export const CloseIcon = (p: P) => <Svg {...p}><path d="M5 5l14
+           14M19 5L5 19" /></Svg>;
+      27  /** Three sliders: the "Filtrai" button on phones. */
+      28  export const FilterIcon = (p: P) => (
+      29 -  <Svg {...p}><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20
+         - 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12"
+         - r="2" /><circle cx="18" cy="18" r="2" /></Svg>                
+      29 +  <Svg {...p}><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12" /
+         +><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /
+         +><circle cx="18" cy="18" r="2" /></Svg>                        
+      30  );
+      31  export const InfoIcon = (p: P) => (
+      32    <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 11v6
+          " /><circle cx="12" cy="7.5" r="0.6" /></Svg>
+
+  Made 1 scratchpad edit +38, read 3 files, ran 1 shell command (ctrl+o to expand)
+
+● The homepage looks unchanged with titles and texts now served from the server.
+  On the phone panel, the sort dropdown is clipped at the toolbar's right edge
+  and the sticky "Rodyti N prekių" button is missing; I'm checking the button's
+  position in the browser next. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The panel overflows the 900px screen because the sort dropdown widens the page
+  and triggers zoom-out; fixing the toolbar should resolve both. I'm also
+  making the .btn.block selector more specific, since it overrides the button's
+  negative margins. · summary
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba/frontend" && grep -n
+      "\.btn.block\|^select\|sele…)
+  ⎿  Updated frontend\src\styles\global.css (+5 -1)
+      305  @media (max-width: 800px) {
+      306    .store { grid-template-columns: 1fr; }
+      307    .toolbar { flex-wrap: wrap; }
+      308 +  .toolbar-actions { width: 100%; }                           
+      309 +  .toolbar-actions select { flex: 1; min-width: 0; }          
+      310    .filters-toggle { display: inline-flex; align-items: center;
+            gap: var(--space-2); }
+      311    .filters { display: none; }
+      312    .filters-open .filters {
+     ...
+      316    .filters-open .filters-backdrop { display: block; position: 
+           fixed; inset: 0; z-index: 100; background: var(--color-overlay
+           ); }
+      317    .filters-head { display: flex; justify-content: space-betwee
+           n; align-items: center; font-size: var(--text-lg); font-weight
+           : 800; }
+      318    /* sticky at the bottom of the panel, over the list while sc
+           rolling */
+      317 -  .filters-done { display: flex; position: sticky; bottom: 0; 
+          -margin: auto calc(-1 * var(--space-4)) 0; border-radius: 0; } 
+      319 +  .filters .filters-done {                                    
+      320 +    position: sticky; bottom: 0; flex-shrink: 0; width: auto; 
+          +margin: auto calc(-1 * var(--space-4)) 0; border-radius: 0;   
+      321 +  }                                                           
+      322  }
+      323  
+      324  /* product page + offers */
+  ⎿  (timeout 3m 20s)
+
+● Same numbers, so the new CSS may not be served yet, or something else is going
+  on. Checking the served stylesheet and the viewport size:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The viewport is 438px against a 420px window, so an element is 18px too wide
+  on phones. I'm finding that overflowing element and checking why the margin
+  isn't applied. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Two causes are behind the overflow: a later .btn.block rule overrides the
+  button width, so I'm raising that selector's specificity, and the header's
+  category links run to 805px on phones, an existing bug that makes every phone
+  page zoom out. · summary
+
+  Read 1 file, ran 2 shell commands (ctrl+o to expand)
+
+● The header links sit inside a scroll container, so they aren't the culprit.
+  I'll search again, skipping elements inside scroll containers:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Everything in the chain is 438px wide. The usual cause is a grid item's
+  default min-width: auto, which lets the results column grow to fit its
+  content. I'll set min-width: 0 on it:
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba/frontend" && python -
+      <<'EOF'
+      import io…)
+  ⎿  Updated frontend\src\styles\global.css (+3 -1)
+      298  .toolbar { display: flex; justify-content: space-between; alig
+           n-items: center; gap: var(--space-4); margin-bottom: var(--spa
+           ce-4); }
+      299  .pager { display: flex; gap: var(--space-2); justify-content: 
+           center; align-items: center; margin-top: var(--space-6); }
+      300  .toolbar-actions { display: flex; gap: var(--space-2); align-i
+           tems: center; }
+      301 +/* grid items default to min-width: auto and would grow to the
+          +ir content, widening the page on phones */                    
+      302 +.store > section { min-width: 0; }                            
+      303  /* Wide screens: the filters are a sidebar; the panel parts st
+           ay hidden. */
+      304  .filters-head, .filters-done, .filters-toggle, .filters-backdr
+           op { display: none; }
+      305  /* Phones: the sidebar becomes a panel from the left behind th
+           e "Filtrai" button (like Eneba).
+     ...
+      318    .filters-open .filters-backdrop { display: block; position: 
+           fixed; inset: 0; z-index: 100; background: var(--color-overlay
+           ); }
+      319    .filters-head { display: flex; justify-content: space-betwee
+           n; align-items: center; font-size: var(--text-lg); font-weight
+           : 800; }
+      320    /* sticky at the bottom of the panel, over the list while sc
+           rolling */
+      319 -  .filters .filters-done {                                    
+      321 +  .filters .btn.filters-done {                                
+      322      position: sticky; bottom: 0; flex-shrink: 0; width: auto; 
+           margin: auto calc(-1 * var(--space-4)) 0; border-radius: 0;
+      323    }
+      324  }
+  ⎿  (timeout 3m 20s)
+
+● Fixed: the viewport is now exactly 420×900, and the button spans the panel's
+  full width at the bottom. Checking the screenshots:
+
+  Read 3 files (ctrl+o to expand)
+
+● Phone and desktop both look right, and the desktop sidebar hasn't changed.
+  Stopping the dev servers and my headless Chrome:
+
+● Stop Task
+  ⎿  cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+     Technology/temp-------------------------------/Eneba/frontend" &&
+     VITE_API_URL=http://localhost:8090… · stopped
+
+● Stop Task
+  ⎿  cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+     Technology/temp-------------------------------/Eneba/backend" &&
+     STORE=memory PORT=8090 go run ./cmd/… · stopped
+
+  Ran 1 shell command (ctrl+o to expand)
+  ⎿  Blocked by auto mode
+     │ Auto mode: [Destructive or Unwanted Actions]
+
+● That broad cleanup was blocked, which is fair. I'll just check what's still
+  running:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Both are mine: the headless Chrome with my scratchpad profile, and the Vite
+  server I started. Stopping exactly those two:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All cleaned up. Now the docs (DECISIONS #35 and #36, the API doc, SPEC,
+  README), then a final test run and two commits.
+  Ran 1 shell command (ctrl+o to expand)
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && python - <<'EOF'
+      import io…)
+  ⎿  Updated README.md (+4 -4)
+      65  
+      66  | Part | What it does |
+      67  |---|---|
+      68 -| Store | Filters (platform, region, genre, price slider), sort
+         -, typo-tolerant search, pagination; state in the URL. |        
+      69 -| Homepage | 8 blocks, each from its own endpoint (banners, rec
+         -ently viewed, recommended, best sellers, gift cards, top-ups, p
+         -re-orders, categories). |                                      
+      70 -| Search | Header dropdown from anywhere; trigram matching cope
+         -s with typos and partial names (`witchr`, `eldne rign`). |     
+      68 +| Store | Filters (platform, region, genre, price slider), sort
+         +, typo- and acronym-tolerant search, pagination; state in the U
+         +RL; filters open as a panel on phones. |                       
+      69 +| Homepage | 8 blocks, each from its own endpoint (banners, rec
+         +ently viewed, recommended, best sellers, gift cards, top-ups, p
+         +re-orders, categories). The block order, titles and texts come 
+         +from the API as well (`GET /api/home`), so nothing is hardcoded
+         + in the frontend. |                                            
+      70 +| Search | Header dropdown from anywhere; trigram matching cope
+         +s with typos and partial names (`witchr`, `eldne rign`), and ac
+         +ronyms (`gta 5`, `rdr2`, `bg3`). |                             
+      71  | Product page | Details + offers from several sellers, cheapes
+          t first, add to cart per offer. |
+      72  | Cart | Server-side: adding an item reserves real keys from th
+          e pool for 30 min; no overselling (transactions). |
+      73  | Checkout | Simulated payment, then the reserved keys are deli
+          vered and shown with copy buttons. |
+     ...
+      75  | Styling | Colors, font (Metropolis), sizes from eneba.com's C
+          SS in `tokens.css`; components use only those variables. |
+      76  
+      77  Known gaps (see `SPEC.md`): covers are generated (gradient + ca
+          tegory icon + title, `DECISIONS.md` #33)
+      78 -instead of real art, and store filters do not collapse on phone
+         -s yet.                                                         
+      78 +instead of real art.                                           
+      79  
+      80  Firestore collections: `products`, `offers` (stock = available 
+          keys), `banners`,
+      81  `keys` (`offerId, code, status: available|reserved|sold, orderI
+          d`) and
+  ⎿  Updated SPEC.md (+3 -3)
+       8  
+       9  | Area | Status | Depth / why |
+      10  |---|---|---|
+      11 -| Store (filters, sort, search, pagination) | Scaffolded | Core
+         - of a marketplace. Filters + sort in Go (see DECISIONS #2). Aim
+         -: polish + tests. |                                            
+      12 -| Homepage blocks | Done | 8 blocks, each its own endpoint, alt
+         -ernating bands: banners, recently viewed, recommended (#25), be
+         -st sellers, gift cards, top-ups, pre-orders, category counts (#
+         -26). |                                                         
+      11 +| Store (filters, sort, search, pagination) | Done | Core of a 
+         +marketplace. Filters + sort in Go (DECISIONS #2), price slider 
+         +(#30), state in the URL; on phones the filters open as a panel 
+         +(#36). |                                                       
+      12 +| Homepage blocks | Done | 8 blocks, each its own endpoint, alt
+         +ernating bands: banners, recently viewed, recommended (#25), be
+         +st sellers, gift cards, top-ups, pre-orders, category counts (#
+         +26). Order, titles, info texts and links come from the API too 
+         +(`GET /api/home`, #35): nothing about the homepage is written i
+         +n the frontend. |                                              
+      13  | Search | Done | Typo/partial tolerant (trigram) and acronyms 
+          ("gta 5", "rdr2", DECISIONS #34); header dropdown + results via
+           store page. |
+      14  | Product page + seller offers | Scaffolded | Offer comparison 
+          table with add-to-cart per offer. |
+      15  | Auth | Done | Firebase email/password + Google. Guests can do
+           everything but pay; paying opens a sign-in popup, and guest vi
+          ews/orders merge into the account on sign-in (DECISIONS #28). A
+          vatar menu + `/account` page. |
+     ...
+      34     Cart changes take ~1.5-2s (transaction round trips); conside
+          r an optimistic UI if it feels slow.
+      35  2. ~~Checkout + key delivery~~ Done (DECISIONS #19).
+      36  3. ~~Order history~~ Done; signed-in only since DECISIONS #32.
+      37 -4. ~~**Eneba styling.**~~ Done (DECISIONS #24, #27, #29). Left:
+         - collapse store filters on phones. Covers are generated (#33). 
+      37 +4. ~~**Eneba styling.**~~ Done (DECISIONS #24, #27, #29). Cover
+         +s are generated (#33); phone filter panel (#36).               
+      38  5. ~~**Deploy to Render**~~ Done 2026-11-16: https://eneba-web.
+          onrender.com (API `eneba-api-10wc`).
+      39     Smoke-tested over HTTP: health, products, typo search, SPA r
+          outes, checkout 401 for guests.
+      40     Not yet seen live: the 30-min expiry sweep (free tier sleeps
+          ; it runs once the API wakes).
+  ⎿  Updated docs\api.md (+5 -1)
+       9  | GET | `/api/products` | query: `q`, `category`, `platform`, `
+          region`, `genre` (comma-separated; `category` is one of `games`
+          , `dlc`, `gaming-cards`, `gift-cards`, `software`), `minPrice`,
+           `maxPrice` (cents), `sort` (`popular`/`price_asc`/`price_desc`
+          /`discount`/`name`), `page`, `pageSize` (max 60). Returns `{ite
+          ms,total,page,pageSize,facets}` |
+      10  | GET | `/api/products/{id}` | `{product, offers[]}`, offers ch
+          eapest first |
+      11  | GET | `/api/search?q=` | top 6 suggestions for the header dro
+          pdown |
+      12 +| GET | `/api/home` | homepage layout, top to bottom: `{blocks:
+         + [{id, type, personal?}]}`; `type` is `banners`, `categories` o
+         +r `products`; each block loads `/api/home/{id}` (DECISIONS #35)
+         + |                                                             
+      13  | GET | `/api/home/banners` | homepage block: banners |
+      14  | GET | `/api/home/best-sellers` | homepage block: top by sales
+           |
+      15  | GET | `/api/home/gift-cards` | homepage block: best-selling `
+          gift-cards` |
+      16  | GET | `/api/home/top-ups` | homepage block: best-selling `gam
+          ing-cards` (Steam, PSN, Roblox...) |
+      17  | GET | `/api/home/pre-orders` | homepage block: products with 
+          a future `releaseDate`, soonest first |
+      17 -| GET | `/api/home/categories` | homepage block: `{items: [{cat
+         -egory, count}]}` in menu order |                               
+      18 +| GET | `/api/home/categories` | homepage block: items `[{categ
+         +ory, count}]` in menu order |                                  
+      19 +                                                               
+      20 +Every `/api/home/{id}` block answers `{id, title?, info?, moreU
+         +rl?, hideWhenEmpty?, items}`: the block's                      
+      21 +text (title, the ⓘ text, the "Rodyti visus" link) comes with it
+         +s items, so the frontend hardcodes none of it.                 
+      22  
+      23  ## Cart (anyone holding the cart id, DECISIONS #15, #19)
+      24  | Method | Path | Notes |
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && cat >>
+      DECISIONS.md <<'EOF'…)
+  ⎿  Updated DECISIONS.md (+33 -0)
+      401  Tested in `search_test.go` and checked against all 28 seed nam
+           es for false hits.
+      402  Rejected: a hand-written alias list ("gta" -> ...) (data to ke
+           ep in sync for every new product);
+      403  matching acronyms anywhere in a name, not only at the start (t
+           oo many accidental hits on 2-3 letters).
+      404 +                                                              
+      405 +## 35. The homepage layout and block texts come from the API (
+          +refines #6, #26)                                              
+      406 +The assignment says the frontend "only displays what it receiv
+          +es and nothing is hardcoded there". The                       
+      407 +items already came from one endpoint per block, but the block 
+          +order, titles, ⓘ texts and "Rodyti visus"                     
+      408 +links were written in `blocks.tsx`. Now:                      
+      409 +- `GET /api/home` returns the layout: `[{id, type, personal}]`
+          + top to bottom. `type` says which component                   
+      410 +  draws the block (`banners`, `categories`, `products`), `pers
+          +onal` says to send the user and reload on                     
+      411 +  sign-in.                                                    
+      412 +- Each block's own endpoint (`/api/home/{id}`, unchanged paths
+          +) returns its text with its items:                            
+      413 +  `{id, title, info, moreUrl, hideWhenEmpty, items}`. So one b
+          +lock = one endpoint for all its content.                      
+      414 +- The texts live in `service/home.go` (Lithuanian, like the UI
+          +); the handlers add them with one helper                      
+      415 +  (`writeBlock`). The frontend keeps only the drawing componen
+          +ts and a `type -> component` map; an                          
+      416 +  unknown type is skipped, so the server can add a new kind la
+          +ter without breaking an old frontend.                         
+      417 +- `router_test.go` walks the layout and calls every block, so 
+          +a block listed without a working                              
+      418 +  endpoint (or a product rail without a title) fails the build
+          +.                                                             
+      419 +Trade-off: if `/api/home` fails, the homepage shows one error 
+          +instead of the blocks; each block still                       
+      420 +fails on its own once the layout is loaded (#6).              
+      421 +Rejected: texts inside each product rail's items call only (no
+          + single place to see the page order);                         
+      422 +a Firestore `home` collection (editable without a deploy, but 
+          +no admin UI exists to edit it, and it                         
+      423 +adds reads to every homepage view); a generic `/api/home/block
+          +?type=` (#26: one endpoint per block).                        
+      424 +Not moved: category names (`lib/categories.ts`) and fixed UI w
+          +ords ("Rodyti visus", "Kraunama…"):                           
+      425 +they are interface labels, not homepage content.              
+      426 +                                                              
+      427 +## 36. Store filters become a panel on phones                 
+      428 +Under 800px the sidebar is hidden and a "Filtrai (N)" button (
+          +N = active filters) opens the same                            
+      429 +`<aside>` as a panel from the left, over a dark backdrop, with
+          + a close button and a sticky                                  
+      430 +"Rodyti N prekės" button at the bottom. Filters still apply im
+          +mediately through the URL, so the count                       
+      431 +is live; the button only closes the panel. Escape and a click 
+          +on the backdrop close it too. Desktop is                      
+      432 +unchanged. Found while testing: the results column was a grid 
+          +item with `min-width: auto`, so on                            
+      433 +phones it grew to its content and made the whole page wider th
+          +an the screen (browsers then zoom out);                       
+      434 +`min-width: 0` fixes it.                                      
+      435 +Rejected: a second, phone-only copy of the filters (two UIs to
+          + keep in sync); "Apply" semantics with                        
+      436 +draft state (more code, and Eneba also applies at once); a dra
+          +wer library (new dependency).                                 
+  ⎿  (timeout 5m)
+
+● Tests pass and the build is clean. Committing as two slices. DECISIONS, SPEC
+  and README cover both changes, so they go in with the second commit.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Both changes are done and committed locally. They aren't pushed: three commits
+  are waiting, including the acronym search from earlier. Go tests pass and npm
+  run build is clean.
+
+  Homepage content now comes from the API
+
+  - Layout: the new GET /api/home returns the block order and how each block is
+    drawn, e.g. {id: "best-sellers", type: "products"}.
+  - Content: each block's existing endpoint now returns its title, ⓘ text and
+    "Rodyti visus" link along with its items. All of it lives in service/home.go
+    (backend/internal/service/home.go). The URLs stay the same, so it's still
+    one endpoint per block.
+  - Frontend: HomePage.tsx (frontend/src/features/home/HomePage.tsx) only maps
+    each block type to the component that draws it. There are no titles, texts,
+    links or order in the frontend anymore.
+  - Test: a new router test walks the layout and calls every listed block. It
+    fails if a block has no working endpoint, or if a product row has no title.
+  - Unchanged on purpose: category names and fixed UI words ("Rodyti visus",
+    "Kraunama…"). I wrote down why in DECISIONS #35.
+  - One trade-off: if /api/home itself fails, the homepage shows a single error
+    instead of the blocks. Once the layout loads, each block still fails on its
+    own.
+
+  The homepage looks exactly the same as before.
+
+  Filters on phones
+
+  - Button: below 800px a "Filtrai (N)" button sits next to the sort dropdown.
+    It opens the same filter sidebar as a panel from the left, with a close
+    button and a sticky yellow "Rodyti 8 prekės" button.
+  - Behavior: filters apply immediately, so the count is always current. Escape
+    or a tap outside closes the panel. Desktop is unchanged.
+  - Bug fixed along the way: on phones the store page was 438px wide in a 420px
+    screen, so the browser zoomed out. The results column was growing to fit its
+    content; min-width: 0 fixes it.
+
+  Before you submit
+
+  - Deploy order: run git push. Render deploys the API and the site separately,
+    and the new site needs /api/home. If the site finishes first, the homepage
+    shows an error until the API is live, which is a minute or two.
+  - Chat log: /export this session and append it to AI_CHAT_LOG.md.
+
+  One cleanup command I ran for my headless Chrome was too broad: it
+  force-closed any Chrome window whose title was exactly "about:blank". That's
+  very unlikely to have hit yours, but if a blank Chrome window closed earlier,
+  that was me. I closed my leftover processes by their exact IDs afterwards.
+
+  ## Session 7 - 2026-11-16 adding favorites function to the page 
+
+> /clear
+
+> ive pushed it it all works and looks nice. FInal thing is I think we can do
+  the favorites part too. Follow the ideas done before
+
+● Favorites will follow the profile pattern from #25 and #28:
+  - They're stored per user id, so guests can use them too.
+  - They merge into the account on sign-in.
+  - The logic is pure functions in the service, with one endpoint per action.
+
+  I'll read the profile code first.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Favorites will live as a product-id list on the existing profile document,
+  with three endpoints behind the same Identify middleware so guests can use
+  them, plus a heart on cards and the product page and a "Norų sąrašas" page.
+  I'm checking a few details before building. · summary
+
+  Read 1 file, ran 3 shell commands (ctrl+o to expand)
+
+● Backend first. I'll check how writeErr maps errors to status codes:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Writing the domain field, memory-repo copies, service logic and handlers:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The shell couldn't parse that heredoc. I'll put the edit script in a file
+  instead:
+
+  Made 1 scratchpad edit +232, ran 1 shell command (ctrl+o to expand)
+
+● I removed writeItems in the homepage refactor. Adding it back next to
+  writeBlock:
+
+● Update(backend\internal\handler\handler.go)
+  ⎿  Added 12 lines
+      145    writeBlock(w, "recommended", items, err)
+      146  }
+      147  
+      148 +// writeItems answers {"items": [...]} (never null), or the er
+          +ror.                                                          
+      149 +func writeItems[T any](w http.ResponseWriter, items []T, err e
+          +rror) {                                                       
+      150 +  if err != nil {                                             
+      151 +    writeErr(w, err)                                          
+      152 +    return                                                    
+      153 +  }                                                           
+      154 +  if items == nil {                                           
+      155 +    items = []T{}                                             
+      156 +  }                                                           
+      157 +  writeJSON(w, http.StatusOK, map[string]any{"items": items}) 
+      158 +}                                                             
+      159 +                                                              
+      160  // writeBlock answers a block's text and its items (never null
+           ), or the error.
+      161  // The embedded BlockText's fields sit next to "items" in the 
+           JSON.
+      162  func writeBlock[T any](w http.ResponseWriter, id string, items
+            []T, err error) {
+
+● Now tests. First the pure setFavorite rule and the service flow, including the
+  merge on sign-in:
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba/backend" && go build
+      ./... && cat >> internal/se…)
+  ⎿  Updated backend\internal\service\profiles_test.go (+90 -0)
+      185                  t.Fatalf("second merge: moved %d, err %v", mov
+           ed, err)
+      186          }
+      187  }
+      188 +                                                              
+      189 +func TestSetFavoriteRule(t *testing.T) {                      
+      190 +        cases := []struct {                                   
+      191 +                name string                                   
+      192 +                list []string                                 
+      193 +                id   string                                   
+      194 +                on   bool                                     
+      195 +                want []string                                 
+      196 +        }{                                                    
+      197 +                {"add goes in front", []string{"a"}, "b", true
+          +, []string{"b", "a"}},                                        
+      198 +                {"add twice keeps its place", []string{"a", "b
+          +"}, "b", true, []string{"a", "b"}},                           
+      199 +                {"remove", []string{"a", "b", "c"}, "b", false
+          +, []string{"a", "c"}},                                        
+      200 +                {"remove missing", []string{"a"}, "x", false, 
+          +[]string{"a"}},                                               
+      201 +        }                                                     
+      202 +        for _, c := range cases {                             
+      203 +                got, err := setFavorite(c.list, c.id, c.on, 3)
+      204 +                if err != nil || !reflect.DeepEqual(got, c.wan
+          +t) {                                                          
+      205 +                        t.Errorf("%s: got %v, %v; want %v", c.
+          +name, got, err, c.want)                                       
+      206 +                }                                             
+      207 +        }                                                     
+      208 +        if _, err := setFavorite([]string{"a", "b", "c"}, "d",
+          + true, 3); !errors.Is(err, ErrFavoritesFull) {                
+      209 +                t.Errorf("adding past the cap: err %v, want Er
+          +rFavoritesFull", err)                                         
+      210 +        }                                                     
+      211 +        orig := []string{"a", "b"}                            
+      212 +        _, _ = setFavorite(orig, "a", false, 3)               
+      213 +        if !reflect.DeepEqual(orig, []string{"a", "b"}) {     
+      214 +                t.Errorf("removing changed the caller's slice:
+          + %v", orig)                                                   
+      215 +        }                                                     
+      216 +}                                                             
+      217 +                                                              
+      218 +// Favorites: newest first, safe to repeat, unknown products r
+          +efused, per user,                                             
+      219 +// and a favorite counts as history for recommendations.      
+      220 +func TestFavorites(t *testing.T) {                            
+      221 +        s, _, _ := newProfilesSvc(t)                          
+      222 +        ctx := context.Background()                           
+      223 +        const user = "uid-1"                                  
+      224 +                                                              
+     … 53 more lines (ctrl+o to expand)
+
+● Imports are already there. Next a router test for the HTTP flow, then a full
+  test run:
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba/backend" && cat >>
+      internal/router/router_test.g…)
+  ⎿  Updated backend\internal\router\router_test.go (+42 -0)
+      107                  }
+      108          }
+      109  }
+      110 +                                                              
+      111 +// Favorites over HTTP as a guest: add (twice), list, remove; 
+          +unknown product 404; no user 401.                             
+      112 +func TestFavoritesRoutes(t *testing.T) {                      
+      113 +        r := newTestRouter(t)                                 
+      114 +        const guest = "0123456789abcdef0123456789abcdef"      
+      115 +        do := func(method, path, guestID string) *httptest.Res
+          +ponseRecorder {                                               
+      116 +                req := httptest.NewRequest(method, path, nil) 
+      117 +                if guestID != "" {                            
+      118 +                        req.Header.Set("X-Guest-Id", guestID) 
+      119 +                }                                             
+      120 +                rec := httptest.NewRecorder()                 
+      121 +                r.ServeHTTP(rec, req)                         
+      122 +                return rec                                    
+      123 +        }                                                     
+      124 +        for _, step := range []struct {                       
+      125 +                method, path, guestID string                  
+      126 +                want                  int                     
+      127 +        }{                                                    
+      128 +                {http.MethodGet, "/api/favorites", "", http.St
+          +atusUnauthorized},                                            
+      129 +                {http.MethodPut, "/api/favorites/p001", guest,
+          + http.StatusNoContent},                                       
+      130 +                {http.MethodPut, "/api/favorites/p001", guest,
+          + http.StatusNoContent}, // repeat is fine                     
+      131 +                {http.MethodPut, "/api/favorites/nope", guest,
+          + http.StatusNotFound},                                        
+      132 +        } {                                                   
+      133 +                if rec := do(step.method, step.path, step.gues
+          +tID); rec.Code != step.want {                                 
+      134 +                        t.Fatalf("%s %s: got %d, want %d", ste
+          +p.method, step.path, rec.Code, step.want)                     
+      135 +                }                                             
+      136 +        }                                                     
+      137 +        var list struct {                                     
+      138 +                Items []struct{ ID string } `json:"items"`    
+      139 +        }                                                     
+      140 +        _ = json.Unmarshal(do(http.MethodGet, "/api/favorites"
+          +, guest).Body.Bytes(), &list)                                 
+      141 +        if len(list.Items) != 1 || list.Items[0].ID != "p001" 
+          +{                                                             
+      142 +                t.Fatalf("favorites: %+v", list.Items)        
+      143 +        }                                                     
+      144 +        if rec := do(http.MethodDelete, "/api/favorites/p001",
+          + guest); rec.Code != http.StatusNoContent {                   
+      145 +                t.Fatalf("delete: %d", rec.Code)              
+      146 +        }                                                     
+     … 5 more lines (ctrl+o to expand)
+  ⎿  (timeout 5m)
+
+● All Go tests pass now, including the new service and HTTP tests; the file
+  errors came from my line-ending check, not the code. Moving on to the
+  frontend: context, button, header link, and page. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Writing the context, button and page:
+
+● Write(frontend\src\features\favorites\FavoritesContext.tsx)
+  ⎿  Wrote 61 lines to frontend\src\features\favorites\FavoritesContext.tsx
+       1 import { createContext, useCallback, useContext, useEffect, useS
+         tate } from "react";
+       2 import { api, ApiError } from "../../lib/api";
+       3 import { useAuth } from "../auth/AuthContext";
+       4
+       5 interface FavoritesState {
+       6   ids: string[]; // favorite product ids, newest first, as the s
+         erver has them
+       7   isFavorite: (productId: string) => boolean;
+       8   /** Flips one product. Returns an error message to show, or nu
+     … +54 lines (~2 KB) (ctrl+o to expand)
+
+● Write(frontend\src\features\favorites\FavoriteButton.tsx)
+  ⎿  Wrote 37 lines to frontend\src\features\favorites\FavoriteButton.tsx
+       1 import { useEffect, useState } from "react";
+       2 import { HeartIcon } from "../../components/Icons";
+       3 import { useFavorites } from "./FavoritesContext";
+       4
+       5 /**
+       6  * The heart. "icon" is the round button on a product card's cov
+         er; "full" is the
+       7  * labelled button on the product page. aria-pressed tells scree
+         n readers the state.
+       8  */
+     … +29 lines (ctrl+o to expand)
+
+● Write(frontend\src\features\favorites\FavoritesPage.tsx)
+  ⎿  Wrote 48 lines to frontend\src\features\favorites\FavoritesPage.tsx
+      1 import { Link } from "react-router-dom";
+      2 import { api } from "../../lib/api";
+      3 import { useAsync } from "../../lib/useAsync";
+      4 import { Status } from "../../components/Status";
+      5 import { ProductCard } from "../../components/ProductCard";
+      6 import { HeartIcon } from "../../components/Icons";
+      7 import { formatItemCount } from "../../lib/format";
+      8 import { useAuth } from "../auth/AuthContext";
+      9 import { useFavorites } from "./FavoritesContext";
+     … +39 lines (ctrl+o to expand)
+
+● Now the wiring: the icon, the API calls, the route and provider, the header
+  link, the card and product page, the CSS, and the recommended block's info
+  text.
+
+  Made 1 scratchpad edit +118 (ctrl+o to expand)
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && python
+      "C:/Users/faust/AppData/Local/Temp/cl…)  ⎿  Updated backend\internal\service\home.go (+1 -1)
+      43          },
+      44          "recommended": {
+      45                  Title: "Rekomenduojama tau",
+      46 -                Info:  "Rekomendacijos grindžiamos tavo peržiūr
+         -ėtomis ir pirktomis prekėmis: siūlome panašaus žanro, kategorij
+         -os ir platformos prekes, kurių dar neturi. Kai esi prisijungęs,
+         - rekomendacijos remiasi tavo paskyros istorija, kitu atveju – š
+         -ios naršyklės. Kol istorijos nėra, rodomos perkamiausios prekės
+         -.",                                                            
+      46 +                Info:  "Rekomendacijos grindžiamos tavo peržiūr
+         +ėtomis, pamėgtomis ir pirktomis prekėmis: siūlome panašaus žanr
+         +o, kategorijos ir platformos prekes, kurių dar neturi. Kai esi 
+         +prisijungęs, rekomendacijos remiasi tavo paskyros istorija, kit
+         +u atveju – šios naršyklės. Kol istorijos nėra, rodomos perkamia
+         +usios prekės.",                                                
+      47          },
+      48          "best-sellers": {
+      49                  Title:   "Perkamiausi",
+  ⎿  Updated frontend\src\app\App.tsx (+6 -0)
+      11  import { CartPopup } from "../features/cart/CartPopup";
+      12  import { CheckoutPage } from "../features/checkout/CheckoutPage
+          ";
+      13  import { OrdersPage } from "../features/orders/OrdersPage";
+      14 +import { FavoritesProvider } from "../features/favorites/Favori
+         +tesContext";                                                   
+      15 +import { FavoritesPage } from "../features/favorites/FavoritesP
+         +age";                                                          
+      16  import { Header } from "../components/Header";
+      17  import { Footer } from "../components/Footer";
+      18  
+     ...
+      32      <BrowserRouter>
+      33        <AuthProvider>
+      34          <CartProvider>
+      35 +        <FavoritesProvider>                                    
+      36          <Routes>
+      37            {/* Like Eneba, the login page has no shop header/foo
+          ter. */}
+      38            <Route path="/login" element={<LoginPage />} />
+     ...
+      41              <Route path="/store" element={<StorePage />} />
+      42              <Route path="/product/:id" element={<ProductPage />
+          } />
+      43              <Route path="/cart" element={<CartPage />} />
+      44 +            {/* guests have a wishlist too, like recently viewe
+         +d (DECISIONS #37) */}                                          
+      45 +            <Route path="/favorites" element={<FavoritesPage />
+         +} />                                                           
+      46              {/* Guests see the checkout summary; pressing "Apmo
+          kėti" asks them to sign in (DECISIONS #28).
+      47                  Order history and the account page need an acco
+          unt (DECISIONS #32). */}
+      48              <Route path="/checkout" element={<CheckoutPage />} 
+          />
+     ...
+      51              <Route path="*" element={<div className="page conta
+          iner"><h1>Puslapis nerastas</h1></div>} />
+      52            </Route>
+      53          </Routes>
+      54 +        </FavoritesProvider>                                   
+      55          </CartProvider>
+      56        </AuthProvider>
+      57      </BrowserRouter>
+  ⎿  Updated frontend\src\components\Header.tsx (+7 -1)
+       5  import { CartMenu } from "../features/cart/CartMenu";
+       6  import { CATEGORIES } from "../lib/categories";
+       7  import { CategoryDrawer } from "./CategoryDrawer";
+       8 -import { MenuIcon } from "./Icons";                            
+       8 +import { HeartIcon, MenuIcon } from "./Icons";                 
+       9 +import { useFavorites } from "../features/favorites/FavoritesCo
+         +ntext";                                                        
+      10  
+      11  export function Header() {
+      12    const [drawer, setDrawer] = useState(false);
+      13 +  const favorites = useFavorites().ids.length;                 
+      14    return (
+      15      <header className="header">
+      16        <div className="container header-main">
+      17          <Link to="/" className="logo">eneba<span>style</span></
+          Link>
+      18          <SearchBox />
+      19          <nav className="nav">
+      20 +          <Link to="/favorites" className="nav-btn icon-badge-b
+         +tn" aria-label={`Norų sąrašas (${favorites})`} title="Norų sąra
+         +šas">                                                          
+      21 +            <HeartIcon size={28} />                            
+      22 +            {favorites > 0 && <span className="cart-count">{fav
+         +orites}</span>}                                                
+      23 +          </Link>                                              
+      24            <CartMenu />
+      25            <AccountMenu />
+      26          </nav>
+  ⎿  Updated frontend\src\components\Icons.tsx (+9 -0)
+      24  export const ChevronLeft = (p: P) => <Svg {...p}><path d="M15 5
+          l-7 7 7 7" /></Svg>;
+      25  export const ChevronRight = (p: P) => <Svg {...p}><path d="M9 5
+          l7 7-7 7" /></Svg>;
+      26  export const CloseIcon = (p: P) => <Svg {...p}><path d="M5 5l14
+           14M19 5L5 19" /></Svg>;
+      27 +/** Heart for favorites; `filled` when the product is on the wi
+         +shlist. */                                                     
+      28 +export function HeartIcon({ size = 24, filled = false }: P & { 
+         +filled?: boolean }) {                                          
+      29 +  return (                                                     
+      30 +    <svg width={size} height={size} viewBox="0 0 24 24" fill={f
+         +illed ? "currentColor" : "none"} stroke="currentColor"         
+      31 +      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="r
+         +ound" aria-hidden="true">                                      
+      32 +      <path d="M12 20s-7-4.4-9-9.2C1.7 7.6 3.6 4.5 6.9 4.5c2 0 
+         +3.3 1.1 5.1 3 1.8-1.9 3.1-3 5.1-3 3.3 0 5.2 3.1 3.9 6.3-2 4.8-9
+         + 9.2-9 9.2z" />                                                
+      33 +    </svg>                                                     
+      34 +  );                                                           
+      35 +}                                                              
+      36  /** Three sliders: the "Filtrai" button on phones. */
+      37  export const FilterIcon = (p: P) => (
+      38    <Svg {...p}><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12" /
+          ><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /
+          ><circle cx="18" cy="18" r="2" /></Svg>
+  ⎿  Updated frontend\src\components\ProductCard.tsx (+3 -0)
+       4  import { formatPrice, regionLabel } from "../lib/format";
+       5  import { useCart } from "../features/cart/CartContext";
+       6  import { Cover } from "./Cover";
+       7 +import { FavoriteButton } from "../features/favorites/FavoriteB
+         +utton";                                                        
+       8  
+       9  /**
+      10   * Eneba-style card: cover, platform strip, then title, region,
+           "Nuo" + old price, price.
+     ...
+      47            <div className="price">{formatPrice(p.priceFrom, p.cu
+          rrency)}</div>
+      48          </div>
+      49        </Link>
+      50 +      {/* outside the link like the buttons below: a button ins
+         +ide a link is invalid HTML */}                                 
+      51 +      <FavoriteButton productId={p.id} />                      
+      52        <div className="card-actions">
+      53          <button type="button" className="btn block" disabled={b
+          usy} onClick={() => run(false)}>Pridėti į krepšelį</button>
+      54          <button type="button" className="btn outline block" dis
+          abled={busy} onClick={() => run(true)}>Pirkti dabar</button>
+  ⎿  … 3 more files changed
+  ⎿  (timeout 5m)
+
+● Build and tests pass. Now an end-to-end check in a real browser: tap a heart,
+  check the header count, open the wishlist page, and toggle on the product
+  page.
+
+  Made 1 scratchpad edit +43, ran 4 shell commands (ctrl+o to expand)
+
+● Every check passed: the hearts toggled, both favorites survived a reload, the
+  wishlist lists them newest first, removal works, and the phone page fits. I'm
+  checking the screenshots next. · summary
+
+  Read 3 files (ctrl+o to expand)
+
+● All the checks pass: hearts on the liked cards, the header badge, the labelled
+  button, and the guest note on the wishlist page. I'm stopping the dev servers
+  and Chrome now. · summary
+
+● Stop Task
+  ⎿  "/c/Program Files/Google/Chrome/Application/chrome.exe" --headless=new
+     --disable-gpu --hide-scrollbars --remote-debugging-port=9333
+     --user-data-dir="C:/Users/fa… · stopped
+
+● Stop Task
+  ⎿  cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+     Technology/temp-------------------------------/Eneba/frontend" &&
+     VITE_API_URL=http://localhost:8090… · stopped
+
+● Stop Task
+  ⎿  cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+     Technology/temp-------------------------------/Eneba/backend" &&
+     STORE=memory PORT=8090 go run ./cmd/… · stopped
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● That's the Vite server I started a few minutes ago. Stopping exactly that one:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Now the docs, then the commit.
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && cat >>
+      DECISIONS.md <<'EOF'…)
+  ⎿  Updated DECISIONS.md (+22 -0)
+      434  `min-width: 0` fixes it.
+      435  Rejected: a second, phone-only copy of the filters (two UIs to
+            keep in sync); "Apply" semantics with
+      436  draft state (more code, and Eneba also applies at once); a dra
+           wer library (new dependency).
+      437 +                                                              
+      438 +## 37. Favorites (wishlist), for guests too (supersedes the "s
+          +kipped wishlist heart" in #27, #29)                           
+      439 +A heart on every product card and on the product page, a heart
+          + with a count in the header, and a                            
+      440 +"Norų sąrašas" page (`/favorites`). Built like recently viewed
+          + (#25, #28), so nothing new to explain:                       
+      441 +- Stored as `favorites` (product ids, newest first) on the sam
+          +e `profiles/{userId}` document. The user                      
+      442 +  is whoever the request is: a guest id or the account, so gue
+          +sts can keep a wishlist like on Eneba.                        
+      443 +- `GET /api/favorites`, `PUT` / `DELETE /api/favorites/{produc
+          +tId}`, behind `Identify`. Absolute like                       
+      444 +  the cart quantity (#15): adding twice or removing twice is a
+          + no-op (and skips the Firestore write).                       
+      445 +  Unknown products 404. The pure rule `setFavorite` is unit te
+          +sted.                                                         
+      446 +- Capped at 100: adding past it is a 409 instead of silently d
+          +ropping an old favorite.                                      
+      447 +- Sign-in merges the guest's favorites in front of the account
+          +'s (same `mergeViews`, no cap, so a                           
+      448 +  merge never loses one), then empties the guest's list, in th
+          +e same step as views (#28).                                   
+      449 +- Favorites count as history for "Rekomenduojama tau" (a heart
+          + says more than a view), and a                                
+      450 +  favorite is not recommended back.                           
+      451 +- Frontend: `FavoritesContext` loads the ids once per user, so
+          + every heart knows its state without its                      
+      452 +  own request; a click flips the heart at once and flips it ba
+          +ck if the server refuses. The heart                           
+      453 +  sits outside the card's link, like the cart buttons (#31).  
+      454 +Checked end to end in headless Chrome: heart two cards -> head
+          +er shows 2 -> reload keeps them (server)                      
+      455 +-> wishlist page lists them newest first -> un-heart on the pr
+          +oduct page -> 1.                                              
+      456 +Rejected: localStorage favorites (lost on sign-in or another d
+          +evice, and recommendations can't see                          
+      457 +them); a separate `favorites` collection (two documents per us
+          +er for one profile); login required                           
+      458 +(Eneba lets guests save items; the merge keeps them).         
+  ⎿  Updated README.md (+1 -0)
+      72  | Cart | Server-side: adding an item reserves real keys from th
+          e pool for 30 min; no overselling (transactions). |
+      73  | Checkout | Simulated payment, then the reserved keys are deli
+          vered and shown with copy buttons. |
+      74  | Auth | Firebase email/password + Google. Guests can browse an
+          d fill a cart; **paying and order history need an account** (si
+          gn-in popup at "Apmokėti"); guest data merges into the account 
+          on sign-in. |
+      75 +| Favorites | Heart on every card and product page, count in th
+         +e header, "Norų sąrašas" page. Works for guests and moves to th
+         +e account on sign-in. |                                        
+      76  | Styling | Colors, font (Metropolis), sizes from eneba.com's C
+          SS in `tokens.css`; components use only those variables. |
+      77  
+      78  Known gaps (see `SPEC.md`): covers are generated (gradient + ca
+          tegory icon + title, `DECISIONS.md` #33)
+  ⎿  Updated SPEC.md (+2 -1)
+      15  | Auth | Done | Firebase email/password + Google. Guests can do
+           everything but pay; paying opens a sign-in popup, and guest vi
+          ews/orders merge into the account on sign-in (DECISIONS #28). A
+          vatar menu + `/account` page. |
+      16  | Cart | Done | The cart is a server-side order (status `cart`)
+          ; the UI renders that document and the browser keeps only the c
+          art id. Stock + keys reserved when an item is added (DECISIONS 
+          #15, #19, #21). Popup, header dropdown, live stock errors. |
+      17  | Checkout + key delivery | Done | Cart is the first stage of a
+          n order: cart -> paid -> delivered. Keys are reserved from the 
+          available pool when added to the cart, sold on delivery. Line d
+          ata (name, price, keys) is written once at add time; checkout o
+          nly changes status fields. Simulated payment (DECISIONS #8, #19
+          , #21). |
+      18 +| Favorites (wishlist) | Done | Heart on cards and the product 
+         +page, header count, `/favorites` page. Guests too, merged on si
+         +gn-in, feeds recommendations (DECISIONS #37). |                
+      19  | Order history | Done | Signed-in only, as the assignment asks
+           (DECISIONS #32); `GET /api/orders?page=`, paged 10 per page (#
+          22), lists orders with copyable key codes. Guest orders from be
+          fore login made it back merge into the account on sign-in (#28)
+          . |
+      20  | Eneba styling | Done | Values from eneba.com CSS in docs/DESI
+          GN.md -> tokens.css; header, cards, store, product, cart restyl
+          ed (DECISIONS #24, #27, #29, #31). Mobile filter drawer still T
+          ODO. Cards without art get a generated cover (#33). |
+      21  
+      22  ## Explicitly out of scope (and why)
+      23  - Real payments: assignment allows simulation; no value in wiri
+          ng a provider.
+      24  - Seller dashboard / admin: not requested; seed data stands in 
+          for sellers.
+      24 -- i18n, reviews, wishlists, email: not requested.              
+      25 +- i18n, reviews, email: not requested.                         
+      26  
+      27  ## Assumptions
+      28  - Currency: EUR only. Prices stored in cents.
+  ⎿  Updated docs\api.md (+4 -1)
+      31  
+      32  | Method | Path | Notes |
+      33  |---|---|---|
+      34 +| GET | `/api/favorites` | the user's favorites (wishlist) `{it
+         +ems}`, newest first (DECISIONS #37) |                          
+      35 +| PUT | `/api/favorites/{productId}` | add a favorite. 204; saf
+         +e to repeat; 404 unknown product; 409 list full (100) |        
+      36 +| DELETE | `/api/favorites/{productId}` | remove a favorite. 20
+         +4; safe to repeat |                                            
+      37  | POST | `/api/profile/views` | body `{productId}`: adds it to 
+          the profile's recently viewed. 204; 404 unknown product |
+      38  | GET | `/api/home/recently-viewed` | homepage block: `{items}`
+           up to 8, newest first |
+      39  | GET | `/api/home/recommended` | homepage block: `{items}` 8 p
+          roducts scored by genre/category/platform overlap with views + 
+          purchases (DECISIONS #25) |
+     ...
+      47  | POST | `/api/orders` | body `{cartId}`: simulated payment, th
+          en delivery. 201 delivered order with key codes. Safe to retry 
+          |
+      48  | GET | `/api/orders?page=&pageSize=` | `{items,total,page,page
+          Size}`, newest first (DECISIONS #22, #32) |
+      49  | GET | `/api/me` | `{uid,email,orderCount,totalSpent}` (cents)
+           |
+      47 -| POST | `/api/me/merge-guest` | body `{guestId}`: moves that g
+         -uest's views and orders to the account. Safe to repeat |       
+      50 +| POST | `/api/me/merge-guest` | body `{guestId}`: moves that g
+         +uest's views, favorites and orders to the account. Safe to repe
+         +at |                                                           
+
+● Docs updated. Committing, after checking that the staged Go files are
+  gofmt-clean:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● That misalignment was already in the committed file (older comment spacing),
+  not something I added. It's a harmless whitespace fix, so I'll format it and
+  commit:
+
+● Bash(cd "c:/Users/faust/Desktop/OneDrive - Kaunas University of
+      Technology/temp-------------------------------/Eneba" && gofmt -w
+      backend/internal/service/profiles_t…)
+  ⎿  Updated backend\internal\service\profiles_test.go (+133 -133)
+        1 -package service                                               
+        2 -                                                              
+        3 -import (                                                      
+        4 -        "context"                                             
+        5 -        "errors"                                              
+        6 -        "reflect"                                             
+        7 -        "testing"                                             
+        8 -                                                              
+        9 -        "eneba-marketplace/backend/internal/domain"           
+       10 -        "eneba-marketplace/backend/internal/repository"       
+       11 -)                                                             
+       12 -                                                              
+       13 -func TestAddView(t *testing.T) {                              
+       14 -        cases := []struct {                                   
+       15 -                list []string                                 
+       16 -                id   string                                   
+       17 -                want []string                                 
+       18 -        }{                                                    
+       19 -                {nil, "a", []string{"a"}},                    
+       20 -                {[]string{"a", "b"}, "c", []string{"c", "a", "
+          -b"}},                                                         
+       21 -                {[]string{"a", "b", "c"}, "b", []string{"b", "
+          -a", "c"}}, // seen again: moves to the front, no duplicate    
+       22 -                {[]string{"a", "b", "c"}, "d", []string{"d", "
+          -a", "b"}}, // max 3: the oldest drops off                     
+       23 -        }                                                     
+       24 -        for _, c := range cases {                             
+       25 -                if got := addView(c.list, c.id, 3); !reflect.D
+          -eepEqual(got, c.want) {                                       
+       26 -                        t.Errorf("addView(%v, %q) = %v, want %
+          -v", c.list, c.id, got, c.want)                                
+       27 -                }                                             
+       28 -        }                                                     
+       29 -}                                                             
+       30 -                                                              
+       31 -func TestRecommendScoresByHistory(t *testing.T) {             
+       32 -        p := func(id, genre, category, platform string, sales 
+          -int) domain.Product {                                         
+       33 -                return domain.Product{ID: id, Genre: genre, Ca
+          -tegory: category, Platform: platform, Sales: sales}           
+       34 -        }                                                     
+       35 -        viewedRPG := p("rpg1", "RPG", "games", "Steam", 10)   
+       36 -        all := []domain.Product{                              
+       37 -                viewedRPG,                                    
+       38 -                p("card", "", "gift-cards", "Amazon", 999),   
+          -      // best seller, but nothing in common                   
+       39 -                p("rpg2", "RPG", "games", "GOG", 5),          
+          -      // genre + category = 5                                 
+       40 -                p("steamShooter", "Shooter", "games", "Steam",
+          - 50), // category + platform = 3                              
+     … 234 more lines (ctrl+o to expand)
+  ⎿  (timeout 3m)
+
+● Favorites are built and committed locally (5cd56d1), not pushed yet. Go tests
+  pass and npm run build is clean.
+
+  What you get:
+  - Heart on every product card: a round button in the top-right corner of the
+    cover. It's empty by default and turns red and filled when the product is on
+    the list.
+  - Product page: an "Į norų sąrašą" button that changes to "Norų sąraše".
+  - Header: a heart icon with a red count badge, next to the cart.
+  - /favorites page ("Norų sąrašas"): shows the saved products newest first.
+    Removing a heart there takes the card off the list immediately. Guests see a
+    note that the list is kept in this browser until they sign in.
+
+  How it follows the earlier patterns:
+  - Storage: favorites are a list on the same profiles/{userId} document as
+    recently viewed. That means guests get a wishlist too, and sign-in moves it
+    into the account the same way views and orders already move.
+  - API: adding works through PUT /api/favorites/{id} and removing through
+    DELETE. Repeating either changes nothing, like setting a cart quantity, so a
+    double click or a retry is harmless.
+  - Limit: a product that doesn't exist returns 404. The list holds at most 100;
+    past that you get a clear error instead of an old favorite quietly
+    disappearing.
+  - Recommendations: favorites now count toward "Rekomenduojama tau", and a
+    favorite isn't recommended back to you. I updated that block's ⓘ text to say
+    so.
+  - Instant hearts: a heart changes as soon as you click and flips back if the
+    server refuses.
+
+  Tests and checks:
+  - New tests: the add/remove rule, the service flow (order, repeats, unknown
+    products, separate per user, recommendations), the merge on sign-in, and the
+    HTTP routes.
+  - Browser run: I hearted two cards and the header showed 2. After a reload
+    both were still there, so they're saved on the server. The /favorites page
+    listed them. Removing one on the product page brought the count to 1. On a
+    phone-width screen the page fits without sideways scrolling.
+
+  The docs are updated: DECISIONS #37 (it replaces the earlier "skipped the
+  wishlist heart" notes), docs/api.md, SPEC (I also took "wishlists" off the
+  out-of-scope list) and README. While committing I also fixed some old comment
+  spacing in profiles_test.go that gofmt flagged; it's whitespace only.
+
+  Left for you: git push. Firestore needs no setup, because the new field just
+  appears on existing profile documents the first time someone saves a favorite.
+  Then /export this session into AI_CHAT_LOG.md.
