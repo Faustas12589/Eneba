@@ -7,8 +7,8 @@ import { OrderCard } from "./OrderCard";
 import { useAuth } from "../auth/AuthContext";
 
 /**
- * The user's past orders (or this browser's, for a guest), newest first, paged,
- * with their key codes. Page number lives in the URL. Reloads on sign-in/out.
+ * The signed-in user's past orders, newest first, paged, with their key codes.
+ * Page number lives in the URL. Behind <RequireAuth> (DECISIONS #32).
  */
 export function OrdersPage() {
   const [sp, setSp] = useSearchParams();

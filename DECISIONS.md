@@ -363,3 +363,15 @@ Side menu: smaller text, platforms in two columns under "Platformos", so it fits
 Rejected: offer ids in every product list response (bigger payload for a hover action);
 a card that grows downward (clipped by the rails' horizontal scroll).
 
+
+## 32. Order history is signed-in only (refines #28)
+The assignment says "checkout and order history are only for signed-in users". Since #28 guests
+can't pay, so they never get new orders, but `GET /api/orders` still accepted a guest id. It now
+sits in the `RequireAuth` group next to checkout, and `/orders` is wrapped in `<RequireAuth>` (a guest
+is sent to `/login` and comes back after). Checkout keeps its #28 shape: guests see the summary,
+"Apmokėti" opens the sign-in popup, which matches the assignment's flow diagram (Cart -> Checkout ->
+sign-in required -> Payment). Old guest orders are not lost: they merge into the account on sign-in.
+`router_test.go` checks each protected route: no token, guest id and bad token get 401, signed-in 200,
+while the personal homepage blocks still accept a guest id.
+Rejected: keeping guest order history and justifying it (the spec names it explicitly, and with
+paying behind login it would only ever show an empty list).

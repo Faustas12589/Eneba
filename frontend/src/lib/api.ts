@@ -106,7 +106,7 @@ export const api = {
   /** Simulated payment (signed in only): turns the cart into a delivered order with its keys. Safe to retry. */
   checkout: (cartId: string) =>
     request<Order>("/api/orders", { auth: true, method: "POST", body: { cartId } }),
-  /** One page of the user's (or this browser's guest) orders, newest first. */
+  /** Signed in: one page of the user's orders, newest first. */
   orders: (page: number, signal?: AbortSignal) =>
-    request<OrderPage>(`/api/orders?page=${page}`, { user: true, signal }),
+    request<OrderPage>(`/api/orders?page=${page}`, { auth: true, signal }),
 };

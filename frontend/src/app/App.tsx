@@ -38,9 +38,10 @@ export function App() {
             <Route path="/store" element={<StorePage />} />
             <Route path="/product/:id" element={<ProductPage />} />
             <Route path="/cart" element={<CartPage />} />
-            {/* Guests may use checkout and orders too; paying asks them to sign in (DECISIONS #28). */}
+            {/* Guests see the checkout summary; pressing "Apmokėti" asks them to sign in (DECISIONS #28).
+                Order history and the account page need an account (DECISIONS #32). */}
             <Route path="/checkout" element={<CheckoutPage />} />
-            <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/orders" element={<RequireAuth><OrdersPage /></RequireAuth>} />
             <Route path="/account" element={<RequireAuth><AccountPage /></RequireAuth>} />
             <Route path="*" element={<div className="page container"><h1>Puslapis nerastas</h1></div>} />
           </Route>

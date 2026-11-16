@@ -34,16 +34,17 @@ func New(h *handler.Handler, verifier middleware.TokenVerifier, corsOrigins []st
 		// guests and signed-in users: a login token if sent, else the X-Guest-Id
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Identify(verifier))
-			r.Get("/orders", h.ListOrders)
 			r.Post("/profile/views", h.RecordView)
 			r.Get("/home/recently-viewed", h.RecentlyViewed)
 			r.Get("/home/recommended", h.Recommended)
 		})
 
-		// signed-in only: paying, the account page, and merging guest data on sign-in
+		// signed-in only (the assignment: checkout and order history need an account):
+		// paying, order history, the account page, and merging guest data on sign-in
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireAuth(verifier))
 			r.Post("/orders", h.Checkout)
+			r.Get("/orders", h.ListOrders)
 			r.Get("/me", h.Me)
 			r.Post("/me/merge-guest", h.MergeGuest)
 		})
