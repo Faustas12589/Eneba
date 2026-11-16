@@ -10,7 +10,7 @@ status; the "why" column is what I will say when asked.
 |---|---|---|
 | Store (filters, sort, search, pagination) | Scaffolded | Core of a marketplace. Filters + sort in Go (see DECISIONS #2). Aim: polish + tests. |
 | Homepage blocks | Done | 8 blocks, each its own endpoint, alternating bands: banners, recently viewed, recommended (#25), best sellers, gift cards, top-ups, pre-orders, category counts (#26). |
-| Search | Scaffolded | Typo/partial tolerant (trigram), header dropdown + results via store page. |
+| Search | Done | Typo/partial tolerant (trigram) and acronyms ("gta 5", "rdr2", DECISIONS #34); header dropdown + results via store page. |
 | Product page + seller offers | Scaffolded | Offer comparison table with add-to-cart per offer. |
 | Auth | Done | Firebase email/password + Google. Guests can do everything but pay; paying opens a sign-in popup, and guest views/orders merge into the account on sign-in (DECISIONS #28). Avatar menu + `/account` page. |
 | Cart | Done | The cart is a server-side order (status `cart`); the UI renders that document and the browser keeps only the cart id. Stock + keys reserved when an item is added (DECISIONS #15, #19, #21). Popup, header dropdown, live stock errors. |

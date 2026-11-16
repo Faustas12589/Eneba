@@ -389,3 +389,15 @@ a faint diagonal stripe, the category icon as a watermark, the category label an
 Rejected: Steam's CDN art (looks closest to Eneba, but not ours to use, and gift cards/top-ups have
 none); random colors per render (a product would change color on every visit); an image service
 such as placeholder.com (outside dependency at runtime for something CSS can do).
+
+## 34. Search matches acronyms (extends #3)
+Gamers search "gta 5", "rdr2", "bg3", "cod". Trigrams can't connect "gta" to "Grand Theft Auto", so
+`search.Build` also stores each name's acronyms (`acronyms()`, computed once per product):
+first letter of each word, numbers kept whole, Roman numerals both as letters and as digits
+("Grand Theft Auto V" -> `gtav`, `gta5`), again without a leading "the" (`tw3`, `w3`) and for the
+subtitle after a colon (`mw3`). Apostrophes are dropped first ("Baldur's" -> `bg3`). The query with
+spaces removed gets +1.5 if it equals an acronym and +1.0 if it starts one ("gta" finds all three
+GTA products); an exact name match is still +2, so plain names keep winning. Two characters minimum.
+Tested in `search_test.go` and checked against all 28 seed names for false hits.
+Rejected: a hand-written alias list ("gta" -> ...) (data to keep in sync for every new product);
+matching acronyms anywhere in a name, not only at the start (too many accidental hits on 2-3 letters).
