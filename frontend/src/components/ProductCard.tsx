@@ -4,6 +4,7 @@ import type { Product } from "../types";
 import { formatPrice, regionLabel } from "../lib/format";
 import { useCart } from "../features/cart/CartContext";
 import { Cover } from "./Cover";
+import { FavoriteButton } from "../features/favorites/FavoriteButton";
 
 /**
  * Eneba-style card: cover, platform strip, then title, region, "Nuo" + old price, price.
@@ -46,6 +47,8 @@ export function ProductCard({ p }: { p: Product }) {
           <div className="price">{formatPrice(p.priceFrom, p.currency)}</div>
         </div>
       </Link>
+      {/* outside the link like the buttons below: a button inside a link is invalid HTML */}
+      <FavoriteButton productId={p.id} />
       <div className="card-actions">
         <button type="button" className="btn block" disabled={busy} onClick={() => run(false)}>Pridėti į krepšelį</button>
         <button type="button" className="btn outline block" disabled={busy} onClick={() => run(true)}>Pirkti dabar</button>

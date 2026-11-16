@@ -145,6 +145,18 @@ func (h *Handler) Recommended(w http.ResponseWriter, r *http.Request) {
 	writeBlock(w, "recommended", items, err)
 }
 
+// writeItems answers {"items": [...]} (never null), or the error.
+func writeItems[T any](w http.ResponseWriter, items []T, err error) {
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if items == nil {
+		items = []T{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
 // writeBlock answers a block's text and its items (never null), or the error.
 // The embedded BlockText's fields sit next to "items" in the JSON.
 func writeBlock[T any](w http.ResponseWriter, id string, items []T, err error) {
@@ -174,6 +186,38 @@ func (h *Handler) RecordView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.Profiles.RecordView(r.Context(), middleware.UserFrom(r.Context()).UID, body.ProductID); err != nil {
+		writeErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Favorites (guests too, DECISIONS #37) ------------------------------------
+
+// Favorites: GET /api/favorites -> {"items": [product...]}, newest first.
+func (h *Handler) Favorites(w http.ResponseWriter, r *http.Request) {
+	items, err := h.Profiles.Favorites(r.Context(), middleware.UserFrom(r.Context()).UID)
+	writeItems(w, items, err)
+}
+
+// AddFavorite: PUT /api/favorites/{productId} -> 204. Safe to repeat; 404 unknown
+// product; 409 when the list already holds service.MaxFavorites.
+func (h *Handler) AddFavorite(w http.ResponseWriter, r *http.Request) {
+	h.setFavorite(w, r, true)
+}
+
+// RemoveFavorite: DELETE /api/favorites/{productId} -> 204. Safe to repeat.
+func (h *Handler) RemoveFavorite(w http.ResponseWriter, r *http.Request) {
+	h.setFavorite(w, r, false)
+}
+
+func (h *Handler) setFavorite(w http.ResponseWriter, r *http.Request, on bool) {
+	err := h.Profiles.SetFavorite(r.Context(), middleware.UserFrom(r.Context()).UID, chi.URLParam(r, "productId"), on)
+	if errors.Is(err, service.ErrFavoritesFull) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	if err != nil {
 		writeErr(w, err)
 		return
 	}

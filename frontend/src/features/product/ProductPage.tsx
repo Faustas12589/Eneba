@@ -7,6 +7,7 @@ import { formatPrice, regionLabel } from "../../lib/format";
 import { categoryLabel } from "../../lib/categories";
 import { Status } from "../../components/Status";
 import { Cover } from "../../components/Cover";
+import { FavoriteButton } from "../favorites/FavoriteButton";
 import { useCart } from "../cart/CartContext";
 
 export function ProductPage() {
@@ -38,6 +39,7 @@ export function ProductPage() {
               <p className="muted">
                 {[p.platform, regionLabel(p.region), categoryLabel(p.category), p.genre].filter(Boolean).join(" · ")}
               </p>
+              <FavoriteButton productId={p.id} variant="full" />
               {p.preOrder && (
                 <p><span className="badge">Išankstinis užsakymas</span> Išleidimo data: {p.releaseDate}</p>
               )}

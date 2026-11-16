@@ -5,16 +5,22 @@ import { AccountMenu } from "../features/auth/AccountMenu";
 import { CartMenu } from "../features/cart/CartMenu";
 import { CATEGORIES } from "../lib/categories";
 import { CategoryDrawer } from "./CategoryDrawer";
-import { MenuIcon } from "./Icons";
+import { HeartIcon, MenuIcon } from "./Icons";
+import { useFavorites } from "../features/favorites/FavoritesContext";
 
 export function Header() {
   const [drawer, setDrawer] = useState(false);
+  const favorites = useFavorites().ids.length;
   return (
     <header className="header">
       <div className="container header-main">
         <Link to="/" className="logo">eneba<span>style</span></Link>
         <SearchBox />
         <nav className="nav">
+          <Link to="/favorites" className="nav-btn icon-badge-btn" aria-label={`Norų sąrašas (${favorites})`} title="Norų sąrašas">
+            <HeartIcon size={28} />
+            {favorites > 0 && <span className="cart-count">{favorites}</span>}
+          </Link>
           <CartMenu />
           <AccountMenu />
         </nav>

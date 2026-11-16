@@ -15,13 +15,14 @@ status; the "why" column is what I will say when asked.
 | Auth | Done | Firebase email/password + Google. Guests can do everything but pay; paying opens a sign-in popup, and guest views/orders merge into the account on sign-in (DECISIONS #28). Avatar menu + `/account` page. |
 | Cart | Done | The cart is a server-side order (status `cart`); the UI renders that document and the browser keeps only the cart id. Stock + keys reserved when an item is added (DECISIONS #15, #19, #21). Popup, header dropdown, live stock errors. |
 | Checkout + key delivery | Done | Cart is the first stage of an order: cart -> paid -> delivered. Keys are reserved from the available pool when added to the cart, sold on delivery. Line data (name, price, keys) is written once at add time; checkout only changes status fields. Simulated payment (DECISIONS #8, #19, #21). |
+| Favorites (wishlist) | Done | Heart on cards and the product page, header count, `/favorites` page. Guests too, merged on sign-in, feeds recommendations (DECISIONS #37). |
 | Order history | Done | Signed-in only, as the assignment asks (DECISIONS #32); `GET /api/orders?page=`, paged 10 per page (#22), lists orders with copyable key codes. Guest orders from before login made it back merge into the account on sign-in (#28). |
 | Eneba styling | Done | Values from eneba.com CSS in docs/DESIGN.md -> tokens.css; header, cards, store, product, cart restyled (DECISIONS #24, #27, #29, #31). Mobile filter drawer still TODO. Cards without art get a generated cover (#33). |
 
 ## Explicitly out of scope (and why)
 - Real payments: assignment allows simulation; no value in wiring a provider.
 - Seller dashboard / admin: not requested; seed data stands in for sellers.
-- i18n, reviews, wishlists, email: not requested.
+- i18n, reviews, email: not requested.
 
 ## Assumptions
 - Currency: EUR only. Prices stored in cents.

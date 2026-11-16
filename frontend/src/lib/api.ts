@@ -20,7 +20,7 @@ interface RequestOpts {
   /** Routes guests may use too: the login token if signed in, else this browser's guest id. */
   user?: boolean;
   signal?: AbortSignal;
-  method?: "GET" | "PUT" | "POST";
+  method?: "GET" | "PUT" | "POST" | "DELETE";
   body?: unknown; // sent as JSON
 }
 
@@ -83,6 +83,11 @@ export const api = {
    */
   homeBlock: <T,>(id: string, personal = false) =>
     request<HomeBlock<T>>(`/api/home/${encodeURIComponent(id)}`, { user: personal }),
+  /** The user's (or this browser's guest) favorites, newest first (DECISIONS #37). */
+  favorites: () => request<{ items: Product[] }>("/api/favorites", { user: true }),
+  /** Add (on) or remove a favorite. Safe to repeat. 409 = the list is full. */
+  setFavorite: (productId: string, on: boolean) =>
+    request<void>(`/api/favorites/${encodeURIComponent(productId)}`, { user: true, method: on ? "PUT" : "DELETE" }),
   /** Remember that this browser opened a product page (feeds "recently viewed" and "recommended"). */
   recordView: (productId: string) =>
     request<void>("/api/profile/views", { user: true, method: "POST", body: { productId } }),

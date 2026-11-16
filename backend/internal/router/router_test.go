@@ -107,3 +107,45 @@ func TestHomeLayoutBlocks(t *testing.T) {
 		}
 	}
 }
+
+// Favorites over HTTP as a guest: add (twice), list, remove; unknown product 404; no user 401.
+func TestFavoritesRoutes(t *testing.T) {
+	r := newTestRouter(t)
+	const guest = "0123456789abcdef0123456789abcdef"
+	do := func(method, path, guestID string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil)
+		if guestID != "" {
+			req.Header.Set("X-Guest-Id", guestID)
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec
+	}
+	for _, step := range []struct {
+		method, path, guestID string
+		want                  int
+	}{
+		{http.MethodGet, "/api/favorites", "", http.StatusUnauthorized},
+		{http.MethodPut, "/api/favorites/p001", guest, http.StatusNoContent},
+		{http.MethodPut, "/api/favorites/p001", guest, http.StatusNoContent}, // repeat is fine
+		{http.MethodPut, "/api/favorites/nope", guest, http.StatusNotFound},
+	} {
+		if rec := do(step.method, step.path, step.guestID); rec.Code != step.want {
+			t.Fatalf("%s %s: got %d, want %d", step.method, step.path, rec.Code, step.want)
+		}
+	}
+	var list struct {
+		Items []struct{ ID string } `json:"items"`
+	}
+	_ = json.Unmarshal(do(http.MethodGet, "/api/favorites", guest).Body.Bytes(), &list)
+	if len(list.Items) != 1 || list.Items[0].ID != "p001" {
+		t.Fatalf("favorites: %+v", list.Items)
+	}
+	if rec := do(http.MethodDelete, "/api/favorites/p001", guest); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d", rec.Code)
+	}
+	_ = json.Unmarshal(do(http.MethodGet, "/api/favorites", guest).Body.Bytes(), &list)
+	if len(list.Items) != 0 {
+		t.Fatalf("after delete: %+v", list.Items)
+	}
+}

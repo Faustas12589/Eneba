@@ -276,6 +276,7 @@ func (m *Memory) GetProfile(_ context.Context, userID string) (*domain.Profile, 
 		return nil, ErrNotFound
 	}
 	p.RecentlyViewed = slices.Clone(p.RecentlyViewed) // callers can't change the stored copy
+	p.Favorites = slices.Clone(p.Favorites)
 	return &p, nil
 }
 
@@ -287,11 +288,13 @@ func (m *Memory) UpdateProfile(_ context.Context, userID string, apply ProfileFu
 		p = domain.Profile{UserID: userID}
 	}
 	p.RecentlyViewed = slices.Clone(p.RecentlyViewed)
+	p.Favorites = slices.Clone(p.Favorites)
 	if err := apply(&p); err != nil {
 		return nil, err
 	}
 	m.profiles[userID] = p
 	out := p
 	out.RecentlyViewed = slices.Clone(p.RecentlyViewed)
+	out.Favorites = slices.Clone(p.Favorites)
 	return &out, nil
 }

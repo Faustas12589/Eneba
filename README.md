@@ -72,6 +72,7 @@ Deployed and working end to end (store, search, product, cart, checkout, keys, o
 | Cart | Server-side: adding an item reserves real keys from the pool for 30 min; no overselling (transactions). |
 | Checkout | Simulated payment, then the reserved keys are delivered and shown with copy buttons. |
 | Auth | Firebase email/password + Google. Guests can browse and fill a cart; **paying and order history need an account** (sign-in popup at "Apmokėti"); guest data merges into the account on sign-in. |
+| Favorites | Heart on every card and product page, count in the header, "Norų sąrašas" page. Works for guests and moves to the account on sign-in. |
 | Styling | Colors, font (Metropolis), sizes from eneba.com's CSS in `tokens.css`; components use only those variables. |
 
 Known gaps (see `SPEC.md`): covers are generated (gradient + category icon + title, `DECISIONS.md` #33)

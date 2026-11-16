@@ -43,7 +43,7 @@ var homeBlocks = map[string]BlockText{
 	},
 	"recommended": {
 		Title: "Rekomenduojama tau",
-		Info:  "Rekomendacijos grindžiamos tavo peržiūrėtomis ir pirktomis prekėmis: siūlome panašaus žanro, kategorijos ir platformos prekes, kurių dar neturi. Kai esi prisijungęs, rekomendacijos remiasi tavo paskyros istorija, kitu atveju – šios naršyklės. Kol istorijos nėra, rodomos perkamiausios prekės.",
+		Info:  "Rekomendacijos grindžiamos tavo peržiūrėtomis, pamėgtomis ir pirktomis prekėmis: siūlome panašaus žanro, kategorijos ir platformos prekes, kurių dar neturi. Kai esi prisijungęs, rekomendacijos remiasi tavo paskyros istorija, kitu atveju – šios naršyklės. Kol istorijos nėra, rodomos perkamiausios prekės.",
 	},
 	"best-sellers": {
 		Title:   "Perkamiausi",

@@ -31,6 +31,9 @@ A bad login token is 401 (never silently a guest); a missing or malformed guest 
 
 | Method | Path | Notes |
 |---|---|---|
+| GET | `/api/favorites` | the user's favorites (wishlist) `{items}`, newest first (DECISIONS #37) |
+| PUT | `/api/favorites/{productId}` | add a favorite. 204; safe to repeat; 404 unknown product; 409 list full (100) |
+| DELETE | `/api/favorites/{productId}` | remove a favorite. 204; safe to repeat |
 | POST | `/api/profile/views` | body `{productId}`: adds it to the profile's recently viewed. 204; 404 unknown product |
 | GET | `/api/home/recently-viewed` | homepage block: `{items}` up to 8, newest first |
 | GET | `/api/home/recommended` | homepage block: `{items}` 8 products scored by genre/category/platform overlap with views + purchases (DECISIONS #25) |
@@ -44,4 +47,4 @@ Anything else, including a guest id, is 401 (`router_test.go`).
 | POST | `/api/orders` | body `{cartId}`: simulated payment, then delivery. 201 delivered order with key codes. Safe to retry |
 | GET | `/api/orders?page=&pageSize=` | `{items,total,page,pageSize}`, newest first (DECISIONS #22, #32) |
 | GET | `/api/me` | `{uid,email,orderCount,totalSpent}` (cents) |
-| POST | `/api/me/merge-guest` | body `{guestId}`: moves that guest's views and orders to the account. Safe to repeat |
+| POST | `/api/me/merge-guest` | body `{guestId}`: moves that guest's views, favorites and orders to the account. Safe to repeat |

@@ -177,5 +177,6 @@ func (o Order) Public() Order {
 type Profile struct {
 	UserID         string    `json:"userId" firestore:"userId"`
 	RecentlyViewed []string  `json:"recentlyViewed" firestore:"recentlyViewed"` // product ids, newest first
+	Favorites      []string  `json:"favorites" firestore:"favorites"`           // the wishlist: product ids, newest first (DECISIONS #37)
 	UpdatedAt      time.Time `json:"updatedAt" firestore:"updatedAt"`
 }

@@ -24,6 +24,15 @@ export const SearchIcon = (p: P) => <Svg {...p}><circle cx="11" cy="11" r="7" />
 export const ChevronLeft = (p: P) => <Svg {...p}><path d="M15 5l-7 7 7 7" /></Svg>;
 export const ChevronRight = (p: P) => <Svg {...p}><path d="M9 5l7 7-7 7" /></Svg>;
 export const CloseIcon = (p: P) => <Svg {...p}><path d="M5 5l14 14M19 5L5 19" /></Svg>;
+/** Heart for favorites; `filled` when the product is on the wishlist. */
+export function HeartIcon({ size = 24, filled = false }: P & { filled?: boolean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20s-7-4.4-9-9.2C1.7 7.6 3.6 4.5 6.9 4.5c2 0 3.3 1.1 5.1 3 1.8-1.9 3.1-3 5.1-3 3.3 0 5.2 3.1 3.9 6.3-2 4.8-9 9.2-9 9.2z" />
+    </svg>
+  );
+}
 /** Three sliders: the "Filtrai" button on phones. */
 export const FilterIcon = (p: P) => (
   <Svg {...p}><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></Svg>

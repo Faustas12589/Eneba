@@ -36,6 +36,9 @@ func New(h *handler.Handler, verifier middleware.TokenVerifier, corsOrigins []st
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Identify(verifier))
 			r.Post("/profile/views", h.RecordView)
+			r.Get("/favorites", h.Favorites)
+			r.Put("/favorites/{productId}", h.AddFavorite)
+			r.Delete("/favorites/{productId}", h.RemoveFavorite)
 			r.Get("/home/recently-viewed", h.RecentlyViewed)
 			r.Get("/home/recommended", h.Recommended)
 		})

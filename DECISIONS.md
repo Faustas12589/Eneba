@@ -434,3 +434,25 @@ phones it grew to its content and made the whole page wider than the screen (bro
 `min-width: 0` fixes it.
 Rejected: a second, phone-only copy of the filters (two UIs to keep in sync); "Apply" semantics with
 draft state (more code, and Eneba also applies at once); a drawer library (new dependency).
+
+## 37. Favorites (wishlist), for guests too (supersedes the "skipped wishlist heart" in #27, #29)
+A heart on every product card and on the product page, a heart with a count in the header, and a
+"Norų sąrašas" page (`/favorites`). Built like recently viewed (#25, #28), so nothing new to explain:
+- Stored as `favorites` (product ids, newest first) on the same `profiles/{userId}` document. The user
+  is whoever the request is: a guest id or the account, so guests can keep a wishlist like on Eneba.
+- `GET /api/favorites`, `PUT` / `DELETE /api/favorites/{productId}`, behind `Identify`. Absolute like
+  the cart quantity (#15): adding twice or removing twice is a no-op (and skips the Firestore write).
+  Unknown products 404. The pure rule `setFavorite` is unit tested.
+- Capped at 100: adding past it is a 409 instead of silently dropping an old favorite.
+- Sign-in merges the guest's favorites in front of the account's (same `mergeViews`, no cap, so a
+  merge never loses one), then empties the guest's list, in the same step as views (#28).
+- Favorites count as history for "Rekomenduojama tau" (a heart says more than a view), and a
+  favorite is not recommended back.
+- Frontend: `FavoritesContext` loads the ids once per user, so every heart knows its state without its
+  own request; a click flips the heart at once and flips it back if the server refuses. The heart
+  sits outside the card's link, like the cart buttons (#31).
+Checked end to end in headless Chrome: heart two cards -> header shows 2 -> reload keeps them (server)
+-> wishlist page lists them newest first -> un-heart on the product page -> 1.
+Rejected: localStorage favorites (lost on sign-in or another device, and recommendations can't see
+them); a separate `favorites` collection (two documents per user for one profile); login required
+(Eneba lets guests save items; the merge keeps them).

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sort"
 	"time"
@@ -13,6 +14,12 @@ import (
 
 // maxViewed is how many recently viewed products a profile keeps.
 const maxViewed = 20
+
+// MaxFavorites caps the wishlist. Adding past it is refused (ErrFavoritesFull)
+// rather than silently dropping an old favorite, which a shopper would not expect.
+const MaxFavorites = 100
+
+var ErrFavoritesFull = fmt.Errorf("favorites list is full (max %d)", MaxFavorites)
 
 // Profiles powers the personal homepage blocks: "Neseniai peržiūrėta" and
 // "Rekomenduojama tau" (DECISIONS #25). The user id comes from the request
@@ -73,7 +80,11 @@ func (s *Profiles) Recommended(ctx context.Context, userID string, n int) ([]dom
 	if err != nil {
 		return nil, err
 	}
-	historyIDs := slices.Clone(viewed)
+	favs, err := s.favorites(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	historyIDs := append(slices.Clone(viewed), favs...) // a favorite says even more than a view
 	for _, o := range orders {
 		for _, it := range o.Items {
 			historyIDs = append(historyIDs, it.ProductID)
@@ -91,33 +102,107 @@ func (s *Profiles) Recommended(ctx context.Context, userID string, n int) ([]dom
 }
 
 // MergeGuest runs when a guest signs in: the guest's recently viewed products
-// go to the front of the account's list, and the guest's orders become the
-// account's (DECISIONS #28). Safe to repeat: views are deduplicated and an
-// order that already moved is no longer the guest's. Returns how many orders moved.
+// and favorites go to the front of the account's lists, and the guest's orders
+// become the account's (DECISIONS #28, #37). Safe to repeat: lists are deduplicated
+// and an order that already moved is no longer the guest's. Returns how many orders moved.
 func (s *Profiles) MergeGuest(ctx context.Context, userID, guestUserID string) (int, error) {
-	guestViews, err := s.viewed(ctx, guestUserID)
-	if err != nil {
+	guest, err := s.repo.GetProfile(ctx, guestUserID)
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
 		return 0, err
 	}
-	if len(guestViews) > 0 {
+	if guest != nil && (len(guest.RecentlyViewed) > 0 || len(guest.Favorites) > 0) {
 		now := time.Now()
 		if _, err := s.repo.UpdateProfile(ctx, userID, func(p *domain.Profile) error {
-			p.RecentlyViewed = mergeViews(guestViews, p.RecentlyViewed, maxViewed)
+			p.RecentlyViewed = mergeViews(guest.RecentlyViewed, p.RecentlyViewed, maxViewed)
+			// a merge never drops a favorite, so the cap may be passed here once
+			p.Favorites = mergeViews(guest.Favorites, p.Favorites, len(guest.Favorites)+len(p.Favorites))
 			p.UpdatedAt = now
 			return nil
 		}); err != nil {
 			return 0, err
 		}
-		// Empty the guest's list only after the account has it: a crash in between
-		// leaves a duplicate, which the next merge removes, never a lost view.
+		// Empty the guest's lists only after the account has them: a crash in between
+		// leaves a duplicate, which the next merge removes, never a lost item.
 		if _, err := s.repo.UpdateProfile(ctx, guestUserID, func(p *domain.Profile) error {
-			p.RecentlyViewed, p.UpdatedAt = nil, now
+			p.RecentlyViewed, p.Favorites, p.UpdatedAt = nil, nil, now
 			return nil
 		}); err != nil {
 			return 0, err
 		}
 	}
 	return s.orders.MoveUserOrders(ctx, guestUserID, userID)
+}
+
+// SetFavorite adds a product to the user's favorites (on) or removes it. Absolute,
+// like the cart's quantity (#15): sending it twice changes nothing, so a retried
+// request or a double click is harmless. Unknown products return ErrNotFound.
+func (s *Profiles) SetFavorite(ctx context.Context, userID, productID string, on bool) error {
+	if on {
+		found, err := s.catalog.lookup(ctx, []string{productID})
+		if err != nil {
+			return err
+		}
+		if len(found) == 0 {
+			return repository.ErrNotFound
+		}
+	}
+	// Already as asked: skip the write (Firestore quota, like RecordView).
+	favs, err := s.favorites(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(favs, productID) == on {
+		return nil
+	}
+	now := time.Now()
+	_, err = s.repo.UpdateProfile(ctx, userID, func(p *domain.Profile) error {
+		next, err := setFavorite(p.Favorites, productID, on, MaxFavorites)
+		if err != nil {
+			return err
+		}
+		p.Favorites, p.UpdatedAt = next, now
+		return nil
+	})
+	return err
+}
+
+// Favorites returns the user's favorite products, newest first. Products that
+// left the catalog are skipped (lookup ignores unknown ids).
+func (s *Profiles) Favorites(ctx context.Context, userID string) ([]domain.Product, error) {
+	favs, err := s.favorites(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.catalog.lookup(ctx, favs)
+}
+
+// favorites is the user's favorite ids; a user without a profile has none.
+func (s *Profiles) favorites(ctx context.Context, userID string) ([]string, error) {
+	p, err := s.repo.GetProfile(ctx, userID)
+	if errors.Is(err, repository.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return p.Favorites, nil
+}
+
+// setFavorite returns the list with id added at the front (on) or removed.
+// Adding one that is already there keeps its place; adding past max is an error.
+func setFavorite(list []string, id string, on bool, max int) ([]string, error) {
+	i := slices.Index(list, id)
+	switch {
+	case on && i >= 0, !on && i < 0: // already as asked
+		return list, nil
+	case on:
+		if len(list) >= max {
+			return nil, ErrFavoritesFull
+		}
+		return append([]string{id}, list...), nil
+	default:
+		return slices.Delete(slices.Clone(list), i, i+1), nil
+	}
 }
 
 // viewed is the user's recently viewed ids; a user without a profile has none.

@@ -132,10 +132,10 @@ func TestMergeViews(t *testing.T) {
 	cases := []struct {
 		guest, account, want []string
 	}{
-		{nil, []string{"a", "b"}, []string{"a", "b"}},                       // nothing to merge
-		{[]string{"x", "y"}, nil, []string{"x", "y"}},                       // new account takes the guest's order
-		{[]string{"x", "a"}, []string{"a", "b"}, []string{"x", "a", "b"}},   // guest views first, no duplicate
-		{[]string{"x", "y"}, []string{"a", "b"}, []string{"x", "y", "a"}},   // max 3: the account's oldest drops off
+		{nil, []string{"a", "b"}, []string{"a", "b"}},                     // nothing to merge
+		{[]string{"x", "y"}, nil, []string{"x", "y"}},                     // new account takes the guest's order
+		{[]string{"x", "a"}, []string{"a", "b"}, []string{"x", "a", "b"}}, // guest views first, no duplicate
+		{[]string{"x", "y"}, []string{"a", "b"}, []string{"x", "y", "a"}}, // max 3: the account's oldest drops off
 	}
 	for _, c := range cases {
 		if got := mergeViews(c.guest, c.account, 3); !reflect.DeepEqual(got, c.want) {
@@ -183,5 +183,95 @@ func TestMergeGuest(t *testing.T) {
 	// Running it again (e.g. a second sign-in) changes nothing.
 	if moved, err := s.MergeGuest(ctx, user, guest); err != nil || moved != 0 {
 		t.Fatalf("second merge: moved %d, err %v", moved, err)
+	}
+}
+
+func TestSetFavoriteRule(t *testing.T) {
+	cases := []struct {
+		name string
+		list []string
+		id   string
+		on   bool
+		want []string
+	}{
+		{"add goes in front", []string{"a"}, "b", true, []string{"b", "a"}},
+		{"add twice keeps its place", []string{"a", "b"}, "b", true, []string{"a", "b"}},
+		{"remove", []string{"a", "b", "c"}, "b", false, []string{"a", "c"}},
+		{"remove missing", []string{"a"}, "x", false, []string{"a"}},
+	}
+	for _, c := range cases {
+		got, err := setFavorite(c.list, c.id, c.on, 3)
+		if err != nil || !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: got %v, %v; want %v", c.name, got, err, c.want)
+		}
+	}
+	if _, err := setFavorite([]string{"a", "b", "c"}, "d", true, 3); !errors.Is(err, ErrFavoritesFull) {
+		t.Errorf("adding past the cap: err %v, want ErrFavoritesFull", err)
+	}
+	orig := []string{"a", "b"}
+	_, _ = setFavorite(orig, "a", false, 3)
+	if !reflect.DeepEqual(orig, []string{"a", "b"}) {
+		t.Errorf("removing changed the caller's slice: %v", orig)
+	}
+}
+
+// Favorites: newest first, safe to repeat, unknown products refused, per user,
+// and a favorite counts as history for recommendations.
+func TestFavorites(t *testing.T) {
+	s, _, _ := newProfilesSvc(t)
+	ctx := context.Background()
+	const user = "uid-1"
+
+	for _, id := range []string{"p002", "p003", "p003"} { // the second p003 changes nothing
+		if err := s.SetFavorite(ctx, user, id, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.SetFavorite(ctx, user, "nope", true); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("unknown product: err %v", err)
+	}
+	got, _ := s.Favorites(ctx, user)
+	if len(got) != 2 || got[0].ID != "p003" || got[1].ID != "p002" {
+		t.Fatalf("favorites: %v", got)
+	}
+	if other, _ := s.Favorites(ctx, "uid-2"); len(other) != 0 {
+		t.Fatalf("another user sees uid-1's favorites: %v", other)
+	}
+	rec, _ := s.Recommended(ctx, user, 50)
+	for _, p := range rec {
+		if p.ID == "p002" || p.ID == "p003" {
+			t.Fatalf("recommended a favorite: %s", p.ID)
+		}
+	}
+
+	if err := s.SetFavorite(ctx, user, "p003", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFavorite(ctx, user, "p003", false); err != nil { // removing twice is fine
+		t.Fatal(err)
+	}
+	if got, _ := s.Favorites(ctx, user); len(got) != 1 || got[0].ID != "p002" {
+		t.Fatalf("after remove: %v", got)
+	}
+}
+
+// Signing in moves a guest's favorites in front of the account's, without duplicates.
+func TestMergeGuestFavorites(t *testing.T) {
+	s, _, _ := newProfilesSvc(t)
+	ctx := context.Background()
+	const guest, user = "guest:browser-1", "uid-1"
+	_ = s.SetFavorite(ctx, user, "p002", true)
+	_ = s.SetFavorite(ctx, guest, "p002", true) // on both lists
+	_ = s.SetFavorite(ctx, guest, "p004", true)
+
+	if _, err := s.MergeGuest(ctx, user, guest); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.Favorites(ctx, user)
+	if len(got) != 2 || got[0].ID != "p004" || got[1].ID != "p002" {
+		t.Fatalf("account favorites after merge: %v", got)
+	}
+	if left, _ := s.Favorites(ctx, guest); len(left) != 0 {
+		t.Fatalf("guest still has favorites: %v", left)
 	}
 }
