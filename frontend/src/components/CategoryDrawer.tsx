@@ -35,14 +35,19 @@ export function CategoryDrawer({ onClose }: { onClose: () => void }) {
           <Link to="/store">Visi pasiūlymai</Link>
           {CATEGORIES.map((c) => (
             <Link key={c.id} to={`/store?category=${c.id}`}>
-              {c.label} <ChevronRight size={20} />
+              {c.label} <ChevronRight size={18} />
             </Link>
           ))}
-          {platforms.data?.facets.platforms.map((p) => (
-            <Link key={p} to={`/store?platform=${encodeURIComponent(p)}`}>
-              {p} <ChevronRight size={20} />
-            </Link>
-          ))}
+          {!!platforms.data?.facets.platforms.length && (
+            <>
+              <p className="drawer-section">Platformos</p>
+              <div className="drawer-grid">
+                {platforms.data.facets.platforms.map((p) => (
+                  <Link key={p} to={`/store?platform=${encodeURIComponent(p)}`}>{p}</Link>
+                ))}
+              </div>
+            </>
+          )}
         </nav>
       </aside>
     </div>

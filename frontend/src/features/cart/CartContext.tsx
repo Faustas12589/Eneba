@@ -16,6 +16,12 @@ interface CartValue {
   liveStock: Record<string, number>;
   /** Reserves one more unit on the server, then opens the popup (success or error). */
   add: (offerId: string) => Promise<void>;
+  /**
+   * Card hover buttons: adds one unit of the product's cheapest offer in stock.
+   * `quiet` skips the success popup ("Pirkti dabar" goes straight to checkout).
+   * Errors still open the popup. Returns whether a unit was added.
+   */
+  addProduct: (productId: string, quiet?: boolean) => Promise<boolean>;
   /** Sets a line's quantity on the server (0 = remove). Returns an error message or null. */
   setQty: (offerId: string, qty: number) => Promise<string | null>;
   /** Simulated payment; starts a new cart and returns the delivered order. Throws on failure. */
@@ -156,9 +162,28 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-  const add = async (offerId: string) => {
+  const addOne = async (offerId: string, quiet: boolean) => {
     const error = await sync(offerId, quantityOf(cartRef.current.items, offerId) + 1);
-    setNotice(error ? { kind: "error", message: error } : { kind: "added" });
+    if (error) setNotice({ kind: "error", message: error });
+    else if (!quiet) setNotice({ kind: "added" });
+    return !error;
+  };
+  const add = async (offerId: string) => void (await addOne(offerId, false));
+
+  const addProduct = async (productId: string, quiet = false) => {
+    let offerId: string | undefined;
+    try {
+      // The API lists offers cheapest first; the server re-checks stock when reserving.
+      offerId = (await api.product(productId)).offers.find((o) => o.stock > 0)?.id;
+    } catch {
+      setNotice({ kind: "error", message: FAILED });
+      return false;
+    }
+    if (!offerId) {
+      setNotice({ kind: "error", title: "Išparduota", message: "Šios prekės šiuo metu neturi nė vienas pardavėjas." });
+      return false;
+    }
+    return addOne(offerId, quiet);
   };
 
   const setQty = (offerId: string, qty: number) => sync(offerId, qty);
@@ -184,6 +209,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     currency: cart.currency,
     liveStock,
     add,
+    addProduct,
     setQty,
     checkout,
     notice,

@@ -351,3 +351,15 @@ Rejected: a slider library (two stacked native `<input type="range">` do it with
 CSS); fixed bounds such as 0-100 € (useless for cheap categories); keeping category checkboxes
 as well (the user asked for them to go; `?category=` in the URL still filters).
 
+## 31. Card hover buttons; compact side menu
+Like Eneba, hovering a product card grows its info panel and shows a yellow "Pridėti į krepšelį"
+and an outlined "Pirkti dabar". The cover slides up by exactly the buttons' height, so the card
+keeps its size: nothing jumps and the scrolling rails don't clip it (pure CSS). The buttons sit
+next to the link, not inside it (a button inside a link is invalid HTML). The list API has no
+offer ids, so a click loads the product and adds its cheapest offer in stock
+(`CartContext.addProduct`; the server still re-checks stock when reserving). "Pirkti dabar"
+skips the popup and opens checkout. Touch screens (no hover) keep the plain card.
+Side menu: smaller text, platforms in two columns under "Platformos", so it fits without scrolling.
+Rejected: offer ids in every product list response (bigger payload for a hover action);
+a card that grows downward (clipped by the rails' horizontal scroll).
+

@@ -107,7 +107,22 @@ input::placeholder { color: var(--color-text-muted); }
   background: var(--color-primary); color: var(--color-on-primary); padding: 2px var(--space-2);
   font-size: var(--text-xs); font-weight: 800; text-align: center; border-radius: var(--radius);
 }
-.card:hover { border-color: var(--color-primary); }
+.card:hover, .card:focus-within { border-color: var(--color-primary); }
+.card-link { display: flex; flex-direction: column; flex: 1; }
+/* Hover: the info panel grows by --actions-h and the cover slides up by the same amount,
+   so the card keeps its size (nothing jumps, and scrolling rails don't clip it). */
+.card { --actions-h: 104px; }
+.card-img { transition: margin-top 0.2s ease; }
+.card-actions {
+  display: flex; flex-direction: column; gap: var(--space-2); height: 0; overflow: hidden;
+  padding: 0 var(--space-3); transition: height 0.2s ease, padding 0.2s ease;
+}
+.card-actions .btn { height: 38px; padding: 0 var(--space-2); white-space: nowrap; }
+.card-actions .btn.outline { min-width: 0; border-width: 1px; }
+.card:hover .card-actions, .card:focus-within .card-actions { height: var(--actions-h); padding: var(--space-1) var(--space-3) var(--space-3); }
+.card:hover .card-img, .card:focus-within .card-img { margin-top: calc(-1 * var(--actions-h)); }
+/* touch screens have no hover: keep the plain card, the product page has the buttons */
+@media (hover: none) { .card-actions { display: none; } .card:hover .card-img { margin-top: 0; } }
 .card-img {
   aspect-ratio: 3 / 4; width: 100%; object-fit: cover;
   background: linear-gradient(160deg, var(--color-secondary), var(--color-band) 60%, var(--color-card));
@@ -340,12 +355,19 @@ input::placeholder { color: var(--color-text-muted); }
 .drawer-head .logo { font-size: 28px; }
 .drawer-close { display: flex; background: none; border: 0; padding: 0; color: var(--color-text); cursor: pointer; }
 .drawer-close:hover { color: var(--color-accent); }
-.drawer-list { display: flex; flex-direction: column; padding: var(--space-3) 0; }
+.drawer-list { display: flex; flex-direction: column; padding: var(--space-2) 0; }
 .drawer-list a {
   display: flex; align-items: center; justify-content: space-between;
-  padding: var(--space-3) var(--space-6); font-size: 18px;
+  padding: var(--space-2) var(--space-6); font-size: var(--text-base);
 }
 .drawer-list a:hover { background: var(--color-band); color: var(--color-accent); }
+.drawer-section {
+  margin: var(--space-3) var(--space-6) var(--space-1); padding-top: var(--space-3); border-top: 1px solid var(--color-band);
+  font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--color-text-nav);
+}
+/* platforms: two short columns instead of one long list, so the menu fits without scrolling */
+.drawer-grid { display: grid; grid-template-columns: 1fr 1fr; }
+.drawer-grid a { padding: var(--space-2) var(--space-6); font-size: var(--text-sm); }
 
 /* header account dropdown (same box as the cart's) */
 .account-menu { position: relative; }
