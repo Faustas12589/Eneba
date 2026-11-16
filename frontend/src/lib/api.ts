@@ -1,6 +1,6 @@
 import { getIdToken } from "./firebase";
 import { guestId } from "./guest";
-import type { Account, Banner, CartUpdate, CategoryCount, Order, OrderPage, Product, ProductDetail, ProductPage } from "../types";
+import type { Account, CartUpdate, HomeBlock, HomeBlockRef, Order, OrderPage, ProductDetail, ProductPage, Product } from "../types";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
@@ -75,16 +75,15 @@ export const api = {
   product: (id: string) => request<ProductDetail>(`/api/products/${encodeURIComponent(id)}`),
   suggest: (q: string, signal?: AbortSignal) =>
     request<{ items: Product[] }>(`/api/search?q=${encodeURIComponent(q)}`, { signal }),
-  banners: () => request<{ items: Banner[] }>("/api/home/banners"),
-  bestSellers: () => request<{ items: Product[] }>("/api/home/best-sellers"),
-  giftCards: () => request<{ items: Product[] }>("/api/home/gift-cards"),
-  topUps: () => request<{ items: Product[] }>("/api/home/top-ups"),
-  preOrders: () => request<{ items: Product[] }>("/api/home/pre-orders"),
-  categoryCounts: () => request<{ items: CategoryCount[] }>("/api/home/categories"),
-  /** Personal blocks: built from the signed-in user's profile, or this browser's guest profile. */
-  recentlyViewed: () => request<{ items: Product[] }>("/api/home/recently-viewed", { user: true }),
-  recommended: () => request<{ items: Product[] }>("/api/home/recommended", { user: true }),
-  /** Remember that this browser opened a product page (feeds the two blocks above). */
+  /** The homepage layout: which blocks, in which order, drawn how. */
+  homeLayout: () => request<{ blocks: HomeBlockRef[] }>("/api/home"),
+  /**
+   * One homepage block from its own endpoint: its title/info/link and items.
+   * Personal blocks send the login token, or this browser's guest id.
+   */
+  homeBlock: <T,>(id: string, personal = false) =>
+    request<HomeBlock<T>>(`/api/home/${encodeURIComponent(id)}`, { user: personal }),
+  /** Remember that this browser opened a product page (feeds "recently viewed" and "recommended"). */
   recordView: (productId: string) =>
     request<void>("/api/profile/views", { user: true, method: "POST", body: { productId } }),
   /**

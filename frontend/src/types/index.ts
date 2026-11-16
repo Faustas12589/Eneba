@@ -121,3 +121,20 @@ export interface Account {
   orderCount: number;
   totalSpent: number; // cents
 }
+
+/** One homepage section from GET /api/home, top to bottom (DECISIONS #35). */
+export interface HomeBlockRef {
+  id: string; // the block's endpoint is /api/home/{id}
+  type: "banners" | "categories" | "products"; // which component draws it
+  personal?: boolean; // built per user: send the login token / guest id, reload on sign-in
+}
+
+/** What a block's own endpoint answers: its text plus its items. */
+export interface HomeBlock<T> {
+  id: string;
+  title?: string;
+  info?: string; // the ⓘ pop-up text
+  moreUrl?: string; // "Rodyti visus" link
+  hideWhenEmpty?: boolean;
+  items: T[];
+}

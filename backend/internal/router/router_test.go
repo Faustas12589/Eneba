@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -63,5 +64,46 @@ func TestSignedInOnlyRoutes(t *testing.T) {
 				t.Fatalf("%s %s: got %d, want %d (body %s)", c.method, c.path, rec.Code, c.want, rec.Body)
 			}
 		})
+	}
+}
+
+// The homepage is whatever GET /api/home lists: every block in it must have a working
+// endpoint that answers its own id, its items, and a title if it is a product rail.
+func TestHomeLayoutBlocks(t *testing.T) {
+	r := newTestRouter(t)
+	get := func(path string, out any) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("X-Guest-Id", "0123456789abcdef0123456789abcdef") // personal blocks need a user
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s: %d %s", path, rec.Code, rec.Body)
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), out); err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+	}
+
+	var layout struct {
+		Blocks []struct{ ID, Type string } `json:"blocks"`
+	}
+	get("/api/home", &layout)
+	if len(layout.Blocks) == 0 {
+		t.Fatal("empty homepage layout")
+	}
+	for _, b := range layout.Blocks {
+		var block struct {
+			ID    string            `json:"id"`
+			Title string            `json:"title"`
+			Items []json.RawMessage `json:"items"`
+		}
+		get("/api/home/"+b.ID, &block)
+		if block.ID != b.ID || block.Items == nil {
+			t.Errorf("block %s: got id %q, items %v", b.ID, block.ID, block.Items)
+		}
+		if b.Type == "products" && block.Title == "" {
+			t.Errorf("product block %s has no title", b.ID)
+		}
 	}
 }

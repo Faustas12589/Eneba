@@ -22,6 +22,7 @@ func New(h *handler.Handler, verifier middleware.TokenVerifier, corsOrigins []st
 		r.Get("/products", h.ListProducts)
 		r.Get("/products/{id}", h.GetProduct)
 		r.Get("/search", h.Suggest)
+		r.Get("/home", h.Home)
 		r.Get("/home/banners", h.Banners)
 		r.Get("/home/best-sellers", h.BestSellers)
 		r.Get("/home/gift-cards", h.GiftCards)

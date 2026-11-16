@@ -87,51 +87,67 @@ func (h *Handler) Suggest(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- Homepage blocks: one endpoint per block -----------------------------
+// Every block answers {"id", "title", "info", "moreUrl", "items"}: its text
+// (service.HomeBlock) plus its items, so the frontend hardcodes nothing (DECISIONS #35).
 
-func (h *Handler) Banners(w http.ResponseWriter, r *http.Request) {
-	items, err := h.Catalog.Banners(r.Context())
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+// Home: GET /api/home -> {"blocks": [{"id", "type", "personal"}...]}, top to bottom.
+func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"blocks": service.HomeLayout})
 }
 
+// Banners: GET /api/home/banners -> the hero tiles.
+func (h *Handler) Banners(w http.ResponseWriter, r *http.Request) {
+	items, err := h.Catalog.Banners(r.Context())
+	writeBlock(w, "banners", items, err)
+}
+
+// BestSellers: GET /api/home/best-sellers -> most sold products.
 func (h *Handler) BestSellers(w http.ResponseWriter, r *http.Request) {
 	items, err := h.Catalog.BestSellers(r.Context(), 8)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	writeBlock(w, "best-sellers", items, err)
 }
 
 // GiftCards: GET /api/home/gift-cards -> best-selling eGift cards (Amazon, Spotify...).
 func (h *Handler) GiftCards(w http.ResponseWriter, r *http.Request) {
 	items, err := h.Catalog.TopInCategory(r.Context(), "gift-cards", 8)
-	writeItems(w, items, err)
+	writeBlock(w, "gift-cards", items, err)
 }
 
 // TopUps: GET /api/home/top-ups -> best-selling gaming cards (Steam, PSN, Roblox...).
 func (h *Handler) TopUps(w http.ResponseWriter, r *http.Request) {
 	items, err := h.Catalog.TopInCategory(r.Context(), "gaming-cards", 8)
-	writeItems(w, items, err)
+	writeBlock(w, "top-ups", items, err)
 }
 
 // PreOrders: GET /api/home/pre-orders -> unreleased products, soonest first.
 func (h *Handler) PreOrders(w http.ResponseWriter, r *http.Request) {
 	items, err := h.Catalog.PreOrders(r.Context(), 8)
-	writeItems(w, items, err)
+	writeBlock(w, "pre-orders", items, err)
 }
 
-// Categories: GET /api/home/categories -> {"items": [{"category", "count"}...]} in menu order.
+// Categories: GET /api/home/categories -> items [{"category", "count"}...] in menu order.
 func (h *Handler) Categories(w http.ResponseWriter, r *http.Request) {
 	items, err := h.Catalog.CategoryCounts(r.Context())
-	writeItems(w, items, err)
+	writeBlock(w, "categories", items, err)
 }
 
-// writeItems answers {"items": [...]} (never null), or the error.
-func writeItems[T any](w http.ResponseWriter, items []T, err error) {
+// Personal blocks: need the request's user (login token or guest id).
+
+// RecentlyViewed: GET /api/home/recently-viewed -> the user's viewed products, newest first.
+func (h *Handler) RecentlyViewed(w http.ResponseWriter, r *http.Request) {
+	items, err := h.Profiles.RecentlyViewed(r.Context(), middleware.UserFrom(r.Context()).UID, 8)
+	writeBlock(w, "recently-viewed", items, err)
+}
+
+// Recommended: GET /api/home/recommended -> products picked from the user's history.
+func (h *Handler) Recommended(w http.ResponseWriter, r *http.Request) {
+	items, err := h.Profiles.Recommended(r.Context(), middleware.UserFrom(r.Context()).UID, 8)
+	writeBlock(w, "recommended", items, err)
+}
+
+// writeBlock answers a block's text and its items (never null), or the error.
+// The embedded BlockText's fields sit next to "items" in the JSON.
+func writeBlock[T any](w http.ResponseWriter, id string, items []T, err error) {
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -139,29 +155,10 @@ func writeItems[T any](w http.ResponseWriter, items []T, err error) {
 	if items == nil {
 		items = []T{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-// Personal blocks: need the request's user (guest id while login is off).
-
-// RecentlyViewed: GET /api/home/recently-viewed -> {"items": [product...]}, newest first.
-func (h *Handler) RecentlyViewed(w http.ResponseWriter, r *http.Request) {
-	items, err := h.Profiles.RecentlyViewed(r.Context(), middleware.UserFrom(r.Context()).UID, 8)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-// Recommended: GET /api/home/recommended -> {"items": [product...]}.
-func (h *Handler) Recommended(w http.ResponseWriter, r *http.Request) {
-	items, err := h.Profiles.Recommended(r.Context(), middleware.UserFrom(r.Context()).UID, 8)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	writeJSON(w, http.StatusOK, struct {
+		service.BlockText
+		Items []T `json:"items"`
+	}{service.HomeBlock(id), items})
 }
 
 // --- Profile ---------------------------------------------------------------
