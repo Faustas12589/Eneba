@@ -40,4 +40,4 @@ scope and DECISIONS.md for past trade-offs before changing anything.
 
 ## AI log (required deliverable)
 The full chat history (prompts AND responses) must be submitted. At the end of each
-session, run `/export` and append the result to `AI_LOG.md` unedited, with a date heading.
+session, run `/export` and append the result to `AI_CHAT_LOG.md` unedited, with a date heading.

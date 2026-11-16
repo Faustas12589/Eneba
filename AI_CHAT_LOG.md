@@ -13663,9 +13663,3 @@ code 0)
   Clicking the two buttons isn't tested yet, so please try them in the browser.
 
   I added DECISIONS #31.
-
-  ## Session 6 - 2026-12-13 cleaning up the skeleton + connecting db
-
-  ## Session 7 - 2026-12-13 cleaning up the skeleton + connecting db
-
-

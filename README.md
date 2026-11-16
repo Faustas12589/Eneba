@@ -3,7 +3,14 @@
 Digital game-key marketplace (internship assignment). React + TypeScript frontend,
 Go REST backend, Firebase (Firestore + Auth), deployed on Render.
 
-**Live:** _add URL_ · **Repo:** _add URL_ · See `SPEC.md` (scope), `DECISIONS.md` (trade-offs), `AI_LOG.md` (agent history).
+**Live:** https://eneba-web.onrender.com (API: https://eneba-api-10wc.onrender.com/healthz) ·
+**Repo:** https://github.com/Faustas12589/Eneba
+
+See `SPEC.md` (scope and why), `DECISIONS.md` (trade-offs, numbered), `docs/api.md` (endpoints),
+`docs/DESIGN.md` (Eneba styling reference) and `AI_CHAT_LOG.md` (full agent chat history).
+
+> The free Render API sleeps when idle: the first page load after a while can take ~30-60 s
+> while it wakes up. After that it is fast.
 
 ## Architecture
 ```
@@ -19,7 +26,7 @@ Frontend: feature folders under `frontend/src/features`, styling via CSS variabl
 ### 1. Backend (works without Firebase)
 ```bash
 cd backend
-go mod tidy          # generates go.sum (required once, commit it)
+go mod download      # go.sum is committed
 go test ./...
 go run ./cmd/api     # :8080, STORE=memory serves embedded demo data
 ```
@@ -34,7 +41,7 @@ Without Firebase env vars the app runs in **dev auth mode**: any email/password 
 you in as a local dev user (only accepted by a `STORE=memory` backend). See `DECISIONS.md` #10.
 
 ### 3. Firebase (when ready)
-1. Create a Firebase project; enable **Firestore** and **Authentication > Email/Password**.
+1. Create a Firebase project; enable **Firestore** and **Authentication > Email/Password** and **Google**.
 2. Project settings > Service accounts > generate a private key (keep it OUT of git).
 3. Project settings > Your apps > add a Web app; copy config into `frontend/.env.local` (see `.env.example`).
 4. Firestore > Rules: paste `firestore.rules` (deny all client access; only the Go API reads/writes).
@@ -54,10 +61,21 @@ you in as a local dev user (only accepted by a `STORE=memory` backend). See `DEC
 4. Note: the free API service sleeps when idle; the first request can take ~30-60s.
 
 ## Status
-Done: catalog, filters/sort/search, homepage blocks, product page with offers,
-cart with server-side key reservation, checkout (simulated payment) + key delivery, order history.
-Login is switched off for now: orders belong to a random per-browser guest id (`DECISIONS.md` #20).
-TODO: Eneba styling pass, deploy. See `SPEC.md`.
+Deployed and working end to end (store, search, product, cart, checkout, keys, order history).
+
+| Part | What it does |
+|---|---|
+| Store | Filters (platform, region, genre, price slider), sort, typo-tolerant search, pagination; state in the URL. |
+| Homepage | 8 blocks, each from its own endpoint (banners, recently viewed, recommended, best sellers, gift cards, top-ups, pre-orders, categories). |
+| Search | Header dropdown from anywhere; trigram matching copes with typos and partial names (`witchr`, `eldne rign`). |
+| Product page | Details + offers from several sellers, cheapest first, add to cart per offer. |
+| Cart | Server-side: adding an item reserves real keys from the pool for 30 min; no overselling (transactions). |
+| Checkout | Simulated payment, then the reserved keys are delivered and shown with copy buttons. |
+| Auth | Firebase email/password + Google. Guests can browse and fill a cart; **paying and order history need an account** (sign-in popup at "Apmokėti"); guest data merges into the account on sign-in. |
+| Styling | Colors, font (Metropolis), sizes from eneba.com's CSS in `tokens.css`; components use only those variables. |
+
+Known gaps (see `SPEC.md`): no real cover images (cards show the name on a gradient), store filters do
+not collapse on phones yet.
 
 Firestore collections: `products`, `offers` (stock = available keys), `banners`,
 `keys` (`offerId, code, status: available|reserved|sold, orderId`) and
