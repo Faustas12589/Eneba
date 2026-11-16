@@ -6,6 +6,7 @@ import { ProductCard } from "../../components/ProductCard";
 import { Pager } from "../../components/Pager";
 import { formatItemCount, regionLabel } from "../../lib/format";
 import { categoryLabel } from "../../lib/categories";
+import { PriceFilter } from "./PriceFilter";
 
 const SORTS = [
   { value: "", label: "Populiariausi" },
@@ -41,13 +42,21 @@ export function StorePage() {
     setSp(next);
   }
 
-  function toggle(key: "category" | "platform" | "region" | "genre", value: string) {
+  function toggle(key: "platform" | "region" | "genre", value: string) {
     const cur = list(sp.get(key));
     set(key, (cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value]).join(","));
   }
 
-  // Price inputs are in euros for the user; the API takes cents.
-  const euros = (cents?: number) => (cents ? String(cents / 100) : "");
+  // Both ends of the price range change in one URL update (cents, like the API).
+  function setPrice(from?: number, to?: number) {
+    const next = new URLSearchParams(sp);
+    for (const [key, v] of [["minPrice", from], ["maxPrice", to]] as const) {
+      if (v) next.set(key, String(v));
+      else next.delete(key);
+    }
+    next.delete("page");
+    setSp(next);
+  }
 
   return (
     <div className="page container store">
@@ -55,9 +64,16 @@ export function StorePage() {
         <Status state={state}>
           {({ facets }) => (
             <>
+              {/* No "Kategorija" checkboxes: the category comes from the header row or the
+                  side menu. The price range comes first instead. */}
+              <PriceFilter
+                bounds={{ min: facets.priceMin, max: facets.priceMax }}
+                from={query.minPrice}
+                to={query.maxPrice}
+                onApply={setPrice}
+              />
               {(
                 [
-                  ["category", "Kategorija", facets.categories],
                   ["platform", "Platforma", facets.platforms],
                   ["region", "Regionas", facets.regions],
                   ["genre", "Žanras", facets.genres],
@@ -68,7 +84,7 @@ export function StorePage() {
                   {values.map((v) => (
                     <label key={v} className="check">
                       <input type="checkbox" checked={list(sp.get(key)).includes(v)} onChange={() => toggle(key, v)} />
-                      {key === "category" ? categoryLabel(v) : key === "region" ? regionLabel(v) : v}
+                      {key === "region" ? regionLabel(v) : v}
                     </label>
                   ))}
                 </fieldset>
@@ -76,11 +92,6 @@ export function StorePage() {
             </>
           )}
         </Status>
-        <div>
-          <label>Kaina (EUR)</label>
-          <input type="number" min={0} placeholder="Nuo" value={euros(query.minPrice)} onChange={(e) => set("minPrice", e.target.value ? String(Math.round(Number(e.target.value) * 100)) : "")} style={{ width: "48%" }} />{" "}
-          <input type="number" min={0} placeholder="Iki" value={euros(query.maxPrice)} onChange={(e) => set("maxPrice", e.target.value ? String(Math.round(Number(e.target.value) * 100)) : "")} style={{ width: "48%" }} />
-        </div>
       </aside>
 
       <section>

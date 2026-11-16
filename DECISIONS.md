@@ -337,3 +337,17 @@ button would mislead); wishlist heart and language picker (as in #27); drawer su
 the › arrows (each row links straight to the store filter).
 Rejected: a tooltip library (new dependency for one pop-up); fake categories to fill the icon row
 (they would lead to empty store pages).
+
+## 30. Store sidebar: price range slider instead of the "Kategorija" checkboxes
+The category already comes from the header row, the side menu (#29) and the homepage icons, so
+the sidebar's first section is now a price range: a two-handle slider plus "Nuo/Iki" boxes in
+whole euros (URL and API stay in cents, rule 2). The slider's ends come from the API:
+`facets.priceMin/priceMax` are the cheapest and dearest products matching every filter except
+price, so inside "Žaidimai" it spans the games, and moving the handles never shrinks the slider
+itself (test: `TestListPriceRange`). The store reloads when a handle is let go or a box is left
+or Entered, not on every keystroke like the old inputs; an empty box or a handle at the end means
+no limit on that side.
+Rejected: a slider library (two stacked native `<input type="range">` do it with ~30 lines of
+CSS); fixed bounds such as 0-100 € (useless for cheap categories); keeping category checkboxes
+as well (the user asked for them to go; `?category=` in the URL still filters).
+

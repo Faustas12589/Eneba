@@ -83,6 +83,10 @@ type Facets struct {
 	Regions    []string `json:"regions"`
 	Genres     []string `json:"genres"`
 	Categories []string `json:"categories"`
+	// Price range (cents) of the products matching every filter except price,
+	// so the store's price slider spans what this category/search can return.
+	PriceMin int `json:"priceMin"`
+	PriceMax int `json:"priceMax"`
 }
 
 type Page struct {
@@ -120,11 +124,16 @@ func (c *Catalog) List(ctx context.Context, f Filter) (Page, error) {
 	}
 
 	out := make([]domain.Product, 0, len(pool))
+	priceMin, priceMax := 0, 0
 	for _, p := range pool {
 		if !inSet(f.Platforms, p.Platform) || !inSet(f.Regions, p.Region) || !inSet(f.Genres, p.Genre) ||
 			!inSet(f.Categories, p.Category) {
 			continue
 		}
+		if priceMin == 0 || p.PriceFrom < priceMin {
+			priceMin = p.PriceFrom
+		}
+		priceMax = max(priceMax, p.PriceFrom)
 		if f.MinPrice > 0 && p.PriceFrom < f.MinPrice {
 			continue
 		}
@@ -138,7 +147,9 @@ func (c *Catalog) List(ctx context.Context, f Filter) (Page, error) {
 
 	total := len(out)
 	start, end := pageBounds(f.Page, f.PageSize, total)
-	return Page{Items: out[start:end], Total: total, Page: f.Page, PageSize: f.PageSize, Facets: facets(all)}, nil
+	fc := facets(all)
+	fc.PriceMin, fc.PriceMax = priceMin, priceMax
+	return Page{Items: out[start:end], Total: total, Page: f.Page, PageSize: f.PageSize, Facets: fc}, nil
 }
 
 // pageBounds returns the slice range [start, end) of a 1-based page. A page

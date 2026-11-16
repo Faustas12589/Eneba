@@ -48,6 +48,8 @@ export interface Facets {
   regions: string[];
   genres: string[];
   categories: string[];
+  priceMin: number; // cents: cheapest product matching every filter except price
+  priceMax: number; // cents
 }
 
 export interface ProductPage {

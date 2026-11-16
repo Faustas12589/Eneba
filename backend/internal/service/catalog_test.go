@@ -81,6 +81,32 @@ func TestListByCategory(t *testing.T) {
 	}
 }
 
+// The price range covers the products matching every filter except price,
+// so narrowing the price does not shrink the slider's own bounds.
+func TestListPriceRange(t *testing.T) {
+	s := newSvc(t)
+	ctx := context.Background()
+
+	pg, err := s.List(ctx, Filter{Categories: []string{"dlc"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lo, hi := pg.Items[0].PriceFrom, pg.Items[0].PriceFrom
+	for _, p := range pg.Items {
+		lo, hi = min(lo, p.PriceFrom), max(hi, p.PriceFrom)
+	}
+	if pg.Facets.PriceMin != lo || pg.Facets.PriceMax != hi {
+		t.Fatalf("DLC price range: got %d-%d, want %d-%d", pg.Facets.PriceMin, pg.Facets.PriceMax, lo, hi)
+	}
+	narrowed, _ := s.List(ctx, Filter{Categories: []string{"dlc"}, MinPrice: hi})
+	if narrowed.Total != 1 && lo != hi {
+		t.Errorf("min price = most expensive DLC: got %d products", narrowed.Total)
+	}
+	if narrowed.Facets.PriceMin != lo || narrowed.Facets.PriceMax != hi {
+		t.Errorf("price filter changed the range: %d-%d", narrowed.Facets.PriceMin, narrowed.Facets.PriceMax)
+	}
+}
+
 func TestListSearchTypo(t *testing.T) {
 	s := newSvc(t)
 	pg, err := s.List(context.Background(), Filter{Q: "eldne rign"})
