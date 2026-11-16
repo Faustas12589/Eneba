@@ -31,12 +31,13 @@ export function App() {
       <AuthProvider>
         <CartProvider>
         <Routes>
+          {/* Like Eneba, the login page has no shop header/footer. */}
+          <Route path="/login" element={<LoginPage />} />
           <Route element={<Layout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/store" element={<StorePage />} />
             <Route path="/product/:id" element={<ProductPage />} />
             <Route path="/cart" element={<CartPage />} />
-            <Route path="/login" element={<LoginPage />} />
             {/* Guests may use checkout and orders too; paying asks them to sign in (DECISIONS #28). */}
             <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/orders" element={<OrdersPage />} />

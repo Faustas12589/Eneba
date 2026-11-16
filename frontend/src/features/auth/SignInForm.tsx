@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "./AuthContext";
+import { GoogleIcon } from "../../components/Icons";
 
 /** Firebase error codes -> text the shopper can act on. null = say nothing (they closed the popup). */
 function authError(e: unknown): string | null {
@@ -30,10 +31,15 @@ function authError(e: unknown): string | null {
   }
 }
 
-/** Email/password (sign in or register) + Google. Used by /login and the checkout popup. */
-export function SignInForm({ onDone }: { onDone: () => void }) {
+type Mode = "login" | "register";
+
+/**
+ * Email/password (sign in or register) + Google, laid out like Eneba's login panel.
+ * Used by /login and the checkout popup; `title` = false when the popup has its own heading.
+ */
+export function SignInForm({ onDone, initialMode = "login", title = true }: { onDone: () => void; initialMode?: Mode; title?: boolean }) {
   const { signIn, register, signInWithGoogle, configured } = useAuth();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -58,13 +64,26 @@ export function SignInForm({ onDone }: { onDone: () => void }) {
     run(() => (mode === "login" ? signIn(email, password) : register(email, password, name.trim())));
   };
 
+  const switchMode = () => {
+    setMode(mode === "login" ? "register" : "login");
+    setError(null);
+  };
+
   return (
     <div className="signin">
+      <div>
+        {title && <h1 className="signin-title">{mode === "login" ? "Prisijungti" : "Susikurk paskyrą"}</h1>}
+        <p className="signin-switch">
+          {mode === "login" ? "Naujas vartotojas? " : "Jau turi paskyrą? "}
+          <button type="button" onClick={switchMode}>{mode === "login" ? "Susikurk paskyrą" : "Prisijunk"}</button>
+        </p>
+      </div>
       {!configured && <p className="muted small">Kūrimo režimas: Firebase nesukonfigūruotas, todėl bet koks el. paštas ir slaptažodis prijungia vietinį testinį naudotoją.</p>}
-      <button type="button" className="btn secondary block" disabled={busy} onClick={() => run(signInWithGoogle)}>
-        Tęsti su Google
+      <button type="button" className="btn-google" disabled={busy} onClick={() => run(signInWithGoogle)}>
+        <GoogleIcon size={22} />
+        <span>Tęsti naudojant Google</span>
       </button>
-      <p className="signin-or muted small">arba</p>
+      <p className="signin-or">arba</p>
       <form className="form" onSubmit={submit}>
         {mode === "register" && (
           <input placeholder="Vardas" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -80,13 +99,10 @@ export function SignInForm({ onDone }: { onDone: () => void }) {
           required
         />
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="btn block" disabled={busy}>
+        <button className="btn block signin-submit" disabled={busy}>
           {busy ? "Palaukite…" : mode === "login" ? "Prisijungti" : "Registruotis"}
         </button>
       </form>
-      <button type="button" className="link-btn" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(null); }}>
-        {mode === "login" ? "Neturite paskyros? Registruokitės" : "Jau turite paskyrą? Prisijunkite"}
-      </button>
     </div>
   );
 }

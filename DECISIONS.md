@@ -315,3 +315,25 @@ starting accounts empty (a guest who signs in mid-shop would lose their history)
 initials avatars (the user asked for the picture only); Firebase UI library (new dependency).
 Trade-off: whoever holds a guest id can merge that guest's data into their account, the same
 trust model as reading those orders with the id (#20). Merging is not undone on sign-out.
+
+## 29. Third design pass: login page, category drawer, icon row, section info pop-ups
+From the new screenshots in `docs/screens/` (header logged in/off, log in page, categories side
+bar, info pop up):
+- Header: signed out shows "👤 Prisijungti | Registruotis" (register = `/login?mode=register`);
+  signed in shows the avatar menu (#28). Category row links use the new `--color-text-nav`.
+- `/login` is its own page outside the shop layout, like Eneba's: greeting on the left, panel on
+  the right, white Google button with Google's G (their branding asks for it; colors are tokens).
+  The same `SignInForm` is used in the checkout popup.
+- "☰ Kategorijos" opens a left drawer (`CategoryDrawer`): "Visi pasiūlymai", the 5 categories,
+  then the platforms from the store's facets (no hardcoded platform list).
+- Icon row: name only (the count is gone from the UI; the endpoint still returns it), smaller and
+  tighter. Our 5 categories repeat to fill the row (asked for the look), and a reusable
+  `ScrollRow` adds ‹ › buttons that only show when there is more to scroll that way.
+- Rails: "Rodyti visus" is an outlined button under the cards. Every section title has an ⓘ
+  (`InfoTip`) whose dark pop-up says what the block shows and how it differs for guests vs
+  signed-in users. Shown with CSS on hover/focus, no state.
+Skipped on purpose: Facebook/Apple/Steam/Discord buttons and magic-link email (not built, a dead
+button would mislead); wishlist heart and language picker (as in #27); drawer sub-menus behind
+the › arrows (each row links straight to the store filter).
+Rejected: a tooltip library (new dependency for one pop-up); fake categories to fill the icon row
+(they would lead to empty store pages).

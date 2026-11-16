@@ -21,6 +21,24 @@ export const UserIcon = (p: P) => (
 );
 export const MenuIcon = (p: P) => <Svg {...p}><path d="M3 6h18M3 12h18M3 18h18" /></Svg>;
 export const SearchIcon = (p: P) => <Svg {...p}><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></Svg>;
+export const ChevronLeft = (p: P) => <Svg {...p}><path d="M15 5l-7 7 7 7" /></Svg>;
+export const ChevronRight = (p: P) => <Svg {...p}><path d="M9 5l7 7-7 7" /></Svg>;
+export const CloseIcon = (p: P) => <Svg {...p}><path d="M5 5l14 14M19 5L5 19" /></Svg>;
+export const InfoIcon = (p: P) => (
+  <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 11v6" /><circle cx="12" cy="7.5" r="0.6" /></Svg>
+);
+
+/** Google's four-color "G" for the sign-in button (their branding asks for it). Colors are tokens. */
+export function GoogleIcon({ size = 20 }: P) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 18 18" aria-hidden="true">
+      <path style={{ fill: "var(--color-google-blue)" }} d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.87 2.69-6.62z" />
+      <path style={{ fill: "var(--color-google-green)" }} d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.34 0-4.33-1.58-5.04-3.71H.96v2.33A9 9 0 0 0 9 18z" />
+      <path style={{ fill: "var(--color-google-yellow)" }} d="M3.96 10.71A5.4 5.4 0 0 1 3.68 9c0-.59.1-1.17.28-1.71V4.96H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.04l3-2.33z" />
+      <path style={{ fill: "var(--color-google-red)" }} d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.96l3 2.33C4.67 5.16 6.66 3.58 9 3.58z" />
+    </svg>
+  );
+}
 
 /** One icon per category id (domain.Categories). */
 export function CategoryIcon({ id, size = 36 }: P & { id: string }) {

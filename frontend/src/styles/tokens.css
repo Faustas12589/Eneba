@@ -22,6 +22,17 @@
   --color-badge: #d32252;       /* red count badge on the cart icon */
   --color-success: #23c299;
   --color-overlay: rgba(31, 10, 77, 0.75);
+  --color-text-nav: #dad6e4;    /* category row links under the search bar */
+  --color-tooltip: #221b31;     /* dark info pop-up next to section titles */
+  --color-login-bg: #200d4f;    /* login page background */
+  --color-input-dark: #3c1595;  /* inputs on the login panel */
+  /* "Continue with Google" button: Google's own white button and four-color G */
+  --color-google-bg: #ffffff;
+  --color-google-text: #1f1f1f;
+  --color-google-blue: #4285f4;
+  --color-google-green: #34a853;
+  --color-google-yellow: #fbbc05;
+  --color-google-red: #ea4335;
   --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
 
   /* typography */

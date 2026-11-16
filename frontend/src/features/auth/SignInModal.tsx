@@ -17,7 +17,7 @@ export function SignInModal({ onClose, onSignedIn }: { onClose: () => void; onSi
         <button type="button" className="modal-close" aria-label="Uždaryti" onClick={onClose}>×</button>
         <h2 id="signin-title">Prisijungimas būtinas</h2>
         <p className="muted small">Norėdami apmokėti, prisijunkite arba susikurkite paskyrą. Jūsų krepšelis išliks.</p>
-        <SignInForm onDone={onSignedIn} />
+        <SignInForm onDone={onSignedIn} title={false} />
       </div>
     </div>
   );

@@ -2,12 +2,25 @@ import { Link, useLocation } from "react-router-dom";
 import { useDropdown } from "../../lib/useDropdown";
 import { useAuth } from "./AuthContext";
 import { Avatar } from "./Avatar";
+import { UserIcon } from "../../components/Icons";
 
-/** Header avatar + dropdown: who is signed in and their links, or a sign-in link for guests. */
+/** Header account area: sign-in/register links for guests; avatar + dropdown when signed in. */
 export function AccountMenu() {
   const { user, signOut } = useAuth();
   const { open, setOpen, ref, close } = useDropdown();
   const { pathname } = useLocation();
+
+  // Signed out: Eneba's "👤 Prisijungti | Registruotis" text links, no dropdown.
+  if (!user) {
+    return (
+      <div className="auth-links">
+        <UserIcon size={26} />
+        <Link to="/login" state={{ from: pathname }}>Prisijungti</Link>
+        <span className="auth-sep" aria-hidden="true">|</span>
+        <Link to="/login?mode=register" state={{ from: pathname }}>Registruotis</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="account-menu" ref={ref}>
@@ -16,15 +29,14 @@ export function AccountMenu() {
         className="nav-btn avatar-btn"
         aria-expanded={open}
         aria-label="Paskyra"
-        title={user ? user.name || user.email || "Paskyra" : "Prisijungti"}
+        title={user.name || user.email || "Paskyra"}
         onClick={() => setOpen((o) => !o)}
       >
         <Avatar user={user} />
       </button>
       {open && (
         <div className="account-dropdown">
-          {user ? (
-            <>
+          <>
               <div className="account-who">
                 <Avatar user={user} size={48} />
                 <div className="account-who-text">
@@ -37,13 +49,7 @@ export function AccountMenu() {
               <button type="button" className="account-signout" onClick={() => { close(); signOut(); }}>
                 Atsijungti
               </button>
-            </>
-          ) : (
-            <>
-              <Link to="/login" state={{ from: pathname }} className="btn block" onClick={close}>Prisijungti</Link>
-              <Link to="/orders" onClick={close}>Mano užsakymai</Link>
-            </>
-          )}
+          </>
         </div>
       )}
     </div>
