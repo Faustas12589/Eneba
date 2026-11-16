@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { formatPrice, formatTime } from "../../lib/format";
 import { useCart } from "./CartContext";
+import { Cover } from "../../components/Cover";
 import type { OrderItem } from "../../types";
 
 /**
@@ -23,7 +24,7 @@ export function CartLine({ item }: { item: OrderItem }) {
 
   return (
     <li className="cart-line">
-      {item.imageUrl ? <img className="cart-img" src={item.imageUrl} alt="" /> : <div className="cart-img" />}
+      <Cover className="cart-img" size="thumb" productId={item.productId} name={item.productName} imageUrl={item.imageUrl} />
       <div className="cart-info">
         <span className="muted small">Parduoda <strong>{item.sellerName}</strong></span>
         <Link to={`/product/${item.productId}`} className="cart-title">{item.productName}</Link>

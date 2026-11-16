@@ -6,6 +6,7 @@ import { useAsync } from "../../lib/useAsync";
 import { formatPrice, regionLabel } from "../../lib/format";
 import { categoryLabel } from "../../lib/categories";
 import { Status } from "../../components/Status";
+import { Cover } from "../../components/Cover";
 import { useCart } from "../cart/CartContext";
 
 export function ProductPage() {
@@ -31,7 +32,7 @@ export function ProductPage() {
       <Status state={state}>
         {({ product: p, offers }) => (
           <div className="product">
-            {p.imageUrl ? <img className="card-img" src={p.imageUrl} alt={p.name} /> : <div className="card-img" />}
+            <Cover className="card-img" size="large" productId={p.id} name={p.name} imageUrl={p.imageUrl} category={p.category} />
             <div>
               <h1>{p.name}</h1>
               <p className="muted">

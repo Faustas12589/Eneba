@@ -34,6 +34,16 @@
   --color-google-yellow: #fbbc05;
   --color-google-red: #ea4335;
   --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  /* generated product covers (components/Cover.tsx): 6 gradients, picked per product id.
+     Hues from Eneba's palette above, plus a blue for variety; each fades into the card color. */
+  --cover-1-from: #7a4edf;  --cover-1-to: #2c0e6c;   /* violet */
+  --cover-2-from: #d32252;  --cover-2-to: #351183;   /* crimson */
+  --cover-3-from: #23c299;  --cover-3-to: #1f0a4d;   /* teal */
+  --cover-4-from: #3a6ff0;  --cover-4-to: #1f0a4d;   /* blue */
+  --cover-5-from: #f0a613;  --cover-5-to: #5825cc;   /* amber */
+  --cover-6-from: #e76a8c;  --cover-6-to: #2c0e6c;   /* pink */
+  --cover-shade: rgba(31, 10, 77, 0.85);              /* bottom fade so the title stays readable */
+  --cover-stripe: rgba(255, 255, 255, 0.05);          /* faint diagonal texture */
 
   /* typography */
   --font-sans: "Metropolis", Arial, Helvetica, sans-serif;

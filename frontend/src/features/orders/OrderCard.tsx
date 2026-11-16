@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { formatPrice } from "../../lib/format";
 import type { Order, OrderStatus } from "../../types";
+import { Cover } from "../../components/Cover";
 
 const STATUS: Record<OrderStatus, string> = {
   cart: "Krepšelis",
@@ -21,7 +22,7 @@ export function OrderCard({ order }: { order: Order }) {
       <ul className="order-items">
         {order.items.map((it) => (
           <li key={it.offerId} className="order-item">
-            {it.imageUrl ? <img className="cart-img" src={it.imageUrl} alt="" /> : <div className="cart-img" />}
+            <Cover className="cart-img" size="thumb" productId={it.productId} name={it.productName} imageUrl={it.imageUrl} />
             <div className="cart-info">
               <Link to={`/product/${it.productId}`} className="cart-title">{it.productName}</Link>
               <span className="muted small">

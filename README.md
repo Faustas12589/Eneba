@@ -74,8 +74,8 @@ Deployed and working end to end (store, search, product, cart, checkout, keys, o
 | Auth | Firebase email/password + Google. Guests can browse and fill a cart; **paying and order history need an account** (sign-in popup at "Apmokėti"); guest data merges into the account on sign-in. |
 | Styling | Colors, font (Metropolis), sizes from eneba.com's CSS in `tokens.css`; components use only those variables. |
 
-Known gaps (see `SPEC.md`): no real cover images (cards show the name on a gradient), store filters do
-not collapse on phones yet.
+Known gaps (see `SPEC.md`): covers are generated (gradient + category icon + title, `DECISIONS.md` #33)
+instead of real art, and store filters do not collapse on phones yet.
 
 Firestore collections: `products`, `offers` (stock = available keys), `banners`,
 `keys` (`offerId, code, status: available|reserved|sold, orderId`) and

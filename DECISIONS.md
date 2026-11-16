@@ -375,3 +375,17 @@ sign-in required -> Payment). Old guest orders are not lost: they merge into the
 while the personal homepage blocks still accept a guest id.
 Rejected: keeping guest order history and justifying it (the spec names it explicitly, and with
 paying behind login it would only ever show an empty list).
+
+## 33. Generated product covers instead of images (refines #24)
+The seed has no cover art, and the real art belongs to Eneba or the publishers (#24 already
+rejected copying it). The plain "name on one gradient" made every card look the same, so
+`components/Cover.tsx` draws a cover when `imageUrl` is empty: one of 6 gradients from `tokens.css`,
+a faint diagonal stripe, the category icon as a watermark, the category label and the title.
+- The gradient is picked by `coverVariant(productId)` (`lib/cover.ts`): a plain string hash mod 6.
+  The same product gets the same color on its card, product page, cart line and order (cart and
+  order lines only know id + name, so they show the color and the first letter).
+- Pure CSS (layered `background`s + custom properties), no images to host; a real `imageUrl`
+  still wins, so adding art later is a data change only.
+Rejected: Steam's CDN art (looks closest to Eneba, but not ours to use, and gift cards/top-ups have
+none); random colors per render (a product would change color on every visit); an image service
+such as placeholder.com (outside dependency at runtime for something CSS can do).

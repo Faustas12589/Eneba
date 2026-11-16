@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { Product } from "../types";
 import { formatPrice, regionLabel } from "../lib/format";
 import { useCart } from "../features/cart/CartContext";
+import { Cover } from "./Cover";
 
 /**
  * Eneba-style card: cover, platform strip, then title, region, "Nuo" + old price, price.
@@ -29,11 +30,7 @@ export function ProductCard({ p }: { p: Product }) {
     <div className="card">
       <Link to={`/product/${p.id}`} className="card-link">
         {p.preOrder && <span className="card-tag" title="Išankstinis užsakymas">Iš anksto · {p.releaseDate}</span>}
-        {p.imageUrl ? (
-          <img className="card-img" src={p.imageUrl} alt={p.name} />
-        ) : (
-          <div className="card-img card-img-empty" aria-hidden="true">{p.name}</div>
-        )}
+        <Cover className="card-img" productId={p.id} name={p.name} imageUrl={p.imageUrl} category={p.category} />
         <div className="card-platform">{p.platform}</div>
         <div className="card-body">
           <div className="card-title">{p.name}</div>
