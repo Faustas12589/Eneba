@@ -12,6 +12,7 @@ frontend/dist/
 
 # go
 backend/bin/
+*.exe
 *.test
 *.out
 

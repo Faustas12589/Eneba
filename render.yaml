@@ -29,6 +29,8 @@ services:
         source: /*
         destination: /index.html
     envVars:
+      - key: NODE_VERSION                # Vite 8 needs Node >= 20.19
+        value: "22"
       - key: VITE_API_URL                # the API URL, e.g. https://eneba-api.onrender.com
         sync: false
       - key: VITE_FIREBASE_API_KEY
