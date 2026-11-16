@@ -45,11 +45,15 @@ func main() {
 	must(seeds.Load("banners", &banners))
 	keys := seeds.Keys(offers)
 
-	// Step 1: delete. Re-seeding resets offer stock and the key pool, so carts
+	// Step 1: delete every collection, so the database matches the seed exactly
+	// (no stale products left from an older seed). Re-seeding resets offer stock and the key pool, so carts
 	// and orders that point at old keys must go too. Old "reservations" docs
 	// are from before carts became orders.
 	del := newBatch(fs, ctx)
-	for _, col := range []string{repository.ColKeys, repository.ColOrders, repository.ColReservations} {
+	for _, col := range []string{
+		repository.ColProducts, repository.ColOffers, repository.ColBanners, repository.ColKeys,
+		repository.ColOrders, repository.ColProfiles, repository.ColReservations,
+	} {
 		docs, err := fs.Collection(col).Documents(ctx).GetAll()
 		must(err)
 		for _, d := range docs {
@@ -73,7 +77,7 @@ func main() {
 		bw.set(fs.Collection(repository.ColKeys).Doc(k.ID), k)
 	}
 	bw.finish("write")
-	log.Printf("seeded %d products, %d offers, %d banners, %d keys; deleted %d old keys/orders/reservations",
+	log.Printf("seeded %d products, %d offers, %d banners, %d keys; deleted %d old docs",
 		len(products), len(offers), len(banners), len(keys), deleted)
 }
 
