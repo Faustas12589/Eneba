@@ -4,12 +4,17 @@ import { useAsync } from "../../lib/useAsync";
 import { Status } from "../../components/Status";
 import { Pager } from "../../components/Pager";
 import { OrderCard } from "./OrderCard";
+import { useAuth } from "../auth/AuthContext";
 
-/** This browser's past orders (newest first, paged) with their key codes. Page number lives in the URL. */
+/**
+ * The user's past orders (or this browser's, for a guest), newest first, paged,
+ * with their key codes. Page number lives in the URL. Reloads on sign-in/out.
+ */
 export function OrdersPage() {
   const [sp, setSp] = useSearchParams();
   const page = Number(sp.get("page")) || 1;
-  const state = useAsync((signal) => api.orders(page, signal), [page]);
+  const uid = useAuth().user?.uid;
+  const state = useAsync((signal) => api.orders(page, signal), [page, uid]);
 
   function goTo(n: number) {
     setSp(n > 1 ? { page: String(n) } : {});

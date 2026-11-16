@@ -111,3 +111,11 @@ export interface OutOfStock {
   stock: number;
   quantity: number;
 }
+
+/** GET /api/me: purchase numbers for the account page (name, photo etc. come from Firebase Auth). */
+export interface Account {
+  uid: string;
+  email: string;
+  orderCount: number;
+  totalSpent: number; // cents
+}

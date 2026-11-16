@@ -230,6 +230,27 @@ func (f *Firestore) ListUserOrders(ctx context.Context, userID string) ([]domain
 	return listAll[domain.Order](ctx, f.c.Collection(ColOrders).Where("userId", "==", userID))
 }
 
+// MoveUserOrders re-reads the user's orders inside the transaction, so an order
+// paid while the move runs is moved too (Firestore retries if one changes).
+func (f *Firestore) MoveUserOrders(ctx context.Context, from, to string) (int, error) {
+	q := f.c.Collection(ColOrders).Where("userId", "==", from)
+	n := 0
+	err := f.c.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		docs, err := tx.Documents(q).GetAll()
+		if err != nil {
+			return err
+		}
+		n = len(docs)
+		for _, d := range docs {
+			if err := tx.Update(d.Ref, []firestore.Update{{Path: "userId", Value: to}}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return n, err
+}
+
 // decode turns a document read into a value; a missing document is ErrNotFound.
 func decode[T any](snap *firestore.DocumentSnapshot, err error) (*T, error) {
 	if status.Code(err) == codes.NotFound {

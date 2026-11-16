@@ -12,10 +12,10 @@ status; the "why" column is what I will say when asked.
 | Homepage blocks | Done | 8 blocks, each its own endpoint, alternating bands: banners, recently viewed, recommended (#25), best sellers, gift cards, top-ups, pre-orders, category counts (#26). |
 | Search | Scaffolded | Typo/partial tolerant (trigram), header dropdown + results via store page. |
 | Product page + seller offers | Scaffolded | Offer comparison table with add-to-cart per offer. |
-| Auth | Switched off | Firebase Auth email/password code is kept but not used: orders belong to a browser guest id for now (DECISIONS #20). Dev mode without Firebase (#10). TODO: turn back on; Google sign-in? (optional) |
+| Auth | Done | Firebase email/password + Google. Guests can do everything but pay; paying opens a sign-in popup, and guest views/orders merge into the account on sign-in (DECISIONS #28). Avatar menu + `/account` page. |
 | Cart | Done | The cart is a server-side order (status `cart`); the UI renders that document and the browser keeps only the cart id. Stock + keys reserved when an item is added (DECISIONS #15, #19, #21). Popup, header dropdown, live stock errors. |
 | Checkout + key delivery | Done | Cart is the first stage of an order: cart -> paid -> delivered. Keys are reserved from the available pool when added to the cart, sold on delivery. Line data (name, price, keys) is written once at add time; checkout only changes status fields. Simulated payment (DECISIONS #8, #19, #21). |
-| Order history | Done | Per browser guest id while login is off (DECISIONS #20); `GET /api/orders?page=`, paged 10 per page (#22), lists orders with copyable key codes. |
+| Order history | Done | Per account, or per browser guest id for guests (DECISIONS #20, #28); `GET /api/orders?page=`, paged 10 per page (#22), lists orders with copyable key codes. |
 | Eneba styling | Done | Values from eneba.com CSS in docs/DESIGN.md -> tokens.css; header, cards, store, product, cart restyled (DECISIONS #24). Mobile filter drawer still TODO. |
 
 ## Explicitly out of scope (and why)

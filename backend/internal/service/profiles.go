@@ -90,6 +90,36 @@ func (s *Profiles) Recommended(ctx context.Context, userID string, n int) ([]dom
 	return recommend(all, history, n), nil
 }
 
+// MergeGuest runs when a guest signs in: the guest's recently viewed products
+// go to the front of the account's list, and the guest's orders become the
+// account's (DECISIONS #28). Safe to repeat: views are deduplicated and an
+// order that already moved is no longer the guest's. Returns how many orders moved.
+func (s *Profiles) MergeGuest(ctx context.Context, userID, guestUserID string) (int, error) {
+	guestViews, err := s.viewed(ctx, guestUserID)
+	if err != nil {
+		return 0, err
+	}
+	if len(guestViews) > 0 {
+		now := time.Now()
+		if _, err := s.repo.UpdateProfile(ctx, userID, func(p *domain.Profile) error {
+			p.RecentlyViewed = mergeViews(guestViews, p.RecentlyViewed, maxViewed)
+			p.UpdatedAt = now
+			return nil
+		}); err != nil {
+			return 0, err
+		}
+		// Empty the guest's list only after the account has it: a crash in between
+		// leaves a duplicate, which the next merge removes, never a lost view.
+		if _, err := s.repo.UpdateProfile(ctx, guestUserID, func(p *domain.Profile) error {
+			p.RecentlyViewed, p.UpdatedAt = nil, now
+			return nil
+		}); err != nil {
+			return 0, err
+		}
+	}
+	return s.orders.MoveUserOrders(ctx, guestUserID, userID)
+}
+
 // viewed is the user's recently viewed ids; a user without a profile has none.
 func (s *Profiles) viewed(ctx context.Context, userID string) ([]string, error) {
 	p, err := s.repo.GetProfile(ctx, userID)
@@ -109,6 +139,17 @@ func addView(list []string, id string, max int) []string {
 		if v != id && len(out) < max {
 			out = append(out, v)
 		}
+	}
+	return out
+}
+
+// mergeViews puts the guest's views (newest first) in front of the account's
+// own, without duplicates, keeping at most max ids. The guest's views are the
+// newest because they happened just before signing in.
+func mergeViews(guest, account []string, max int) []string {
+	out := account
+	for i := len(guest) - 1; i >= 0; i-- { // oldest first, so the newest ends up in front
+		out = addView(out, guest[i], max)
 	}
 	return out
 }

@@ -1,4 +1,4 @@
-// Package middleware holds HTTP middleware: CORS and Firebase auth.
+// Package middleware holds HTTP middleware: CORS, Firebase auth and guest ids.
 package middleware
 
 import (
@@ -40,8 +40,8 @@ func RequireAuth(v TokenVerifier) func(http.Handler) http.Handler {
 				http.Error(w, `{"error":"auth not configured"}`, http.StatusServiceUnavailable)
 				return
 			}
-			tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-			if tok == "" || tok == r.Header.Get("Authorization") {
+			tok := bearer(r)
+			if tok == "" {
 				http.Error(w, `{"error":"missing bearer token"}`, http.StatusUnauthorized)
 				return
 			}
@@ -53,6 +53,31 @@ func RequireAuth(v TokenVerifier) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, u)))
 		})
 	}
+}
+
+// Identify is for routes guests may use too (order history, profile blocks).
+// A request with a bearer token is the signed-in user (a bad token is 401, never
+// a silent fall back to guest); without one it is the browser's guest id.
+func Identify(v TokenVerifier) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		asUser, asGuest := RequireAuth(v)(next), RequireGuest()(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if bearer(r) != "" {
+				asUser.ServeHTTP(w, r)
+				return
+			}
+			asGuest.ServeHTTP(w, r)
+		})
+	}
+}
+
+// bearer returns the token from "Authorization: Bearer <token>", or "" if there is none.
+func bearer(r *http.Request) string {
+	tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok {
+		return ""
+	}
+	return tok
 }
 
 func UserFrom(ctx context.Context) *User {

@@ -1,6 +1,6 @@
 import { getIdToken } from "./firebase";
 import { guestId } from "./guest";
-import type { Banner, CartUpdate, CategoryCount, Order, OrderPage, Product, ProductDetail, ProductPage } from "../types";
+import type { Account, Banner, CartUpdate, CategoryCount, Order, OrderPage, Product, ProductDetail, ProductPage } from "../types";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
@@ -16,8 +16,9 @@ export class ApiError extends Error {
 }
 
 interface RequestOpts {
-  auth?: boolean;
-  guest?: boolean; // send this browser's guest id (orders, while login is off)
+  auth?: boolean; // send the login token (routes only signed-in users may use)
+  /** Routes guests may use too: the login token if signed in, else this browser's guest id. */
+  user?: boolean;
   signal?: AbortSignal;
   method?: "GET" | "PUT" | "POST";
   body?: unknown; // sent as JSON
@@ -25,11 +26,11 @@ interface RequestOpts {
 
 async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   const headers: Record<string, string> = {};
-  if (opts.auth) {
+  if (opts.auth || opts.user) {
     const token = await getIdToken();
     if (token) headers.Authorization = `Bearer ${token}`;
+    else if (opts.user) headers["X-Guest-Id"] = guestId();
   }
-  if (opts.guest) headers["X-Guest-Id"] = guestId();
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   const res = await fetch(`${BASE}${path}`, {
     method: opts.method ?? "GET",
@@ -80,12 +81,12 @@ export const api = {
   topUps: () => request<{ items: Product[] }>("/api/home/top-ups"),
   preOrders: () => request<{ items: Product[] }>("/api/home/pre-orders"),
   categoryCounts: () => request<{ items: CategoryCount[] }>("/api/home/categories"),
-  /** Personal blocks: built from this browser's profile (guest id while login is off). */
-  recentlyViewed: () => request<{ items: Product[] }>("/api/home/recently-viewed", { guest: true }),
-  recommended: () => request<{ items: Product[] }>("/api/home/recommended", { guest: true }),
+  /** Personal blocks: built from the signed-in user's profile, or this browser's guest profile. */
+  recentlyViewed: () => request<{ items: Product[] }>("/api/home/recently-viewed", { user: true }),
+  recommended: () => request<{ items: Product[] }>("/api/home/recommended", { user: true }),
   /** Remember that this browser opened a product page (feeds the two blocks above). */
   recordView: (productId: string) =>
-    request<void>("/api/profile/views", { guest: true, method: "POST", body: { productId } }),
+    request<void>("/api/profile/views", { user: true, method: "POST", body: { productId } }),
   /**
    * Reserve/release stock so the cart holds exactly `quantity` (0 = remove).
    * Returns the cart as stored. 409 = not enough stock, 410 = cart already paid.
@@ -97,11 +98,15 @@ export const api = {
     }),
   /** The cart order as stored (expired lines are gone). 410 = cart already paid. */
   cart: (cartId: string) => request<Order>(`/api/carts/${encodeURIComponent(cartId)}`),
-  me: () => request<{ uid: string; email: string }>("/api/me", { auth: true }),
-  /** Simulated payment: turns the cart into a delivered order with its keys. Safe to retry. */
+  /** Signed in: the account page's purchase numbers. */
+  me: () => request<Account>("/api/me", { auth: true }),
+  /** Signed in: move this browser's guest views and orders to the account. Safe to repeat. */
+  mergeGuest: () =>
+    request<{ movedOrders: number }>("/api/me/merge-guest", { auth: true, method: "POST", body: { guestId: guestId() } }),
+  /** Simulated payment (signed in only): turns the cart into a delivered order with its keys. Safe to retry. */
   checkout: (cartId: string) =>
-    request<Order>("/api/orders", { guest: true, method: "POST", body: { cartId } }),
-  /** One page of this browser's orders, newest first. */
+    request<Order>("/api/orders", { auth: true, method: "POST", body: { cartId } }),
+  /** One page of the user's (or this browser's guest) orders, newest first. */
   orders: (page: number, signal?: AbortSignal) =>
-    request<OrderPage>(`/api/orders?page=${page}`, { guest: true, signal }),
+    request<OrderPage>(`/api/orders?page=${page}`, { user: true, signal }),
 };

@@ -293,3 +293,25 @@ titles, 214px cards, thin themed scrollbar. Icons are hand-written inline SVG in
 Skipped on purpose: wishlist heart and language/currency picker (no such features, a dead icon
 would only be decoration); Eneba's logo and banner art (their brand assets).
 Rejected: an icon library such as lucide-react (new dependency for 9 icons).
+
+## 28. Real login is back: guests do everything except pay (supersedes #20)
+Firebase Auth with email/password and Google (`signInWithPopup`, part of the `firebase` package
+already installed). Guests keep their browser id (#20) and can browse, fill a cart, see recently
+viewed, recommendations and their guest orders. Only paying needs an account: pressing
+"Apmokėti" as a guest opens a "Prisijungimas būtinas" popup, and payment continues right after.
+- Routes: `middleware.Identify` uses the login token if one is sent, else `X-Guest-Id`
+  (orders list, profile views, personal blocks). A bad token is a 401, never silently a guest.
+  `RequireAuth` guards checkout, `GET /api/me` and `POST /api/me/merge-guest`.
+- Merge on sign-in: the guest's recently viewed go in front of the account's (pure `mergeViews`,
+  deduped, max 20) and the guest's orders get the account's user id (`MoveUserOrders`, one
+  transaction). Safe to repeat. The browser runs it before switching `user`, so blocks that reload
+  on sign-in already see the merged data.
+- User info: the header avatar is the Google photo, or the plain user icon (no initials). Its menu
+  shows name + email and links to `/account` (name editable, email, sign-in method, member since,
+  order count, total spent). Name/photo/dates come from Firebase Auth in the browser; only order
+  numbers come from the API, since orders live there.
+Rejected: login required for the cart (more friction, and Eneba lets guests shop);
+starting accounts empty (a guest who signs in mid-shop would lose their history);
+initials avatars (the user asked for the picture only); Firebase UI library (new dependency).
+Trade-off: whoever holds a guest id can merge that guest's data into their account, the same
+trust model as reading those orders with the id (#20). Merging is not undone on sign-out.

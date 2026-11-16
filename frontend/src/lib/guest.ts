@@ -1,5 +1,6 @@
-// Login is switched off for now (DECISIONS #20). Orders belong to this browser
-// instead: a random id made once and kept in localStorage, sent as X-Guest-Id.
+// A visitor who has not signed in is this browser: a random id made once and
+// kept in localStorage, sent as X-Guest-Id (DECISIONS #20). On sign-in the
+// guest's views and orders move to the account (DECISIONS #28).
 const KEY = "guestId";
 let fallback: string | null = null; // used when storage is blocked: lasts one page load
 

@@ -212,6 +212,20 @@ func (m *Memory) ListUserOrders(_ context.Context, userID string) ([]domain.Orde
 	return out, nil
 }
 
+func (m *Memory) MoveUserOrders(_ context.Context, from, to string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for id, o := range m.orders {
+		if o.UserID == from {
+			o.UserID = to
+			m.orders[id] = o
+			n++
+		}
+	}
+	return n, nil
+}
+
 // KeyCounts returns how many of an offer's keys are in each status. Used by
 // tests to check that offer stock always equals the available keys.
 func (m *Memory) KeyCounts(offerID string) map[string]int {

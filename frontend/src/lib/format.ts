@@ -18,6 +18,11 @@ export function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("lt-LT", { hour: "2-digit", minute: "2-digit" });
 }
 
+/** "2026 m. lapkričio 16 d." from any date string the browser can parse. */
+export function formatDate(s: string): string {
+  return new Date(s).toLocaleDateString("lt-LT", { year: "numeric", month: "long", day: "numeric" });
+}
+
 /** Lithuanian plural: 1 prekė, 2 prekės, 10 prekių, 21 prekė, 22 prekės. */
 export function formatItemCount(n: number): string {
   const last = n % 10;

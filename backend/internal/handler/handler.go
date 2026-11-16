@@ -236,15 +236,41 @@ func (h *Handler) GetCart(w http.ResponseWriter, r *http.Request) {
 
 // --- Auth-protected ---------------------------------------------------
 
-// Me: GET /api/me (requires Firebase ID token)
+// Me: GET /api/me (signed in) -> the account page's purchase numbers.
+// Name, photo and sign-up date come from Firebase Auth in the browser.
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	u := middleware.UserFrom(r.Context())
-	writeJSON(w, http.StatusOK, map[string]string{"uid": u.UID, "email": u.Email})
+	sum, err := h.Orders.Summary(r.Context(), u.UID)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"uid": u.UID, "email": u.Email, "orderCount": sum.OrderCount, "totalSpent": sum.TotalSpent,
+	})
+}
+
+// MergeGuest: POST /api/me/merge-guest  body {"guestId": "..."} (signed in).
+// Called right after sign-in: the browser's guest views and orders move to the account.
+func (h *Handler) MergeGuest(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		GuestID string `json:"guestId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || !middleware.ValidGuestID(body.GuestID) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": `body must be {"guestId": "..."}`})
+		return
+	}
+	u := middleware.UserFrom(r.Context())
+	moved, err := h.Profiles.MergeGuest(r.Context(), u.UID, middleware.GuestUserID(body.GuestID))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"movedOrders": moved})
 }
 
 // Checkout: POST /api/orders  body {"cartId": "..."} -> 201 with the delivered order.
-// Simulated payment: the cart's reserved keys are sold to the request's user
-// (for now a browser guest id, see router).
+// Simulated payment: the cart's reserved keys are sold to the signed-in user.
 // Safe to retry: a paid-but-undelivered order is finished, a delivered one returned.
 func (h *Handler) Checkout(w http.ResponseWriter, r *http.Request) {
 	var body struct {

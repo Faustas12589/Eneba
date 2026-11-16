@@ -60,6 +60,9 @@ type Orders interface {
 	PayOrder(ctx context.Context, id string, apply PayFunc) (*domain.Order, error)
 	DeliverOrder(ctx context.Context, id string, apply DeliverFunc) (*domain.Order, error)
 	ListUserOrders(ctx context.Context, userID string) ([]domain.Order, error)
+	// MoveUserOrders gives every order of user `from` to user `to` in one atomic
+	// step and returns how many moved. Used when a guest signs in.
+	MoveUserOrders(ctx context.Context, from, to string) (int, error)
 }
 
 // ProfileFunc is a service rule that changes a profile (e.g. adds a view).

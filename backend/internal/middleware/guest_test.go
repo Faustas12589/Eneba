@@ -17,8 +17,8 @@ func TestRequireGuest(t *testing.T) {
 		header string
 		want   int
 	}{
-		{"", http.StatusUnauthorized},          // no header
-		{"short", http.StatusUnauthorized},     // too short to be random
+		{"", http.StatusUnauthorized},      // no header
+		{"short", http.StatusUnauthorized}, // too short to be random
 		{"bad id with spaces!!", http.StatusUnauthorized},
 		{id, http.StatusOK},
 	}

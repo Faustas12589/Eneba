@@ -127,3 +127,61 @@ func TestRecommendedUsesPurchases(t *testing.T) {
 		t.Errorf("an RPG buyer should get an RPG first, got %s (%s)", got[0].Name, got[0].Genre)
 	}
 }
+
+func TestMergeViews(t *testing.T) {
+	cases := []struct {
+		guest, account, want []string
+	}{
+		{nil, []string{"a", "b"}, []string{"a", "b"}},                       // nothing to merge
+		{[]string{"x", "y"}, nil, []string{"x", "y"}},                       // new account takes the guest's order
+		{[]string{"x", "a"}, []string{"a", "b"}, []string{"x", "a", "b"}},   // guest views first, no duplicate
+		{[]string{"x", "y"}, []string{"a", "b"}, []string{"x", "y", "a"}},   // max 3: the account's oldest drops off
+	}
+	for _, c := range cases {
+		if got := mergeViews(c.guest, c.account, 3); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("mergeViews(%v, %v) = %v, want %v", c.guest, c.account, got, c.want)
+		}
+	}
+}
+
+// Signing in moves the guest's views and orders to the account; the guest keeps nothing.
+func TestMergeGuest(t *testing.T) {
+	s, cart, orders := newProfilesSvc(t)
+	ctx := context.Background()
+	const guest, user = "guest:browser-1", "uid-1"
+
+	_ = s.RecordView(ctx, user, "p002")  // viewed while signed in, earlier
+	_ = s.RecordView(ctx, guest, "p003") // then as a guest
+	if _, err := cart.SetQuantity(ctx, testCart, testOffer, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := orders.Checkout(ctx, guest, testCart); err != nil { // an older guest order
+		t.Fatal(err)
+	}
+
+	moved, err := s.MergeGuest(ctx, user, guest)
+	if err != nil || moved != 1 {
+		t.Fatalf("merge: moved %d, err %v", moved, err)
+	}
+	got, _ := s.RecentlyViewed(ctx, user, 8)
+	if len(got) != 2 || got[0].ID != "p003" || got[1].ID != "p002" {
+		t.Fatalf("account views after merge: %v", got)
+	}
+	if left, _ := s.RecentlyViewed(ctx, guest, 8); len(left) != 0 {
+		t.Fatalf("guest still has views: %v", left)
+	}
+	if pg, _ := orders.List(ctx, user, 1, 10); pg.Total != 1 {
+		t.Fatalf("account has %d orders, want 1", pg.Total)
+	}
+	if pg, _ := orders.List(ctx, guest, 1, 10); pg.Total != 0 {
+		t.Fatalf("guest still has %d orders", pg.Total)
+	}
+	if sum, _ := orders.Summary(ctx, user); sum.OrderCount != 1 || sum.TotalSpent <= 0 {
+		t.Fatalf("summary: %+v", sum)
+	}
+
+	// Running it again (e.g. a second sign-in) changes nothing.
+	if moved, err := s.MergeGuest(ctx, user, guest); err != nil || moved != 0 {
+		t.Fatalf("second merge: moved %d, err %v", moved, err)
+	}
+}

@@ -31,21 +31,21 @@ func New(h *handler.Handler, verifier middleware.TokenVerifier, corsOrigins []st
 		r.Get("/carts/{cartId}", h.GetCart)
 		r.Put("/carts/{cartId}/items/{offerId}", h.SetCartItem)
 
-		// signed-in only
+		// guests and signed-in users: a login token if sent, else the X-Guest-Id
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.RequireAuth(verifier))
-			r.Get("/me", h.Me)
-		})
-
-		// Orders and profiles belong to a browser guest id while login is switched
-		// off (DECISIONS #20, #25). To require login again: RequireAuth(verifier) here.
-		r.Group(func(r chi.Router) {
-			r.Use(middleware.RequireGuest())
-			r.Post("/orders", h.Checkout)
+			r.Use(middleware.Identify(verifier))
 			r.Get("/orders", h.ListOrders)
 			r.Post("/profile/views", h.RecordView)
 			r.Get("/home/recently-viewed", h.RecentlyViewed)
 			r.Get("/home/recommended", h.Recommended)
+		})
+
+		// signed-in only: paying, the account page, and merging guest data on sign-in
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireAuth(verifier))
+			r.Post("/orders", h.Checkout)
+			r.Get("/me", h.Me)
+			r.Post("/me/merge-guest", h.MergeGuest)
 		})
 	})
 	return r

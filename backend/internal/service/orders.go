@@ -90,6 +90,26 @@ func (s *Orders) List(ctx context.Context, userID string, page, pageSize int) (O
 	return OrderPage{Items: items, Total: len(orders), Page: page, PageSize: pageSize}, nil
 }
 
+// Summary is what the account page shows about a user's purchases.
+type Summary struct {
+	OrderCount int `json:"orderCount"`
+	TotalSpent int `json:"totalSpent"` // cents
+}
+
+// Summary counts the user's orders and adds up what they paid. Carts are not
+// counted: they have no user until they are paid.
+func (s *Orders) Summary(ctx context.Context, userID string) (Summary, error) {
+	orders, err := s.repo.ListUserOrders(ctx, userID)
+	if err != nil {
+		return Summary{}, err
+	}
+	sum := Summary{OrderCount: len(orders)}
+	for _, o := range orders {
+		sum.TotalSpent += o.Total
+	}
+	return sum, nil
+}
+
 func paidTime(o domain.Order) time.Time {
 	if o.PaidAt == nil {
 		return time.Time{}

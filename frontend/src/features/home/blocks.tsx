@@ -7,6 +7,7 @@ import { Status } from "../../components/Status";
 import { ProductCard } from "../../components/ProductCard";
 import { CategoryIcon } from "../../components/Icons";
 import type { Product } from "../../types";
+import { useAuth } from "../auth/AuthContext";
 
 // Each block fetches from its OWN endpoint and handles its own loading/error,
 // so one failing service never blanks the whole homepage (DECISIONS #6).
@@ -34,8 +35,9 @@ function ProductRail({ title, items, more }: { title: string; items: Product[]; 
 }
 
 /** A product block from one endpoint: loading/error inside its own band. */
-function RailBlock({ title, load, more }: { title: string; load: () => Promise<{ items: Product[] }>; more?: string }) {
-  const state = useAsync(load, []);
+function RailBlock({ title, load, more, personal }: { title: string; load: () => Promise<{ items: Product[] }>; more?: string; personal?: boolean }) {
+  const uid = useAuth().user?.uid;
+  const state = useAsync(load, personal ? [uid] : []); // personal blocks reload on sign-in/out
   return (
     <Band>
       <Status state={state}>{({ items }) => <ProductRail title={title} items={items} more={more} />}</Status>
@@ -64,7 +66,8 @@ export function BannerBlock() {
 
 /** "Neseniai peržiūrėta": no band at all until the browser has viewed something, like on Eneba. */
 export function RecentlyViewedBlock() {
-  const state = useAsync(() => api.recentlyViewed(), []);
+  const uid = useAuth().user?.uid;
+  const state = useAsync(() => api.recentlyViewed(), [uid]);
   if (!state.data?.items.length) return null;
   return (
     <Band>
@@ -73,7 +76,7 @@ export function RecentlyViewedBlock() {
   );
 }
 
-export const RecommendedBlock = () => <RailBlock title="Rekomenduojama tau" load={api.recommended} />;
+export const RecommendedBlock = () => <RailBlock title="Rekomenduojama tau" load={api.recommended} personal />;
 export const BestSellersBlock = () => <RailBlock title="Perkamiausi" load={api.bestSellers} more="/store" />;
 export const GiftCardsBlock = () => (
   <RailBlock title="Populiariausios el. dovanų kortelės" load={api.giftCards} more="/store?category=gift-cards" />

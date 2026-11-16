@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { useDropdown } from "../../lib/useDropdown";
 import { formatPrice } from "../../lib/format";
 import { useCart } from "./CartContext";
 import { CartLine } from "./CartLine";
@@ -8,30 +8,7 @@ import { CartIcon } from "../../components/Icons";
 /** Header cart button + dropdown with the cart's lines, sum and two actions. */
 export function CartMenu() {
   const { items, count, total, currency } = useCart();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const { pathname } = useLocation();
-  const close = () => setOpen(false);
-
-  // Close when navigating (e.g. clicking a product name inside the dropdown).
-  useEffect(() => setOpen(false), [pathname]);
-
-  // Close on a click outside or Escape.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  const { open, setOpen, ref, close } = useDropdown();
 
   return (
     <div className="cart-menu" ref={ref}>
